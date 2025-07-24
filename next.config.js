@@ -17,7 +17,8 @@ const nextConfig = {
             'cdn.pixabay.com',
             'img.freepik.com',
             'source.unsplash.com',
-            'picsum.photos'
+            'picsum.photos',
+            'images.pexels.com'
         ],
         formats: ['image/webp', 'image/avif'],
         deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
@@ -26,23 +27,23 @@ const nextConfig = {
         dangerouslyAllowSVG: true,
         contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
         remotePatterns: [{
-            protocol: 'https',
-            hostname: '**.dropboxusercontent.com',
-            port: '',
-            pathname: '/**',
-        },
-        {
-            protocol: 'https',
-            hostname: '**.unsplash.com',
-            port: '',
-            pathname: '/**',
-        },
-        {
-            protocol: 'https',
-            hostname: '**.bqitech.com',
-            port: '',
-            pathname: '/**',
-        }
+                protocol: 'https',
+                hostname: '**.dropboxusercontent.com',
+                port: '',
+                pathname: '/**',
+            },
+            {
+                protocol: 'https',
+                hostname: '**.unsplash.com',
+                port: '',
+                pathname: '/**',
+            },
+            {
+                protocol: 'https',
+                hostname: '**.bqitech.com',
+                port: '',
+                pathname: '/**',
+            }
         ]
     },
     async headers() {
@@ -60,13 +61,13 @@ const nextConfig = {
         ];
 
         const securityHeaders = [{
-            key: 'Content-Security-Policy',
-            value: cspDirectives.join('; ')
-        },
-        {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff'
-        }
+                key: 'Content-Security-Policy',
+                value: cspDirectives.join('; ')
+            },
+            {
+                key: 'X-Content-Type-Options',
+                value: 'nosniff'
+            }
         ];
 
         return [{
@@ -102,15 +103,15 @@ const nextConfig = {
     },
     async redirects() {
         return [{
-            source: '/admin',
-            destination: '/admin/overview',
-            permanent: true,
-        },
-        {
-            source: '/dashboard',
-            destination: '/dashboard/overview',
-            permanent: true,
-        }
+                source: '/admin',
+                destination: '/admin/overview',
+                permanent: true,
+            },
+            {
+                source: '/dashboard',
+                destination: '/dashboard/overview',
+                permanent: true,
+            }
         ];
     },
     transpilePackages: ['@uiw/react-md-editor', 'react-beautiful-dnd'],
@@ -118,7 +119,7 @@ const nextConfig = {
         return [{
             source: '/sitemap.xml',
             destination: '/api/sitemap',
-        },]
+        }, ]
     },
     output: 'standalone',
 };
