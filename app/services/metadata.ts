@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Professional Services & Solutions | BQI Tech',
-  description: 'Discover BQI Tech\'s comprehensive range of professional services including software development, implementation services, and digital transformation solutions.',
+  title: 'Enterprise Platform Solutions, IT Consulting for Government | BQI Tech Kenya & USA',
+  description: 'Explore BQI Tech’s government focused IT consulting, software development in Kenya and the U.S., and enterprise platform solutions. Reliable, scalable, and secure digital transformation for the public sector.',
   keywords: ['professional services', 'software development', 'implementation services', 'digital transformation', 'IT consulting'],
   openGraph: {
     title: 'Professional Services & Solutions | BQI Tech',
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     creator: '@BQITech',
   },
   alternates: {
-    canonical: 'https://bqitech.com/services',
+    canonical: '<link rel= "canonical" href= "https://bqitech.com/services" />',
   },
   robots: {
     index: true,

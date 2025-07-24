@@ -8,25 +8,59 @@ import Link from 'next/link'
 
 const services = [
   {
-    icon: Briefcase,
-    title: 'Professional IT Implementation Services',
-    description: `Our team of technical experts brings hands-on experience to tackle complex IT projects. We specialize in configuring enterprise platforms, ensuring smooth integration and optimized performance.`,
+    icon: Code,
+    title: 'Custom Software Development & Engineering for Government and Public Sector Needs',
+    description: `Our software engineering team delivers custom built applications that support mission critical operations. We
+    design and develop secure, scalable software solutions for public sector agencies, aligning technology with
+    regulatory frameworks, data protection standards, and institutional goals.
+    Our Software Development Services Include:`,
     details: [
-      'Enterprise Platform Configuration – Our experts customize and configure your enterprise systems to enhance performance and usability.',
-      'Advanced Report Writing – We simplify the process of generating custom reports using SSRS, Crystal Reports, and other reporting tools, helping you gain valuable business insights.'
+      'Custom Software Development: Web and mobile applications tailored to your internal workflows and citizen facing services.',
+      'COTS Software Optimization: We enhance and integrate commercial off the shelf (COTS) solutions for better performance and adaptability to public sector requirements.',
+      'Full Cycle Development: From system design and prototyping to deployment and maintenance, we manage the full software lifecycle with a focus on reliability and compliance.'
+    ],
+    image: 'https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=1600'
+  },
+  {
+    icon: Briefcase,
+    title: 'Enterprise Platform Solutions for Scalable Government Operations',
+    description: `Our enterprise platform engineering services help government bodies implement, customize, and optimize large scale IT
+    systems. These platforms are the backbone of modern public service delivery, enabling integration, efficiency, and data
+    driven decision making.
+    Key Capabilities:`,
+    details: [
+      'Enterprise Platform Configuration: We tailor platforms to your institution’s structure, ensuring optimized workflows and user experience.',
+      'Advanced Reporting Solutions: Using SSRS, Crystal Reports, and other tools, we develop reporting frameworks that provide transparency and actionable insights.',
+      'System Integration: We ensure seamless interoperability across departments and systems, reducing redundancy and improving coordination.'
     ],
     image: 'https://images.unsplash.com/photo-1606857521015-7f9fcf423740?q=80&w=1600'
   },
   {
-    icon: Code,
-    title: 'Software Engineering & Development Services',
-    description: `BQI Tech offers full-cycle software development services, from concept and design to deployment and maintenance. Our team of software engineers, DevOps professionals, and UX designers ensures innovative, high-quality solutions that meet your business needs.`,
+    icon: CheckCircle,
+    title: 'Strategic IT Consulting for Government Agencies',
+    description: `BQI Tech offers specialized IT consulting for government institutions. We bring domain expertise and technical depth to support high stakes decision making, implementation planning, and technology adoption strategies.\nOur Consulting Services Cover :`,
     details: [
-      'Custom Software Development - We build tailor-made web and mobile applications that align with your business objectives.',
-      'COTS Software Optimization - We enhance, manage, and integrate commercial off-the-shelf (COTS) software, providing a scalable and future-ready foundation for your business.',
-      'Platform Engineering & DevOps - Our DevOps expertise ensures efficient CI/CD pipelines, automation, and cloud optimization, enhancing operational efficiency and cost-effectiveness.'
+      'IT infrastructure evaluation and planning',
+      'Enterprise architecture design',
+      'Cloud migration strategy and execution',
+      'Security assessment and compliance',
+      'Process automation and digitization advisory'
     ],
-    image: 'https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=1600'
+    footer: `We understand the constraints, challenges, and regulatory environments that shape government IT projects and provide insights that align with policy goals and funding requirements.`,
+    image: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1600&q=80' // Tech-focused digital collaboration
+  },
+  {
+    icon: Code,
+    title: 'DevOps and Cloud Engineering for Public Sector Efficiency',
+    description: `With modern DevOps practices and cloud native engineering, we support continuous integration, automation, and operational efficiency for public sector IT environments.\nServices Include:`,
+    details: [
+      'CI/CD Pipeline Implementation',
+      'Infrastructure as Code (IaC)',
+      'Cloud Cost Optimization',
+      'Environment Management and Automation'
+    ],
+    footer: `Our DevOps services are designed to reduce deployment times, minimize downtime, and enhance system reliability in both on-premise and cloud environments.`,
+    image: 'https://images.pexels.com/photos/1148820/pexels-photo-1148820.jpeg?auto=compress&w=1600&q=80' // Data center with blue lighting, strong tech/devops vibe
   }
 ]
 
@@ -77,7 +111,7 @@ export default function ServicesPage() {
               Our Services
             </h1>
             <p className="text-xl text-gray-100 max-w-3xl mx-auto">
-              Comprehensive IT Solutions to Drive Business Success
+            Government Focused IT Consulting and Enterprise Platform Solutions
             </p>
           </div>
         </motion.section>
@@ -88,12 +122,13 @@ export default function ServicesPage() {
           transition={{ duration: 0.8 }}
           className="mb-16 p-8 rounded-2xl bg-white/95 backdrop-blur-sm shadow-xl"
         >
-          <div className="max-w-4xl mx-auto">
+          <div className="max-w-4xl mx-auto text-center">
             <p className="text-lg text-gray-800 leading-relaxed font-medium">
-              At BQI Tech, we provide end-to-end software development, IT consulting, and DevOps solutions to help 
-              businesses optimize operations and achieve digital transformation. Our expertise spans custom software 
-              development, enterprise platform engineering, and IT implementation, ensuring seamless and scalable 
-              solutions for every industry.
+            At BQI Tech, we provide advanced software development and IT consulting services tailored to
+            the needs of government agencies and public sector organizations. With deep expertise in
+            enterprise platform solutions, we help institutions in Kenya and the United States modernize
+            operations, improve service delivery, and achieve digital transformation at scale.
+
             </p>
           </div>
         </motion.section>
@@ -135,23 +170,28 @@ export default function ServicesPage() {
                       </motion.li>
                     ))}
                   </ul>
+                  {service.footer && (
+                    <p className="text-lg text-gray-700 font-medium mt-6">{service.footer}</p>
+                  )}
                 </div>
-                <div className={`relative h-[400px] group ${index % 2 === 0 ? 'md:order-2' : 'md:order-1'}`}>
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    transition={{ duration: 0.3 }}
-                    className="relative h-full rounded-lg overflow-hidden shadow-xl"
-                  >
-                    <Image
-                      src={service.image}
-                      alt={service.title}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 50vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  </motion.div>
-                </div>
+                {service.image && (
+                  <div className={`relative h-[400px] group ${index % 2 === 0 ? 'md:order-2' : 'md:order-1'}`}>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      transition={{ duration: 0.3 }}
+                      className="relative h-full rounded-lg overflow-hidden shadow-xl"
+                    >
+                      <Image
+                        src={service.image}
+                        alt={service.title}
+                        fill
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    </motion.div>
+                  </div>
+                )}
               </div>
             </div>
           </motion.section>
@@ -162,20 +202,14 @@ export default function ServicesPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
-          className="mb-16 p-8 rounded-2xl relative overflow-hidden"
-          style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1600&q=80')`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat'
-          }}
+          className="mb-16 p-8 rounded-2xl relative overflow-hidden bg-gradient-to-r from-blue-500 to-blue-700"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-violet-700/85 via-indigo-600/85 to-cyan-600/85 z-0" />
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/85 to-blue-800/85 z-0" />
           <motion.div
             initial={{ backgroundPosition: "0% 0%" }}
             animate={{ backgroundPosition: "100% 100%" }}
             transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
-            className="absolute inset-0 bg-gradient-to-r from-violet-400/5 to-cyan-400/5 z-10"
+            className="absolute inset-0 bg-gradient-to-r from-blue-400/5 to-blue-500/5 z-10"
           />
           
           <div className="max-w-4xl mx-auto relative z-20">
@@ -185,19 +219,23 @@ export default function ServicesPage() {
               </span>
               Why Choose BQI Tech?
             </h2>
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 gap-6">
               {[
                 {
-                  title: "Industry-Leading Expertise",
-                  description: "Our team stays ahead of industry trends, delivering cutting-edge solutions."
+                  title: "Expertise in Public Sector IT",
+                  description: "We’ve designed and deployed systems for government agencies with complex regulatory and security needs."
                 },
                 {
-                  title: "Scalable & Secure Solutions",
-                  description: "We implement future-proof, security-focused IT strategies."
+                  title: "End to End Services",
+                  description: "From strategic consulting to post deployment support, we provide complete IT lifecycle management."
                 },
                 {
-                  title: "End-to-End IT Services",
-                  description: "From implementation to maintenance, we provide seamless IT solutions."
+                  title: "Kenya and U.S. Coverage",
+                  description: "We operate across two key regions, understanding the local frameworks, policies, and technology ecosystems in both."
+                },
+                {
+                  title: "Compliance & Security Focus",
+                  description: "Our solutions are built with public sector data governance, access controls, and audit readiness in mind."
                 }
               ].map((item, index) => (
                 <motion.div
@@ -226,7 +264,11 @@ export default function ServicesPage() {
         >
           <h2 className="text-3xl font-bold mb-4">Interested in Our Services?</h2>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Let's discuss how BQI Tech can empower your business with advanced IT solutions.
+          BQI Tech is ready to support your next public sector IT project. Whether you're planning a system
+          upgrade, a new citizen service platform, or want to improve internal operations, our team is here to help.
+          Contact us today to discuss how our software development, IT consulting, and enterprise platform
+          services can support your institution.
+
           </p>
           <div className="flex justify-center gap-6">
             <Link href="/contact-us">
