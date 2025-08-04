@@ -15,7 +15,7 @@ const services = [
     regulatory frameworks, data protection standards, and institutional goals.
     Our Software Development Services Include:`,
     details: [
-      'Custom Software Development: Web and mobile applications tailored to your internal workflows and citizen facing services.',
+      'Custom Software Development: Web applications tailored to your internal workflows and citizen facing services.',
       'COTS Software Optimization: We enhance and integrate commercial off the shelf (COTS) solutions for better performance and adaptability to public sector requirements.',
       'Full Cycle Development: From system design and prototyping to deployment and maintenance, we manage the full software lifecycle with a focus on reliability and compliance.'
     ],
@@ -51,16 +51,16 @@ const services = [
   },
   {
     icon: Code,
-    title: 'DevOps and Cloud Engineering for Public Sector Efficiency',
-    description: `With modern DevOps practices and cloud native engineering, we support continuous integration, automation, and operational efficiency for public sector IT environments.\nServices Include:`,
+    title: 'Salesforce Configuration for Public Sector Workflows',
+    description: `We deliver tailored solutions on the Salesforce platform to help government agencies streamline and automate core processes. Our team applies Salesforce best practices to build secure, maintainable, and scalable configurations for public sector applications.\nServices Include:`,
     details: [
-      'CI/CD Pipeline Implementation',
-      'Infrastructure as Code (IaC)',
-      'Cloud Cost Optimization',
-      'Environment Management and Automation'
+      'Apex, Lightning Components, and Visualforce development',
+      'Custom workflows and objects tailored to regulatory processes',
+      'Third-party integration and automation',
+      'Ongoing optimization and enhancements',
+      'Data migration and system interoperability'
     ],
-    footer: `Our DevOps services are designed to reduce deployment times, minimize downtime, and enhance system reliability in both on-premise and cloud environments.`,
-    image: 'https://images.pexels.com/photos/1148820/pexels-photo-1148820.jpeg?auto=compress&w=1600&q=80' // Data center with blue lighting, strong tech/devops vibe
+    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1600&q=80'
   }
 ]
 

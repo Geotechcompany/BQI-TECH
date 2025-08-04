@@ -154,3 +154,85 @@ async def send_verification_code(email: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error in send_verification_code: {str(e)}")
         return None 
+
+async def send_contact_form_email(
+    name: str, 
+    email: str, 
+    phone: str = 'Not provided', 
+    organization: str = 'Not provided', 
+    service: str = 'Not specified', 
+    message: str = ''
+) -> bool:
+    """Send contact form submission email"""
+    try:
+        # Create message
+        message_obj = MIMEMultipart()
+        message_obj["From"] = settings.from_email
+        message_obj["To"] = settings.hr_email  # Send to HR or contact email
+        message_obj["Subject"] = f"New Contact Form Submission from {name}"
+        
+        # Email body
+        body = f"""
+        <html>
+        <body>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
+                </div>
+                
+                <h2 style="color: #1f2937;">New Contact Form Submission</h2>
+                
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Name:</strong></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Email:</strong></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{email}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Phone:</strong></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{phone}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Organization:</strong></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{organization}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Service Interest:</strong></td>
+                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{service}</td>
+                    </tr>
+                </table>
+                
+                <h3 style="color: #1f2937; margin-top: 20px;">Message:</h3>
+                <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px;">
+                    {message}
+                </p>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+                        This is an automated email from the BQI Tech contact form.
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        message_obj.attach(MIMEText(body, "html"))
+        
+        # Create secure connection and send email
+        context = ssl.create_default_context()
+        
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
+            server.login(settings.smtp_user, settings.smtp_pass)
+            text = message_obj.as_string()
+            server.sendmail(settings.from_email, settings.hr_email, text)
+        
+        logger.info(f"Contact form email sent successfully for {email}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send contact form email: {str(e)}")
+        return False 

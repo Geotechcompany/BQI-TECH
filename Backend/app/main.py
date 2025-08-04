@@ -35,11 +35,15 @@ except ImportError:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # Change to DEBUG to capture more detailed logs
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+# Set logging for specific modules
+logging.getLogger('app.routers.contact').setLevel(logging.DEBUG)
+logging.getLogger('app.lib.email').setLevel(logging.DEBUG)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -84,7 +88,14 @@ async def add_security_headers(request: Request, call_next):
         
         # Content Security Policy (adjust as needed)
         if settings.is_production:
-            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; "
+                "style-src 'self' 'unsafe-inline'; "
+                "frame-src 'self' https://www.google.com/ https://www.google.com/recaptcha/ https://app.thinkstack.ai; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self' https://api.bqitech.com;"
+            )
     
     return response
 
