@@ -13,7 +13,7 @@ const expertise = [
     title: 'Custom Software Development', 
     description: 'We design and develop high-performance, scalable software solutions tailored to meet the unique needs of government agencies and enterprises.',
     features: [
-      'Web & Mobile Application Development - Secure, responsive, and user-friendly digital solutions.',
+      'Web Application Development - Secure, responsive, and user-friendly digital solutions.',
       'Legacy System Modernization - Transform outdated systems into modern, cloud-based platforms.',
       'Cloud-Native Solutions - Scalable, secure cloud applications to improve operational efficiency.',
       'API Development & Integration - Seamless data connectivity between systems.'
@@ -21,7 +21,7 @@ const expertise = [
   },
   { 
     icon: Lightbulb, 
-    title: 'Enterprise Platform & IT Consulting', 
+    title: 'Enterprise Platform Configuration & IT Consulting', 
     description: 'We provide comprehensive IT consulting and enterprise platform optimization services to help organizations implement and manage large-scale systems.',
     features: [
       'Enterprise Platform Setup - Full-scale implementation and configuration for government IT solutions.',
