@@ -16,23 +16,24 @@ def generate_verification_code(length: int = 6) -> str:
     """Generate a random verification code"""
     return ''.join(random.choices(string.digits, k=length))
 
-async def store_verification_code(email: str, code: str, expires_in_minutes: int = 15) -> bool:
-    """Store verification code in database with expiration"""
+async def store_verification_code(email: str, code: str, expires_in_minutes: int = 10) -> bool:
+    """Store verification code in database with expiration (default 10 minutes)"""
     try:
         db = get_database()
         
         # Calculate expiration time
         expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
         
-        # Store or update verification code
-        result = await db.email_verifications.update_one(
+        # Store or update verification code (using consistent collection name)
+        result = await db.verification_codes.update_one(
             {"email": email},
             {
                 "$set": {
                     "code": code,
-                    "expires_at": expires_at,
-                    "created_at": datetime.utcnow(),
-                    "used": False
+                    "expiresAt": expires_at,  # Changed to match TTL index field name
+                    "createdAt": datetime.utcnow(),  # Consistent field naming
+                    "used": False,
+                    "attempts": 0  # Track verification attempts
                 }
             },
             upsert=True
@@ -48,21 +49,32 @@ async def verify_code(email: str, code: str) -> bool:
     try:
         db = get_database()
         
-        # Find the verification record
-        verification = await db.email_verifications.find_one({
+        # Find the verification record (using consistent collection and field names)
+        verification = await db.verification_codes.find_one({
             "email": email,
             "code": code,
             "used": False,
-            "expires_at": {"$gt": datetime.utcnow()}
+            "expiresAt": {"$gt": datetime.utcnow()}
         })
         
         if not verification:
+            # Increment attempts counter for failed verification
+            await db.verification_codes.update_one(
+                {
+                    "email": email,
+                    "expiresAt": {"$gt": datetime.utcnow()}
+                },
+                {
+                    "$inc": {"attempts": 1},
+                    "$set": {"lastAttempt": datetime.utcnow()}
+                }
+            )
             return False
         
-        # Mark as used
-        await db.email_verifications.update_one(
+        # Mark as used and record usage time
+        await db.verification_codes.update_one(
             {"_id": verification["_id"]},
-            {"$set": {"used": True, "used_at": datetime.utcnow()}}
+            {"$set": {"used": True, "usedAt": datetime.utcnow()}}
         )
         
         return True
@@ -132,25 +144,88 @@ def send_verification_email(email: str, verification_code: str) -> bool:
         return False
 
 async def send_verification_code(email: str) -> Optional[str]:
-    """Generate and send verification code to email"""
+    """Generate and send verification code to email (expires in 10 minutes)"""
     try:
         # Generate verification code
         code = generate_verification_code()
+        logger.info(f"Generated verification code for {email}")
         
-        # Store in database
-        stored = await store_verification_code(email, code)
+        # Store in database with 10-minute expiration
+        stored = await store_verification_code(email, code, expires_in_minutes=10)
         if not stored:
-            logger.error("Failed to store verification code")
+            logger.error(f"Failed to store verification code for {email}")
             return None
+        
+        logger.info(f"Verification code stored successfully for {email} (expires in 10 minutes)")
         
         # Send email
         sent = send_verification_email(email, code)
         if not sent:
-            logger.error("Failed to send verification email")
+            logger.error(f"Failed to send verification email to {email}")
             return None
         
+        logger.info(f"Verification email sent successfully to {email}")
         return code
         
     except Exception as e:
-        logger.error(f"Error in send_verification_code: {str(e)}")
-        return None 
+        logger.error(f"Error in send_verification_code for {email}: {str(e)}")
+        return None
+
+
+async def get_verification_status(email: str) -> dict:
+    """Get verification code status for an email"""
+    try:
+        db = get_database()
+        
+        # Find the most recent verification record for this email
+        verification = await db.verification_codes.find_one(
+            {"email": email},
+            sort=[("createdAt", -1)]  # Most recent first
+        )
+        
+        if not verification:
+            return {
+                "exists": False,
+                "message": "No verification code found"
+            }
+        
+        current_time = datetime.utcnow()
+        is_expired = verification["expiresAt"] <= current_time
+        
+        return {
+            "exists": True,
+            "expired": is_expired,
+            "used": verification.get("used", False),
+            "attempts": verification.get("attempts", 0),
+            "createdAt": verification["createdAt"],
+            "expiresAt": verification["expiresAt"],
+            "timeLeft": max(0, (verification["expiresAt"] - current_time).total_seconds()) if not is_expired else 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting verification status for {email}: {str(e)}")
+        return {
+            "exists": False,
+            "error": str(e)
+        }
+
+
+async def cleanup_expired_verification_codes() -> int:
+    """Clean up expired verification codes"""
+    try:
+        db = get_database()
+        
+        # Delete expired codes
+        result = await db.verification_codes.delete_many({
+            "expiresAt": {"$lt": datetime.utcnow()}
+        })
+        
+        deleted_count = result.deleted_count
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} expired verification codes")
+        
+        return deleted_count
+        
+    except Exception as e:
+        logger.error(f"Error cleaning up verification codes: {str(e)}")
+        return 0 

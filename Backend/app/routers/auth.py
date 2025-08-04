@@ -713,3 +713,43 @@ async def cleanup_expired_registrations():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Cleanup failed"
         )
+
+
+@router.post("/verification-status")
+async def get_verification_code_status(
+    email: str = Body(...)
+):
+    """Get verification code status for debugging"""
+    try:
+        from app.lib.email import get_verification_status
+        
+        status_info = await get_verification_status(email)
+        return status_info
+        
+    except Exception as e:
+        logger.error(f"Error getting verification status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get verification status"
+        )
+
+
+@router.post("/cleanup-verification-codes") 
+async def cleanup_verification_codes():
+    """Admin endpoint to clean up expired verification codes"""
+    try:
+        from app.lib.email import cleanup_expired_verification_codes
+        
+        deleted_count = await cleanup_expired_verification_codes()
+        
+        return {
+            "message": f"Cleaned up {deleted_count} expired verification codes",
+            "deleted_count": deleted_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error cleaning verification codes: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cleanup verification codes"
+        )
