@@ -108,7 +108,7 @@ const team = [
     }
   },
   {
-    name: "Felix Ronoh",
+    name: "Felix Rono",
     role: "Software Engineer",
     image: "/Teams/Felix.jpg",
     social: {
