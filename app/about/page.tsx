@@ -64,7 +64,7 @@ const team = [
     role: "Senior Configuration Analyst",
     image: "/Teams/Victor.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/victor-ongeto-0000000000/",
+      linkedin: "https://linkedin.com/in/victor-ongeto",
     }
   },
   {
