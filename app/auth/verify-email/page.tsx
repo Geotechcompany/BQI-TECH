@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense } from 'react'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Loader2, CheckCircle2, XCircle, Zap } from 'lucide-react'
@@ -104,6 +104,12 @@ function EmailVerificationContent() {
   const [otp, setOtp] = useState('')
   const [error, setError] = useState('')
   const [initialEmailSent, setInitialEmailSent] = useState(false)
+  
+  // Ref to prevent duplicate verification requests
+  const isRequestInProgress = useRef(false)
+  const lastEmailSent = useRef<string | null>(null)
+  const lastResendTime = useRef<number>(0)
+  const RESEND_COOLDOWN = 30000 // 30 seconds cooldown between resends
 
   // Initialize form outside of any conditional block
   const { 
@@ -217,36 +223,64 @@ function EmailVerificationContent() {
     }
   }, [email, isAuthenticated, router, getEmailFromSources])
 
-  // Send initial verification email
+  // Send initial verification email with enhanced duplicate prevention
   useEffect(() => {
     const sendInitialVerification = async () => {
-      if (email && !initialEmailSent && status === 'idle') {
-        try {
-          setStatus('loading')
-          const response = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/resend-verification`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(email)
-          })
+      // Multiple safeguards to prevent duplicate sends
+      if (!email || 
+          initialEmailSent || 
+          status !== 'idle' || 
+          isRequestInProgress.current ||
+          lastEmailSent.current === email) {
+        return
+      }
 
-          if (!response.ok) {
-            const data = await response.json()
-            throw new Error(data.detail || 'Failed to send verification')
-          }
-          
-          toast.success('Verification code sent! Check your email.')
-        } catch (error: any) {
-          toast.error(error.message || 'Failed to send verification email')
-        } finally {
-          setStatus('idle')
-          setInitialEmailSent(true)
+      try {
+        // Set flags to prevent duplicate requests
+        isRequestInProgress.current = true
+        setStatus('loading')
+        
+        const response = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/resend-verification`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(email)
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.detail || 'Failed to send verification')
         }
+        
+        // Mark this email as sent
+        lastEmailSent.current = email
+        toast.success('Verification code sent! Check your email.')
+        
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to send verification email')
+      } finally {
+        setStatus('idle')
+        setInitialEmailSent(true)
+        isRequestInProgress.current = false
       }
     }
 
-    const debounceTimer = setTimeout(sendInitialVerification, 500)
-    return () => clearTimeout(debounceTimer)
-  }, [email, initialEmailSent, status])
+    // Longer debounce to prevent rapid-fire requests
+    const debounceTimer = setTimeout(sendInitialVerification, 1000)
+    return () => {
+      clearTimeout(debounceTimer)
+      // Ensure we clean up the request flag if component unmounts
+      isRequestInProgress.current = false
+    }
+     }, [email]) // Simplified dependencies to reduce re-runs
+
+  // Cleanup effect to reset flags on unmount
+  useEffect(() => {
+    return () => {
+      isRequestInProgress.current = false
+      lastEmailSent.current = null
+      lastResendTime.current = 0
+    }
+  }, [])
 
   // Auto-submit when OTP is complete (memoized to prevent unnecessary re-renders)
   const handleOtpSubmit = useCallback(() => {
@@ -280,11 +314,25 @@ function EmailVerificationContent() {
 
   const handleResendCode = async () => {
     try {
-      if (!email || status === 'loading') {
+      // Enhanced duplicate prevention for manual resend
+      if (!email || 
+          status === 'loading' || 
+          isRequestInProgress.current) {
         throw new Error('Operation in progress')
       }
       
+      // Check cooldown period
+      const now = Date.now()
+      const timeSinceLastResend = now - lastResendTime.current
+      if (timeSinceLastResend < RESEND_COOLDOWN) {
+        const remainingTime = Math.ceil((RESEND_COOLDOWN - timeSinceLastResend) / 1000)
+        throw new Error(`Please wait ${remainingTime} seconds before requesting another code`)
+      }
+      
+      // Set flags to prevent duplicate requests
+      isRequestInProgress.current = true
       setStatus('loading')
+      
       const response = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/resend-verification`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -296,11 +344,16 @@ function EmailVerificationContent() {
         throw new Error(data.detail || 'Failed to resend code')
       }
       
+      // Update tracking
+      lastEmailSent.current = email
+      lastResendTime.current = Date.now()
       toast.success('New verification code sent!')
+      
     } catch (error: any) {
       toast.error(error.message || 'Failed to resend code')
     } finally {
       setStatus('idle')
+      isRequestInProgress.current = false
     }
   }
 
