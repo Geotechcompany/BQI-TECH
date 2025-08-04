@@ -13,10 +13,11 @@ export default function ClientLayout({
 }) {
   const pathname = usePathname();
   
-  // Exclude header/footer from auth pages and ALL admin pages
+  // Exclude header/footer from auth pages, admin pages, and dashboard pages
   const isAuthPage = ['/login', '/sign-up', '/forgot-password', '/auth/verify-email'].some(path => pathname?.startsWith(path));
   const isAdminPage = pathname?.startsWith('/admin');
-  const shouldHideHeaderFooter = isAuthPage || isAdminPage;
+  const isDashboardPage = pathname?.startsWith('/dashboard');
+  const shouldHideHeaderFooter = isAuthPage || isAdminPage || isDashboardPage;
 
   return (
     <div className="min-h-screen flex flex-col">

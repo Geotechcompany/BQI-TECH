@@ -75,12 +75,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check email verification status
   const isEmailVerified = () => {
     const verified = authState.user?.isEmailVerified || false;
-    console.log('🔐 Email Verification Check:', {
-      email: authState.user?.email,
-      isVerified: verified,
-      userExists: !!authState.user,
-      isAuthenticated: authState.isAuthenticated
-    });
     return verified;
   };
 
@@ -128,15 +122,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       try {
         const session = authService.getSession()
-        console.log('Initial auth session:', session)
-        
         if (session?.token && session?.user) {
           // Fetch complete user profile
           try {
             const profileResponse = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/profile`)
             if (profileResponse.ok) {
               const profileData = await profileResponse.json()
-              console.log('Profile data fetched on init:', profileData)
               
               setAuthState({
                 isAuthenticated: true,
@@ -186,14 +177,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login(email, password)
-      console.log('Login successful:', response)
       
       // Fetch complete user profile after login
       try {
         const profileResponse = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/profile`)
         if (profileResponse.ok) {
           const profileData = await profileResponse.json()
-          console.log('Profile data fetched:', profileData)
           
           setAuthState({
             isAuthenticated: true,
@@ -245,7 +234,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (email: string, password: string, name: string) => {
     try {
       const response = await authService.register(email, password, name)
-      console.log('Registration successful:', response)
       
       setAuthState({
         isAuthenticated: true,
@@ -377,7 +365,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/profile`)
       if (response.ok) {
         const profileData = await response.json()
-        console.log('Profile data refreshed:', profileData)
         
         const updatedUser = {
           ...session.user,
@@ -400,8 +387,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isAdmin: profileData.role === 'admin',
           authLoading: false
         }))
-        
-        console.log('Auth state updated with verification status:', updatedUser.isEmailVerified)
       } else {
         console.error('Failed to refresh user profile')
         setAuthState(prev => ({
@@ -450,8 +435,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return updatedState;
     });
   };
-
-  console.log('Auth State Debug:', authState)
 
   return (
     <AuthContext.Provider

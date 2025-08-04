@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion'
 import Image from 'next/image'
-import { Shield, Lightbulb, Code, Users, Target, Award, Linkedin } from 'lucide-react'
+import { Shield, Lightbulb, Code, Users, Target, Award, Linkedin, Github } from 'lucide-react'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
 import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
@@ -56,47 +56,54 @@ const team = [
     role: "Chief Technology Officer",
     image: "/Teams/lynn 2 1.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/lynn-sugut-6a275016",
+      linkedin: "#",
     }
   },
   {
     name: "Victor Ongeto",
     role: "Senior Configuration Analyst",
+
     image: "/Teams/Victor.jpg",
     social: {
-      linkedin: "https://linkedin.com/in/victor-ongeto",
+      linkedin: "#",
+     
     }
   },
   {
     name: "Lovell Oduor",
-    role: "Junior Configuration Analyst", 
+    role: "Configuration Analyst",
+ 
     image: "/Teams/Lovell.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/lovelloduor/",
+   
     }
   },
   {
     name: "Geoffrey Audia",
-    role: "Junior Configuration Analyst",
+    role: "Configuration Analyst",
     image: "/Teams/Geo1.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/geoffrey-audia"
+    
+      github: "https://github.com/Geotechcompany"
     }
   },
   {
     name: "Ian Mosonik",
-    role: "Junior Configuration Analyst",
+    role: "Configuration Analyst",
     image: "/Teams/Ian 1.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/ian-mosonik-a18089225/",
+      github: "#"
     }
   },
   {
     name: "Gloria Onyancha",
-    role: "Junior Configuration Analyst",
+    role: "Configuration Analyst",
     image: "/Teams/Gloria 2.jpg",
     social: {
       linkedin: "#",
+      github: "#"
     }
   },
   {
@@ -105,14 +112,16 @@ const team = [
     image: "/Teams/Geoffrey Nyakundi.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/geoffreynyakundi/",
+      
     }
   },
   {
-    name: "Felix Rono",
+    name: "Felix Ronoh",
     role: "Software Engineer",
     image: "/Teams/Felix.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/felixrono/",
+      linkedin: "#",
+      github: "#"
     }
   },
   {
@@ -120,7 +129,8 @@ const team = [
     role: "Operations and Strategic Initiatives Associate",
     image: "/Teams/Nigel.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/nigelwatunu",
+      linkedin: "#",
+      github: "#"
     }
   }
 ]
@@ -347,6 +357,18 @@ export default function AboutPage() {
                             whileTap={{ scale: 0.95 }}
                           >
                             <Linkedin className="w-5 h-5 text-white" />
+                          </motion.a>
+                        )}
+                        {member.social.github && (
+                          <motion.a
+                            href={member.social.github}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-3 bg-white/20 backdrop-blur-md rounded-full hover:bg-purple-600 transition-all duration-300 hover:scale-110"
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                          >
+                            <Github className="w-5 h-5 text-white" />
                           </motion.a>
                         )}
                       </div>
