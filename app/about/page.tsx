@@ -303,10 +303,10 @@ export default function AboutPage() {
               <motion.div 
                 key={member.name}
                 className={`group relative w-full max-w-[280px] ${
-                  member.name === 'Felix Ronoh'
-                    ? 'lg:col-start-2'
+                  member.name === 'Felix Rono'
+                    ? 'lg:col-start-2'  // Centered on large screens
                     : member.name === 'Nigel Watunu'
-                    ? 'lg:col-start-3'
+                    ? 'lg:col-start-3'  // Next to Felix, also centered
                     : ''
                 }`}
                 initial={{ opacity: 0, y: 30 }}
