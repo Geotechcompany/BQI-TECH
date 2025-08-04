@@ -105,11 +105,56 @@ function EmailVerificationContent() {
   const [error, setError] = useState('')
   const [initialEmailSent, setInitialEmailSent] = useState(false)
   
+  // Constants for duplicate prevention
+  const RESEND_COOLDOWN = 30000 // 30 seconds cooldown between resends
+  const AUTO_SEND_STORAGE_KEY = 'verification_auto_sent'
+  const LAST_SEND_TIME_KEY = 'verification_last_send_time'
+  
   // Ref to prevent duplicate verification requests
   const isRequestInProgress = useRef(false)
-  const lastEmailSent = useRef<string | null>(null)
-  const lastResendTime = useRef<number>(0)
-  const RESEND_COOLDOWN = 30000 // 30 seconds cooldown between resends
+  
+  // Session-based tracking to handle React StrictMode
+  const sessionSentEmails = useRef(new Set<string>())
+  
+  // Helper functions for duplicate prevention
+  const hasAutoSentForEmail = useCallback((emailToCheck: string) => {
+    if (typeof window === 'undefined') return false
+    
+    // Check session tracking first (handles React StrictMode)
+    if (sessionSentEmails.current.has(emailToCheck)) {
+      return true
+    }
+    
+    // Check localStorage (handles page refreshes)
+    const stored = localStorage.getItem(`${AUTO_SEND_STORAGE_KEY}_${emailToCheck}`)
+    return stored === 'true'
+  }, [])
+  
+  const markAutoSentForEmail = useCallback((emailToCheck: string) => {
+    // Add to session tracking (prevents React StrictMode duplicates)
+    sessionSentEmails.current.add(emailToCheck)
+    
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`${AUTO_SEND_STORAGE_KEY}_${emailToCheck}`, 'true')
+      localStorage.setItem(`${LAST_SEND_TIME_KEY}_${emailToCheck}`, Date.now().toString())
+    }
+  }, [])
+  
+  const getLastSendTime = useCallback((emailToCheck: string) => {
+    if (typeof window === 'undefined') return 0
+    const stored = localStorage.getItem(`${LAST_SEND_TIME_KEY}_${emailToCheck}`)
+    return stored ? parseInt(stored, 10) : 0
+  }, [])
+  
+  const clearVerificationTracking = useCallback((emailToCheck: string) => {
+    // Clear session tracking
+    sessionSentEmails.current.delete(emailToCheck)
+    
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(`${AUTO_SEND_STORAGE_KEY}_${emailToCheck}`)
+      localStorage.removeItem(`${LAST_SEND_TIME_KEY}_${emailToCheck}`)
+    }
+  }, [])
 
   // Initialize form outside of any conditional block
   const { 
@@ -190,6 +235,9 @@ function EmailVerificationContent() {
       // Remove stored email after successful verification
       safeLocalStorage.removeItem('verification_email')
       
+      // Clear verification tracking for this email
+      clearVerificationTracking(email)
+      
       // Redirect to appropriate dashboard based on user role
       const redirectPath = result.user?.role === 'admin' ? '/admin' : '/dashboard'
       setTimeout(() => {
@@ -223,15 +271,15 @@ function EmailVerificationContent() {
     }
   }, [email, isAuthenticated, router, getEmailFromSources])
 
-  // Send initial verification email with enhanced duplicate prevention
+    // Send initial verification email with bulletproof duplicate prevention
   useEffect(() => {
     const sendInitialVerification = async () => {
-      // Multiple safeguards to prevent duplicate sends
+      // Robust safeguards to prevent any duplicate sends
       if (!email || 
-          initialEmailSent || 
           status !== 'idle' || 
           isRequestInProgress.current ||
-          lastEmailSent.current === email) {
+          hasAutoSentForEmail(email) ||
+          user?.isEmailVerified) { // Don't send if already verified
         return
       }
 
@@ -251,34 +299,31 @@ function EmailVerificationContent() {
           throw new Error(data.detail || 'Failed to send verification')
         }
         
-        // Mark this email as sent
-        lastEmailSent.current = email
+        // Mark this email as sent persistently
+        markAutoSentForEmail(email)
+        setInitialEmailSent(true)
         toast.success('Verification code sent! Check your email.')
         
       } catch (error: any) {
         toast.error(error.message || 'Failed to send verification email')
       } finally {
         setStatus('idle')
-        setInitialEmailSent(true)
         isRequestInProgress.current = false
       }
     }
 
-    // Longer debounce to prevent rapid-fire requests
-    const debounceTimer = setTimeout(sendInitialVerification, 1000)
+    // Only run once per email with longer debounce
+    const debounceTimer = setTimeout(sendInitialVerification, 1500)
     return () => {
       clearTimeout(debounceTimer)
-      // Ensure we clean up the request flag if component unmounts
       isRequestInProgress.current = false
     }
-     }, [email]) // Simplified dependencies to reduce re-runs
+   }, [email, user?.isEmailVerified, hasAutoSentForEmail, markAutoSentForEmail]) // Include callback dependencies
 
   // Cleanup effect to reset flags on unmount
   useEffect(() => {
     return () => {
       isRequestInProgress.current = false
-      lastEmailSent.current = null
-      lastResendTime.current = 0
     }
   }, [])
 
@@ -321,9 +366,10 @@ function EmailVerificationContent() {
         throw new Error('Operation in progress')
       }
       
-      // Check cooldown period
+      // Check cooldown period using persistent storage
       const now = Date.now()
-      const timeSinceLastResend = now - lastResendTime.current
+      const lastSendTime = getLastSendTime(email)
+      const timeSinceLastResend = now - lastSendTime
       if (timeSinceLastResend < RESEND_COOLDOWN) {
         const remainingTime = Math.ceil((RESEND_COOLDOWN - timeSinceLastResend) / 1000)
         throw new Error(`Please wait ${remainingTime} seconds before requesting another code`)
@@ -344,9 +390,8 @@ function EmailVerificationContent() {
         throw new Error(data.detail || 'Failed to resend code')
       }
       
-      // Update tracking
-      lastEmailSent.current = email
-      lastResendTime.current = Date.now()
+      // Update tracking with persistent storage
+      markAutoSentForEmail(email)
       toast.success('New verification code sent!')
       
     } catch (error: any) {
