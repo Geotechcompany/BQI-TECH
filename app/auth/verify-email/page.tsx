@@ -74,22 +74,7 @@ function EmailVerificationContent() {
   const router = useRouter()
   const { updateEmailVerificationStatus, authLoading, user, isAuthenticated } = useAuth()
 
-  // Enhanced logging for debugging
-  useEffect(() => {
-    console.group('🔍 Email Verification Page Debug')
-    console.log('Authentication State:', {
-      authLoading,
-      isAuthenticated,
-      user: user ? {
-        email: user.email,
-        isEmailVerified: user.isEmailVerified,
-        id: user.id
-      } : null
-    })
-    console.log('Search Params:', Object.fromEntries(searchParams.entries()))
-    console.log('Local Storage Email:', localStorage.getItem('verification_email'))
-    console.groupEnd()
-  }, [authLoading, isAuthenticated, user, searchParams])
+
 
   // Robust email retrieval with multiple fallback mechanisms
   const getEmailFromSources = useCallback(() => {
@@ -102,11 +87,7 @@ function EmailVerificationContent() {
     // Priority 3: Local Storage (safely accessed)
     const emailFromStorage = safeLocalStorage.getItem('verification_email')
 
-    console.group('📧 Comprehensive Email Retrieval')
-    console.log('Email from Params:', emailFromParams)
-    console.log('Email from User:', emailFromUser)
-    console.log('Email from Storage:', emailFromStorage)
-    console.groupEnd()
+
 
     return emailFromParams || emailFromUser || emailFromStorage
   }, [searchParams, user])
@@ -139,13 +120,7 @@ function EmailVerificationContent() {
 
   // Memoize onSubmit to prevent unnecessary re-renders
   const onSubmit = useCallback(async (data: z.infer<typeof otpSchema>) => {
-    console.log('🚀 Submitting Verification:', { 
-      email, 
-      otpLength: data.code.length 
-    })
-
     if (!email) {
-      console.error('❌ No email found for verification')
       toast.error('No email found. Please start the verification process again.')
       router.push('/login')
       return;
@@ -165,16 +140,10 @@ function EmailVerificationContent() {
 
       // Parse the response to handle different error scenarios
       const responseData = await response.json()
-      console.log('🔐 Verification Response:', { 
-        status: response.status, 
-        ok: response.ok, 
-        data: responseData 
-      })
 
       if (!response.ok) {
         // Handle specific error scenarios
         if (responseData.detail === "Email already registered") {
-          console.warn('⚠️ Email Already Registered')
           toast.error('This email is already registered. Please login or use a different email.', {
             duration: 5000,
             position: 'top-center',
@@ -208,9 +177,8 @@ function EmailVerificationContent() {
       // Try to refresh user profile to update verification status
       try {
         await updateEmailVerificationStatus(true)
-        console.log('✅ Email Verification Status Updated Successfully')
       } catch (sessionError) {
-        console.error('❌ Error updating session:', sessionError)
+        // Silent error - session update is not critical for user experience
       }
       
       // Remove stored email after successful verification
@@ -223,7 +191,6 @@ function EmailVerificationContent() {
       }, 1500)
       
     } catch (error) {
-      console.error('❌ Verification Error:', error)
       setStatus('error')
       toast.error(error.message || 'Verification failed', {
         duration: 3000,
@@ -235,17 +202,8 @@ function EmailVerificationContent() {
 
   // Effect to handle email retrieval and redirect logic
   useEffect(() => {
-    console.group('🔄 Email Verification Redirect Check')
-    console.log('Current State:', { 
-      authLoading, 
-      email, 
-      isAuthenticated,
-      userEmailVerified: user?.isEmailVerified
-    })
-
     // Prevent redirect if email is present and user is authenticated
     if (!email && isAuthenticated) {
-      console.warn('❌ No email found. Attempting to retrieve from sources.')
       const retrievedEmail = getEmailFromSources()
       
       if (retrievedEmail) {
@@ -257,104 +215,38 @@ function EmailVerificationContent() {
         router.replace('/login')
       }
     }
-
-    console.groupEnd()
   }, [email, isAuthenticated, router, getEmailFromSources])
 
-  // State to track verification email sending
-  const [emailSent, setEmailSent] = useState(false)
-  const [emailSendAttempts, setEmailSendAttempts] = useState(0)
-
-  // Prevent excessive email send attempts
-  const MAX_EMAIL_SEND_ATTEMPTS = 3
-
-  // Send verification email
-  const sendVerificationEmail = useCallback(async () => {
-    // Prevent multiple email sends
-    if (emailSent || emailSendAttempts >= MAX_EMAIL_SEND_ATTEMPTS) {
-      console.warn('🚫 Verification email already sent or max attempts reached')
-      return false
-    }
-
-    try {
-      // Increment send attempts
-      setEmailSendAttempts(prev => prev + 1)
-
-      // Actual email sending logic
-      const response = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/send-verification-code`, {
-        method: 'POST',
-        body: JSON.stringify({ 
-          email, 
-          // Optional: Add resend flag if needed
-          resend: emailSendAttempts > 0 
-        })
-      })
-
-      if (response.ok) {
-        // Mark email as sent
-        setEmailSent(true)
-        
-        // Optional: Toast or notification
-        toast.success('Verification code sent successfully', {
-          duration: 4000,
-          position: 'top-center'
-        })
-
-        return true
-      } else {
-        // Handle send failure
-        const errorData = await response.json()
-        toast.error(errorData.detail || 'Failed to send verification email', {
-          duration: 4000,
-          position: 'top-center'
-        })
-        return false
-      }
-    } catch (error) {
-      console.error('🔥 Verification Email Send Error:', error)
-      
-      // Show error toast
-      toast.error('Network error. Please try again.', {
-        duration: 4000,
-        position: 'top-center'
-      })
-
-      return false
-    }
-  }, [email, emailSent, emailSendAttempts])
-
-  // Initial email send effect
+  // Send initial verification email
   useEffect(() => {
-    // Only send if email exists and not already sent
-    if (email && !emailSent) {
-      sendVerificationEmail()
-    }
-  }, [email, emailSent, sendVerificationEmail])
+    const sendInitialVerification = async () => {
+      if (email && !initialEmailSent && status === 'idle') {
+        try {
+          setStatus('loading')
+          const response = await authService.authenticatedFetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/resend-verification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(email)
+          })
 
-  // Resend email handler
-  const handleResendEmail = useCallback(async () => {
-    // Check if resend is allowed
-    if (emailSendAttempts < MAX_EMAIL_SEND_ATTEMPTS) {
-      // Reset sent status to allow resending
-      setEmailSent(false)
-      
-      // Attempt to send again
-      const success = await sendVerificationEmail()
-      
-      if (success) {
-        toast.success('Verification email resent', {
-          duration: 4000,
-          position: 'top-center'
-        })
+          if (!response.ok) {
+            const data = await response.json()
+            throw new Error(data.detail || 'Failed to send verification')
+          }
+          
+          toast.success('Verification code sent! Check your email.')
+        } catch (error: any) {
+          toast.error(error.message || 'Failed to send verification email')
+        } finally {
+          setStatus('idle')
+          setInitialEmailSent(true)
+        }
       }
-    } else {
-      // Max attempts reached
-      toast.error('Maximum email send attempts reached. Please contact support.', {
-        duration: 5000,
-        position: 'top-center'
-      })
     }
-  }, [sendVerificationEmail, emailSendAttempts])
+
+    const debounceTimer = setTimeout(sendInitialVerification, 500)
+    return () => clearTimeout(debounceTimer)
+  }, [email, initialEmailSent, status])
 
   // Auto-submit when OTP is complete (memoized to prevent unnecessary re-renders)
   const handleOtpSubmit = useCallback(() => {
@@ -454,7 +346,7 @@ function EmailVerificationContent() {
                   <Controller
                     name="code"
                     control={control}
-                    render={({ field }) => (
+                    render={({ field: { ref, ...field } }) => (
                       <OtpInput
                         {...field}
                         value={otp}
