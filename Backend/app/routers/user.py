@@ -209,22 +209,41 @@ async def resend_verification_email(
         from app.lib.email import send_verification_code
         
         db = get_database()
+        
+        # Check if user exists in main users collection
         user = await db.users.find_one({"_id": ObjectId(current_user["_id"])})
         
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-            
-        if user.get("isEmailVerified", False):
-            raise HTTPException(
-                status_code=400,
-                detail="Email is already verified"
-            )
+        # Also check for pending registration
+        pending_registration = await db.pending_registrations.find_one({"email": email})
         
-        # Verify that the email matches the current user's email
-        if user.get("email") != email:
+        if user:
+            # User exists in main collection
+            if user.get("isEmailVerified", False):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email is already verified"
+                )
+            
+            # Verify that the email matches the current user's email
+            if user.get("email") != email:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Email does not match current user"
+                )
+        elif pending_registration:
+            # User has pending registration
+            # Check if registration is expired
+            if pending_registration.get("expiresAt") and pending_registration["expiresAt"] < datetime.utcnow():
+                # Clean up expired registration
+                await db.pending_registrations.delete_one({"_id": pending_registration["_id"]})
+                raise HTTPException(
+                    status_code=400,
+                    detail="Registration expired. Please register again."
+                )
+        else:
             raise HTTPException(
-                status_code=400,
-                detail="Email does not match current user"
+                status_code=404, 
+                detail="User not found. Please register first."
             )
         
         # Send verification code

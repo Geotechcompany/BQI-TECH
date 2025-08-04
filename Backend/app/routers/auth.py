@@ -43,6 +43,25 @@ async def login(
         # Find user by email
         user = await db.users.find_one({"email": credentials.username})
         if not user:
+            # Check if there's a pending registration
+            pending_registration = await db.pending_registrations.find_one({"email": credentials.username})
+            if pending_registration:
+                # Check if pending registration is expired
+                if pending_registration.get("expiresAt") and pending_registration["expiresAt"] < datetime.utcnow():
+                    # Clean up expired registration
+                    await db.pending_registrations.delete_one({"_id": pending_registration["_id"]})
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Registration expired. Please register again."
+                    )
+                
+                # Verify password against pending registration
+                if verify_password(credentials.password, pending_registration["password"]):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Please verify your email to complete registration before logging in."
+                    )
+            
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials"
@@ -136,7 +155,7 @@ async def signup(
     password: str = Form(...),
     name: str = Form(...)
 ):
-    """User registration endpoint"""
+    """User registration endpoint - stores in pending until email verification"""
     try:
         from app.lib.email import send_verification_code
         
@@ -145,7 +164,7 @@ async def signup(
         # Normalize email to lowercase
         email = email.lower()
         
-        # Check if user already exists (case-insensitive)
+        # Check if user already exists in main users collection (case-insensitive)
         existing_user = await db.users.find_one({
             "email": {"$regex": f"^{email}$", "$options": "i"}
         })
@@ -157,22 +176,33 @@ async def signup(
                 detail="Email already registered"
             )
         
+        # Check if there's already a pending registration for this email
+        existing_pending = await db.pending_registrations.find_one({
+            "email": {"$regex": f"^{email}$", "$options": "i"}
+        })
+        
         # Hash password
         hashed_password = get_password_hash(password)
         
-        # Create user document
-        user_data = {
+        # Create pending registration document
+        pending_data = {
             "email": email,
             "name": name,
             "password": hashed_password,
             "role": "USER",
             "is_active": True,
             "createdAt": datetime.utcnow(),
-            "isEmailVerified": False
+            "expiresAt": datetime.utcnow() + timedelta(hours=24),  # Expire after 24 hours
+            "attempts": 0,
+            "lastAttempt": datetime.utcnow()
         }
         
-        # Insert user into database
-        result = await db.users.insert_one(user_data)
+        # Upsert pending registration (update if exists, insert if not)
+        result = await db.pending_registrations.replace_one(
+            {"email": {"$regex": f"^{email}$", "$options": "i"}},
+            pending_data,
+            upsert=True
+        )
         
         # Send verification email
         try:
@@ -185,10 +215,10 @@ async def signup(
             logger.error(f"Error sending verification email to {email}: {str(e)}")
             # Don't fail the signup if email sending fails
         
-        logger.info(f"New user registered: {email}")
+        logger.info(f"Pending registration created for: {email}")
         return {
-            "message": "User created successfully. Please check your email for verification code.",
-            "user_id": str(result.inserted_id)
+            "message": "Registration initiated. Please check your email for verification code to complete registration.",
+            "email": email
         }
         
     except HTTPException:
@@ -442,46 +472,127 @@ async def verify_email(
     email: str = Body(...),
     code: str = Body(...)
 ):
-    """Verify user's email address"""
+    """Verify user's email address and complete registration"""
     try:
         from app.lib.email import verify_code
         
         db = get_database()
         
-        # Find user
-        user = await db.users.find_one({"email": email})
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
+        # First check if user already exists and is verified
+        existing_user = await db.users.find_one({"email": email})
+        if existing_user and existing_user.get("isEmailVerified", False):
+            return {"message": "Email already verified", "user": {
+                "id": str(existing_user["_id"]),
+                "email": existing_user["email"],
+                "name": existing_user["name"],
+                "role": existing_user.get("role", "USER"),
+                "isEmailVerified": True
+            }}
+        
+        # Look for pending registration
+        pending_registration = await db.pending_registrations.find_one({"email": email})
+        if not pending_registration:
+            # Check if user exists but isn't verified (legacy case)
+            if existing_user:
+                user = existing_user
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Registration not found. Please register again."
+                )
+        else:
+            # Check if pending registration has expired
+            if pending_registration.get("expiresAt") and pending_registration["expiresAt"] < datetime.utcnow():
+                # Clean up expired registration
+                await db.pending_registrations.delete_one({"_id": pending_registration["_id"]})
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Registration expired. Please register again."
+                )
         
         # Verify the code
         is_valid = await verify_code(email, code)
         if not is_valid:
+            # Increment attempt counter for pending registrations
+            if pending_registration:
+                await db.pending_registrations.update_one(
+                    {"_id": pending_registration["_id"]},
+                    {
+                        "$inc": {"attempts": 1},
+                        "$set": {"lastAttempt": datetime.utcnow()}
+                    }
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid or expired verification code"
             )
         
-        # Mark email as verified
-        result = await db.users.update_one(
-            {"_id": user["_id"]},
-            {
-                "$set": {
-                    "isEmailVerified": True,
-                    "verifiedAt": datetime.utcnow()
-                }
+        if pending_registration:
+            # Complete registration by moving from pending to users collection
+            user_data = {
+                "email": pending_registration["email"],
+                "name": pending_registration["name"],
+                "password": pending_registration["password"],
+                "role": pending_registration.get("role", "USER"),
+                "is_active": pending_registration.get("is_active", True),
+                "createdAt": datetime.utcnow(),  # Use current time as actual creation time
+                "isEmailVerified": True,
+                "verifiedAt": datetime.utcnow()
             }
-        )
-        
-        if result.modified_count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to verify email"
+            
+            # Insert into users collection
+            result = await db.users.insert_one(user_data)
+            
+            if not result.inserted_id:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to complete registration"
+                )
+            
+            # Remove from pending registrations
+            await db.pending_registrations.delete_one({"_id": pending_registration["_id"]})
+            
+            logger.info(f"Registration completed for: {email}")
+            
+            # Return user data
+            user_response = {
+                "id": str(result.inserted_id),
+                "email": user_data["email"],
+                "name": user_data["name"],
+                "role": user_data["role"],
+                "isEmailVerified": True
+            }
+            
+        else:
+            # Legacy case: update existing unverified user
+            result = await db.users.update_one(
+                {"_id": existing_user["_id"]},
+                {
+                    "$set": {
+                        "isEmailVerified": True,
+                        "verifiedAt": datetime.utcnow()
+                    }
+                }
             )
+            
+            if result.modified_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to verify email"
+                )
+            
+            user_response = {
+                "id": str(existing_user["_id"]),
+                "email": existing_user["email"],
+                "name": existing_user["name"],
+                "role": existing_user.get("role", "USER"),
+                "isEmailVerified": True
+            }
         
-        return {"message": "Email verified successfully"}
+        return {
+            "message": "Email verified successfully", 
+            "user": user_response
+        }
         
     except HTTPException:
         raise
@@ -576,4 +687,29 @@ async def check_email_verification(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
+        )
+
+
+@router.post("/cleanup-expired-registrations")
+async def cleanup_expired_registrations():
+    """Admin endpoint to clean up expired pending registrations"""
+    try:
+        db = get_database()
+        
+        # Delete expired registrations
+        result = await db.pending_registrations.delete_many({
+            "expiresAt": {"$lt": datetime.utcnow()}
+        })
+        
+        logger.info(f"Cleaned up {result.deleted_count} expired pending registrations")
+        return {
+            "message": f"Cleaned up {result.deleted_count} expired registrations",
+            "deleted_count": result.deleted_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Cleanup error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Cleanup failed"
         )

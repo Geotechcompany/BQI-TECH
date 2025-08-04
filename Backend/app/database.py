@@ -43,6 +43,9 @@ async def connect_to_database():
         await _client.admin.command('ping', serverSelectionTimeoutMS=30000)
         logger.info(f"Connected to MongoDB: {database_name}")
         
+        # Initialize database indexes
+        await initialize_database_indexes()
+        
     except (ConnectionFailure, ServerSelectionTimeoutError) as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
         _client = None
@@ -75,4 +78,54 @@ def get_database():
 def is_connected():
     """Check if database is connected"""
     global _database
-    return _database is not None 
+    return _database is not None
+
+
+async def initialize_database_indexes():
+    """Initialize database indexes for optimal performance"""
+    global _database
+    
+    if not _database:
+        logger.warning("Database not connected, skipping index initialization")
+        return
+    
+    try:
+        # Create TTL index for pending_registrations collection to auto-expire documents
+        await _database.pending_registrations.create_index(
+            "expiresAt", 
+            expireAfterSeconds=0,  # Use the date in the field
+            name="pending_registrations_ttl"
+        )
+        
+        # Create unique index on email for pending_registrations
+        await _database.pending_registrations.create_index(
+            "email",
+            unique=True,
+            name="pending_registrations_email_unique"
+        )
+        
+        # Create index on email for verification_codes (if not exists)
+        await _database.verification_codes.create_index(
+            "email",
+            name="verification_codes_email"
+        )
+        
+        # Create TTL index for verification_codes
+        await _database.verification_codes.create_index(
+            "expiresAt",
+            expireAfterSeconds=0,
+            name="verification_codes_ttl"
+        )
+        
+        # Ensure unique email index on users collection
+        await _database.users.create_index(
+            "email",
+            unique=True,
+            name="users_email_unique"
+        )
+        
+        logger.info("Database indexes initialized successfully")
+        
+    except Exception as e:
+        logger.error(f"Error initializing database indexes: {e}")
+        # Don't raise exception to avoid blocking startup 
