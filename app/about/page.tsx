@@ -56,7 +56,7 @@ const team = [
     role: "Chief Technology Officer",
     image: "/Teams/lynn 2 1.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/lynn-sugut-0000000000/",
+      linkedin: "https://www.linkedin.com/in/lynn-sugut-6a275016",
     }
   },
   {

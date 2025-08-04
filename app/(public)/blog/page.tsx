@@ -162,13 +162,11 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
 
 const fetcher = async (url: string) => {
   const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000'
-  console.log('Fetching from:', `${baseUrl}/api${url}`);
   const response = await fetch(`${baseUrl}/api${url}`)
   if (!response.ok) {
     throw new Error('Failed to fetch posts')
   }
   const data = await response.json()
-  console.log('Fetched data:', data);
   return data
 }
 
@@ -197,7 +195,6 @@ export default function BlogPage() {
     { 
       refreshInterval: 5000, // Refresh every 5 seconds
       revalidateOnFocus: true, // Refresh when window regains focus
-      onSuccess: (data) => console.log('Successfully fetched data:', data),
       onError: (error) => console.error('Error fetching data:', error)
     }
   )

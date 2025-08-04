@@ -46,6 +46,7 @@ class Settings(BaseModel):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
+          "http://localhost:3002",
         "http://localhost:9000",
         "https://bqitech.com",
         "https://bqitech-nonprod.netlify.app",

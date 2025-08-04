@@ -1,0 +1,54 @@
+2025-08-04 13:33:44,126 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:33:44,127 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:33:44,128 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:33:44,129 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:33:44,621 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:33:44,621 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:33:50,189 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:33:50,191 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:33:50,191 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:33:50,191 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:33:50,675 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:33:50,675 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:33:56,012 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:33:56,013 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:33:56,015 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:33:56,016 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:33:56,490 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:33:56,490 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:34:01,513 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:34:01,514 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:34:01,514 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:34:01,515 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:34:02,029 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:34:02,030 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:34:07,365 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:34:07,366 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:34:07,366 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:34:07,367 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:34:07,838 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:34:07,838 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:34:12,854 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:34:12,855 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:34:12,855 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:34:12,856 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:34:13,715 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:34:13,715 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:34:18,738 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:34:18,740 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:34:18,740 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:34:18,741 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:34:19,220 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:34:19,221 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:34:24,236 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:34:24,237 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:34:24,238 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:34:24,239 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:34:24,712 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:34:24,712 - bqitech - INFO - Successfully prepared response
+2025-08-04 13:34:30,043 - bqitech - INFO - Received GET /blog request
+2025-08-04 13:34:30,044 - bqitech - INFO - Query parameters: skip=0, limit=9, category=None
+2025-08-04 13:34:30,045 - bqitech - INFO - Request headers: {'host': 'localhost:9000', 'connection': 'keep-alive', 'sec-ch-ua-platform': '"Windows"', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36', 'sec-ch-ua': '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"', 'sec-ch-ua-mobile': '?0', 'accept': '*/*', 'origin': 'http://localhost:3002', 'sec-fetch-site': 'same-site', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty', 'referer': 'http://localhost:3002/', 'accept-encoding': 'gzip, deflate, br, zstd', 'accept-language': 'en-US,en;q=0.9'}
+2025-08-04 13:34:30,046 - bqitech - INFO - MongoDB query: {'$or': [{'isPublished': True}, {'published': True}]}
+2025-08-04 13:34:30,597 - bqitech - INFO - Found 1 posts out of 1 total
+2025-08-04 13:34:30,599 - bqitech - INFO - Successfully prepared response

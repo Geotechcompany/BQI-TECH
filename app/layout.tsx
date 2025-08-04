@@ -37,8 +37,6 @@ export default function RootLayout({
         script.async = true;
         
         script.onload = () => {
-          console.log('ThinkStack AI script loaded successfully');
-          
           // Attempt to initialize the chatbot
           try {
             // @ts-ignore

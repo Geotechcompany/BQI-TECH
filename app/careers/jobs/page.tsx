@@ -1,6 +1,6 @@
 "use client";
  
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -22,6 +22,42 @@ export default function JobsPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
   const isSignedIn = isAuthenticated;
+
+  // Refs for dropdown containers
+  const locationDropdownRef = useRef<HTMLDivElement>(null);
+  const departmentDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(event.target as Node)) {
+        setIsLocationOpen(false);
+      }
+      if (departmentDropdownRef.current && !departmentDropdownRef.current.contains(event.target as Node)) {
+        setIsDepartmentOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Close dropdowns when pressing Escape key
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsLocationOpen(false);
+        setIsDepartmentOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, []);
  
   const {
     data: jobs,
@@ -54,12 +90,82 @@ export default function JobsPage() {
     retry: 2, // Retry failed requests up to 2 times
   });
  
-  const uniqueLocations = Array.from(
-    new Set(jobs?.map((job) => job.location) || [])
-  );
-  const uniqueDepartments = Array.from(
-    new Set(jobs?.map((job) => job.department).filter(Boolean) || [])
-  );
+  const uniqueLocations = (() => {
+    if (!jobs?.length) return [];
+    
+    // Get all clean locations
+    const allLocations = jobs
+      .map(job => job.location?.trim().replace(/\s+/g, ' '))
+      .filter(Boolean);
+    
+    // Remove exact duplicates first
+    const uniqueLocationsList = [...new Set(allLocations)];
+    
+    // Consolidate similar locations (e.g., "Nairobi" + "Nairobi, Kenya" = "Nairobi, Kenya")
+    const consolidated = [];
+    
+    for (const location of uniqueLocationsList) {
+      let shouldAdd = true;
+      let indexToReplace = -1;
+      
+      for (let i = 0; i < consolidated.length; i++) {
+        const existing = consolidated[i];
+        const locationLower = location.toLowerCase();
+        const existingLower = existing.toLowerCase();
+        
+        // Check if they're related (one contains the other)
+        if (locationLower.includes(existingLower) || existingLower.includes(locationLower)) {
+          // Keep the longer, more specific one
+          if (location.length > existing.length) {
+            indexToReplace = i;
+          }
+          shouldAdd = false;
+          break;
+        }
+      }
+      
+      if (indexToReplace >= 0) {
+        // Replace the existing shorter location with the longer one
+        consolidated[indexToReplace] = location;
+      } else if (shouldAdd) {
+        // Add if no similar location exists
+        consolidated.push(location);
+      }
+    }
+    
+    return consolidated.sort();
+  })();
+
+  const uniqueDepartments = (() => {
+    if (!jobs?.length) return [];
+    
+    // Create a map to track department variations
+    const departmentMap = new Map();
+    
+    jobs.forEach(job => {
+      if (!job.department) return;
+      
+      const cleanDepartment = job.department.trim().replace(/\s+/g, ' ');
+      if (!cleanDepartment) return;
+      
+      // Create a normalized key for comparison (lowercase, no punctuation)
+      const normalizedKey = cleanDepartment.toLowerCase().replace(/[.,\s]/g, '');
+      
+      // If this normalized key doesn't exist, add it
+      if (!departmentMap.has(normalizedKey)) {
+        departmentMap.set(normalizedKey, cleanDepartment);
+      } else {
+        // If it exists, prefer the more complete version
+        const existing = departmentMap.get(normalizedKey);
+        if (cleanDepartment.length > existing.length) {
+          departmentMap.set(normalizedKey, cleanDepartment);
+        }
+      }
+    });
+    
+    // Return sorted array of unique departments
+    return Array.from(departmentMap.values()).sort();
+  })();
  
   const filteredJobs = jobs?.filter((job) => {
     const matchesSearch =
@@ -151,7 +257,7 @@ export default function JobsPage() {
  
           {/* Enhanced Filters */}
           <div className="flex flex-wrap gap-3 sm:gap-4">
-            <div className="relative flex-1 sm:flex-none">
+            <div className="relative flex-1 sm:flex-none" ref={locationDropdownRef}>
               <button
                 onClick={() => setIsLocationOpen(!isLocationOpen)}
                 className="w-full px-6 py-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
@@ -178,7 +284,7 @@ export default function JobsPage() {
               )}
             </div>
  
-            <div className="relative flex-1 sm:flex-none">
+            <div className="relative flex-1 sm:flex-none" ref={departmentDropdownRef}>
               <button
                 onClick={() => setIsDepartmentOpen(!isDepartmentOpen)}
                 className="w-full px-6 py-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
