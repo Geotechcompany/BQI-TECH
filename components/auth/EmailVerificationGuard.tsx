@@ -55,19 +55,11 @@ export function EmailVerificationGuard({
 
       // Check if email is verified
       const isVerified = isEmailVerified();
-      console.log('EmailVerificationGuard - Verification check:', {
-        pathname,
-        isVerified,
-        userEmail: user.email,
-        isEmailVerified: user.isEmailVerified,
-        hasRedirectedBefore: !!hasRedirectedBefore
-      });
 
       // Only redirect if not already on verification page and not redirected recently
       if (!isVerified && 
           !pathname.startsWith('/auth/verify-email') && 
           !hasRedirectedBefore) {
-        console.log('Email not verified, redirecting to verification page');
         
         // Set a flag to prevent multiple redirects
         localStorage.setItem(hasRedirectedKey, 'true');

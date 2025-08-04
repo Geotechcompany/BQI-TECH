@@ -76,7 +76,6 @@ class AuthService {
   // Set session data
   setSession(session: SessionData): void {
     if (typeof window !== 'undefined') {
-      console.log('Setting session:', session);
       localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
     }
   }
@@ -86,16 +85,13 @@ class AuthService {
     if (typeof window === 'undefined') return null;
     
     const session = localStorage.getItem(this.SESSION_KEY);
-    console.log('Raw session from storage:', session);
     
     if (!session) {
-      console.log('No session found in storage');
       return null;
     }
     
     try {
       const parsedSession = JSON.parse(session);
-      console.log('Parsed session:', parsedSession);
       return parsedSession;
     } catch (error) {
       console.error('Error parsing session:', error);
@@ -107,7 +103,6 @@ class AuthService {
   // Clear session data
   clearSession(): void {
     if (typeof window !== 'undefined') {
-      console.log('Clearing session');
       localStorage.removeItem(this.SESSION_KEY);
     }
   }
@@ -132,8 +127,6 @@ class AuthService {
   // Login with email and password
   async login(email: string, password: string): Promise<AuthResponse> {
     try {
-      console.log('Attempting login for:', email);
-      
       // Use URLSearchParams for form data as required by FastAPI
       const formData = new URLSearchParams();
       formData.append('username', email.toLowerCase());
@@ -162,7 +155,6 @@ class AuthService {
       } catch (error) {
         data = ResponseDecoder.decode(rawData);
       }
-      console.log('Login response:', data);
       
       if (!data.access_token || !data.refresh_token || !data.user) {
         console.error('Invalid login response:', data);
@@ -182,7 +174,6 @@ class AuthService {
         refreshToken: data.refresh_token
       };
       
-      console.log('Setting session after login:', sessionData);
       this.setSession(sessionData);
       
       return {
@@ -258,12 +249,9 @@ class AuthService {
       const session = this.getSession();
       
       if (!session?.refreshToken) {
-        console.log('No refresh token available');
         this.clearSession();
         return null;
       }
-
-      console.log('Attempting to refresh token');
       const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
         method: 'POST',
         headers: {
@@ -289,7 +277,6 @@ class AuthService {
       } catch (error) {
         data = ResponseDecoder.decode(rawData);
       }
-      console.log('Token refresh successful:', data);
       
       if (!data.access_token || !data.refresh_token) {
         console.error('Invalid refresh response:', data);
@@ -304,7 +291,6 @@ class AuthService {
         refreshToken: data.refresh_token
       };
       
-      console.log('Setting new session after refresh:', newSession);
       this.setSession(newSession);
       
       return {
@@ -375,11 +361,9 @@ class AuthService {
       }
 
       // If 401, try to refresh token
-      console.log('Token expired, attempting refresh...');
       const refreshResult = await this.refreshToken();
       
       if (!refreshResult) {
-        console.log('Token refresh failed, clearing session');
         this.clearSession();
         throw new Error('Authentication failed');
       }
