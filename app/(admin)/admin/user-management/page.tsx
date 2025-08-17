@@ -17,6 +17,7 @@ import { toast } from "react-hot-toast";
 import { Pagination } from "@/components/Pagination";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { EditUserModal } from "@/components/admin/EditUserModal";
+import { adminApi } from "@/lib/api-backend";
 
 export default function UserManagementPage() {
   const { user } = useAuth();
@@ -29,14 +30,13 @@ export default function UserManagementPage() {
   const { data: usersData, isLoading } = useQuery({
     queryKey: ['admin-users', currentPage],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/admin/users?page=${currentPage}&limit=${itemsPerPage}`
-      );
-      if (!res.ok) throw new Error("Failed to fetch users");
-      return res.json() as Promise<{
-        data: UserType[];
-        total: number;
-      }>;
+      const skip = (currentPage - 1) * itemsPerPage;
+      const res = await adminApi.getUsers({ skip, limit: itemsPerPage });
+      // Normalize shape for the table props
+      return {
+        data: (res as any).users ?? (res as any).data ?? [],
+        total: (res as any).total ?? 0,
+      } as { data: UserType[]; total: number };
     },
   });
 
@@ -44,11 +44,7 @@ export default function UserManagementPage() {
 
   const deleteUser = useMutation({
     mutationFn: async (userId: string) => {
-      const response = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE'
-      });
-      if (!response.ok) throw new Error('Failed to delete user');
-      return response.json();
+      return adminApi.deleteUser(userId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });

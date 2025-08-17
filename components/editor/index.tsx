@@ -85,6 +85,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
   return (
     <div className="border border-input bg-transparent rounded-t-md p-1 flex flex-wrap gap-1">
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
         disabled={!editor.can().chain().focus().toggleBold().run()}
         variant={editor.isActive('bold') ? 'secondary' : 'ghost'}
@@ -93,6 +94,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <Bold className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleItalic().run()}
         disabled={!editor.can().chain().focus().toggleItalic().run()}
         variant={editor.isActive('italic') ? 'secondary' : 'ghost'}
@@ -101,6 +103,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <Italic className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
         disabled={!editor.can().chain().focus().toggleHeading({ level: 1 }).run()}
         variant={editor.isActive('heading', { level: 1 }) ? 'secondary' : 'ghost'}
@@ -109,6 +112,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <Heading1 className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
         disabled={!editor.can().chain().focus().toggleHeading({ level: 2 }).run()}
         variant={editor.isActive('heading', { level: 2 }) ? 'secondary' : 'ghost'}
@@ -117,6 +121,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <Heading2 className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleBulletList().run()}
         disabled={!editor.can().chain().focus().toggleBulletList().run()}
         variant={editor.isActive('bulletList') ? 'secondary' : 'ghost'}
@@ -125,6 +130,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <List className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         disabled={!editor.can().chain().focus().toggleOrderedList().run()}
         variant={editor.isActive('orderedList') ? 'secondary' : 'ghost'}
@@ -133,6 +139,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <ListOrdered className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
         disabled={!editor.can().chain().focus().toggleBlockquote().run()}
         variant={editor.isActive('blockquote') ? 'secondary' : 'ghost'}
@@ -141,6 +148,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <Quote className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().toggleCode().run()}
         disabled={!editor.can().chain().focus().toggleCode().run()}
         variant={editor.isActive('code') ? 'secondary' : 'ghost'}
@@ -149,6 +157,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <Code className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={addLink}
         variant={editor.isActive('link') ? 'secondary' : 'ghost'}
         size="sm"
@@ -164,6 +173,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
           disabled={isUploading}
         />
         <Button 
+          type="button"
           variant="ghost"
           size="sm"
           disabled={isUploading}
@@ -176,6 +186,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         </Button>
       </div>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().undo().run()}
         disabled={!editor.can().chain().focus().undo().run()}
         variant="ghost"
@@ -184,6 +195,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
         <Undo className="h-4 w-4" />
       </Button>
       <Button
+        type="button"
         onClick={() => editor.chain().focus().redo().run()}
         disabled={!editor.can().chain().focus().redo().run()}
         variant="ghost"
