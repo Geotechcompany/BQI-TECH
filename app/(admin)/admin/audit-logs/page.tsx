@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { adminApi } from "@/lib/api-backend"
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout"
 import { Input } from "@/components/ui/input"
@@ -37,7 +37,7 @@ export default function AuditLogsPage() {
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["audit-logs", params],
     queryFn: () => adminApi.getAuditLogs(params),
-    placeholderData: (prev) => prev,
+    placeholderData: keepPreviousData,
     staleTime: 10_000,
   })
 
