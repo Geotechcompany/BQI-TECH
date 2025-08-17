@@ -75,11 +75,11 @@ export default function UserDashboardSidebar({
           initial={{ width: 280 }}
           animate={{ width: isCollapsed ? 80 : 280 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-[9998] bg-white/95 backdrop-blur-xl border-r border-gray-200/60 shadow-xl flex-shrink-0"
+          className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-[9998] bg-white/95 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/60 dark:border-gray-800 shadow-xl flex-shrink-0"
         >
           <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="h-10 flex items-center justify-between px-4 border-b border-gray-100/80 mb-4">
+            <div className="h-10 flex items-center justify-between px-4 border-b border-gray-100/80 dark:border-gray-800 mb-4">
               {!isCollapsed && (
                 <Link href="/dashboard" className="flex items-center space-x-3 group">
                   <div className="w-16 h-5 relative transition-transform group-hover:scale-105">
@@ -107,7 +107,7 @@ export default function UserDashboardSidebar({
                 variant="ghost"
                 size="icon"
                 onClick={() => onCollapse?.(!isCollapsed)}
-                className="ml-auto hover:bg-gray-100/80 rounded-xl transition-all duration-200 hover:scale-105"
+                className="ml-auto hover:bg-gray-100/80 dark:hover:bg-gray-800 rounded-xl transition-all duration-200 hover:scale-105"
               >
                 <ChevronRight className={`h-4 w-4 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
               </Button>
@@ -125,15 +125,15 @@ export default function UserDashboardSidebar({
                           className={cn(
                             "flex items-center justify-center px-4 py-3 rounded-xl transition-all duration-200 relative group",
                             pathname === tab.href
-                              ? "bg-gradient-to-r from-[#31CDFF]/10 to-[#272055]/10 text-[#272055] shadow-sm border border-[#31CDFF]/20"
-                              : "text-gray-600 hover:bg-gray-50/80 hover:text-[#272055]"
+                              ? "bg-gradient-to-r from-[#31CDFF]/10 to-[#272055]/10 text-[#272055] dark:text-white shadow-sm border border-[#31CDFF]/20"
+                              : "text-gray-600 dark:text-gray-300 hover:bg-gray-50/80 dark:hover:bg-gray-800/60 hover:text-[#272055] dark:hover:text-white"
                           )}
                         >
                           <div className={cn(
                             "p-2 rounded-lg transition-all duration-200",
                             pathname === tab.href 
                               ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md" 
-                              : "bg-gray-100/60 text-gray-500 group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
+                              : "bg-gray-100/60 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
                           )}>
                             <tab.icon className="h-5 w-5" />
                           </div>
@@ -149,15 +149,15 @@ export default function UserDashboardSidebar({
                       className={cn(
                         "flex items-center px-4 py-3 rounded-xl transition-all duration-200 relative group",
                         pathname === tab.href
-                          ? "bg-gradient-to-r from-[#31CDFF]/10 to-[#272055]/10 text-[#272055] shadow-sm border border-[#31CDFF]/20"
-                          : "text-gray-600 hover:bg-gray-50/80 hover:text-[#272055]"
+                          ? "bg-gradient-to-r from-[#31CDFF]/10 to-[#272055]/10 text-[#272055] dark:text-white shadow-sm border border-[#31CDFF]/20"
+                          : "text-gray-600 dark:text-gray-300 hover:bg-gray-50/80 dark:hover:bg-gray-800/60 hover:text-[#272055] dark:hover:text-white"
                       )}
                     >
                       <div className={cn(
                         "p-2 rounded-lg transition-all duration-200",
                         pathname === tab.href 
                           ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md" 
-                          : "bg-gray-100/60 text-gray-500 group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
+                          : "bg-gray-100/60 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
                       )}>
                         <tab.icon className="h-5 w-5" />
                       </div>
@@ -177,7 +177,7 @@ export default function UserDashboardSidebar({
             </nav>
 
             {/* Footer - User Profile */}
-            <div className="p-4 border-t border-gray-100/80">
+            <div className="p-4 border-t border-gray-100/80 dark:border-gray-800">
               {!isCollapsed ? (
                 <Link 
                   href="/dashboard/settings"
@@ -197,10 +197,10 @@ export default function UserDashboardSidebar({
                     <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full shadow-sm"></div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate group-hover:text-[#272055] transition-colors">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-[#272055] dark:group-hover:text-white transition-colors">
                       {user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user?.email || 'User'}
                     </p>
-                    <p className="text-xs text-gray-500 truncate">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       {user?.firstName ? user?.email : ''}
                     </p>
                     <div className="flex items-center mt-1">
@@ -215,7 +215,7 @@ export default function UserDashboardSidebar({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Link href="/dashboard/settings" className="group">
-                        <Avatar className="h-12 w-12 ring-2 ring-white shadow-lg group-hover:ring-[#31CDFF]/30 transition-all duration-300 group-hover:shadow-xl group-hover:scale-105">
+                        <Avatar className="h-12 w-12 ring-2 ring-white dark:ring-gray-900 shadow-lg group-hover:ring-[#31CDFF]/30 transition-all duration-300 group-hover:shadow-xl group-hover:scale-105">
                           <AvatarImage 
                             src={user?.avatar}
                             alt={displayName}
@@ -248,7 +248,7 @@ export function MobileBottomTabs() {
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50">
       {/* iOS-style backdrop blur effect */}
-      <div className="bg-white/90 ios-backdrop-blur border-t border-gray-200/30 shadow-2xl">
+      <div className="bg-white/90 dark:bg-gray-900/80 ios-backdrop-blur border-t border-gray-200/30 dark:border-gray-800 shadow-2xl">
         <div className="safe-area-pb">
           <nav className="flex items-center justify-around px-1 py-1">
             {tabs.map((tab) => {

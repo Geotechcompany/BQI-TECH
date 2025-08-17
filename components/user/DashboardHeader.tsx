@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,6 +19,9 @@ import {
   Settings,
   User,
   ChevronDown,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -29,6 +33,7 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ title = "Dashboard", subtitle }: DashboardHeaderProps) {
   const { user, logout } = useAuth();
+  const { theme, updateTheme } = useSettings();
 
   const handleLogout = async () => {
     try {
@@ -54,22 +59,48 @@ export function DashboardHeader({ title = "Dashboard", subtitle }: DashboardHead
     <motion.header
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white/95 backdrop-blur-sm shadow-sm"
+      className="sticky top-0 z-40 w-full border-b border-gray-200 dark:border-gray-800 bg-white/95 dark:bg-gray-900/80 backdrop-blur-sm shadow-sm"
     >
       <div className="flex h-16 items-center justify-between px-6 md:px-8">
         {/* Left section - Title */}
         <div className="flex items-center gap-4">
           {/* Title Section */}
           <div className="flex flex-col">
-            <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{title}</h1>
             {subtitle && (
-              <p className="text-sm text-gray-500">{subtitle}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
             )}
           </div>
         </div>
 
         {/* Right section - Notifications and User Menu */}
         <div className="flex items-center gap-4">
+          {/* Theme Switcher */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Toggle theme">
+                {theme === 'dark' ? (
+                  <Moon className="h-5 w-5" />
+                ) : theme === 'light' ? (
+                  <Sun className="h-5 w-5" />
+                ) : (
+                  <Monitor className="h-5 w-5" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={() => updateTheme('light')}>
+                <Sun className="h-4 w-4 mr-2" /> Light
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => updateTheme('dark')}>
+                <Moon className="h-4 w-4 mr-2" /> Dark
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => updateTheme('system')}>
+                <Monitor className="h-4 w-4 mr-2" /> System
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {/* Notifications */}
           <UserNotificationButton />
 
