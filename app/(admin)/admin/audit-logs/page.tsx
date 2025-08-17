@@ -37,7 +37,7 @@ export default function AuditLogsPage() {
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["audit-logs", params],
     queryFn: () => adminApi.getAuditLogs(params),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
     staleTime: 10_000,
   })
 
