@@ -89,39 +89,88 @@ async def initialize_database_indexes():
 		logger.warning("Database not connected, skipping index initialization")
 		return
 	
+	async def ensure_index(collection, keys, name: str | None = None, **options):
+		"""Create an index idempotently, resolving name/options conflicts.
+
+		If an index on the same key pattern already exists but with different
+		options or a different name, we drop the conflicting index and recreate
+		it with the desired options. This avoids IndexOptionsConflict errors
+		during application startup across environments.
+		"""
+		try:
+			info = await collection.index_information()
+			# Normalize keys to tuple of tuples like (("field", 1), ...)
+			if isinstance(keys, str):
+				desired_keys = ((keys, 1),)
+			elif isinstance(keys, list):
+				# list of tuples or single string wrapped in list
+				desired_keys = tuple(tuple(k) if isinstance(k, (list, tuple)) else (k, 1) for k in keys)
+			else:
+				desired_keys = tuple(keys)
+
+			conflicting_name = None
+			for idx_name, spec in info.items():
+				existing_keys = tuple(tuple(k) for k in spec.get("key", ()))
+				if existing_keys == desired_keys:
+					# Compare only relevant options we set
+					unique_ok = (options.get("unique") or False) == spec.get("unique", False)
+					ttl_desired = options.get("expireAfterSeconds")
+					ttl_ok = True if ttl_desired is None else ttl_desired == spec.get("expireAfterSeconds")
+					if unique_ok and ttl_ok:
+						# Index already satisfies our requirements; nothing to do
+						return
+					conflicting_name = idx_name
+					break
+
+			if conflicting_name:
+				logger.warning(f"Dropping conflicting index '{conflicting_name}' on '{collection.name}' to recreate with desired options")
+				await collection.drop_index(conflicting_name)
+
+			if name:
+				await collection.create_index(keys, name=name, **options)
+			else:
+				await collection.create_index(keys, **options)
+		except Exception as e:
+			logger.error(f"Failed ensuring index on {collection.name}: {e}")
+
 	try:
 		# Create TTL index for pending_registrations collection to auto-expire documents
-		await _database.pending_registrations.create_index(
-			"expiresAt", 
-			expireAfterSeconds=0,  # Use the date in the field
-			name="pending_registrations_ttl"
+		await ensure_index(
+			_database.pending_registrations,
+			["expiresAt"],
+			name="pending_registrations_ttl",
+			expireAfterSeconds=0
 		)
 		
 		# Create unique index on email for pending_registrations
-		await _database.pending_registrations.create_index(
-			"email",
-			unique=True,
-			name="pending_registrations_email_unique"
+		await ensure_index(
+			_database.pending_registrations,
+			["email"],
+			name="pending_registrations_email_unique",
+			unique=True
 		)
 		
 		# Create index on email for verification_codes (if not exists)
-		await _database.verification_codes.create_index(
-			"email",
+		await ensure_index(
+			_database.verification_codes,
+			["email"],
 			name="verification_codes_email"
 		)
 		
 		# Create TTL index for verification_codes
-		await _database.verification_codes.create_index(
-			"expiresAt",
-			expireAfterSeconds=0,
-			name="verification_codes_ttl"
+		await ensure_index(
+			_database.verification_codes,
+			["expiresAt"],
+			name="verification_codes_ttl",
+			expireAfterSeconds=0
 		)
 		
 		# Ensure unique email index on users collection
-		await _database.users.create_index(
-			"email",
-			unique=True,
-			name="users_email_unique"
+		await ensure_index(
+			_database.users,
+			["email"],
+			name="users_email_unique",
+			unique=True
 		)
 		
 		logger.info("Database indexes initialized successfully")
