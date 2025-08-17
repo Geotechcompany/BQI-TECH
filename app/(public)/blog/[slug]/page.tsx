@@ -296,20 +296,33 @@ const AuthorProfile = ({ post }: { post: BlogPost }) => {
 const fetcher = async (url: string) => {
   const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000'
   const response = await fetch(`${baseUrl}/api${url}`)
-  if (!response.ok) {
-    throw new Error('Failed to fetch post')
+
+  // Gracefully handle not found
+  if (response.status === 404) {
+    return null
   }
-  const data = await response.json()
-  return data
+
+  if (!response.ok) {
+    let message = 'Failed to fetch post'
+    try {
+      const errBody = await response.text()
+      message = errBody || message
+    } catch {}
+    const error: any = new Error(message)
+    error.status = response.status
+    throw error
+  }
+  return response.json()
 }
 
 export default function BlogPostPage({ params }: { params: { slug: string } }) {
-  const { data: post, error, isLoading } = useSWR<BlogPost>(
+  const { data: post, error, isLoading } = useSWR<BlogPost | null>(
     `/blog/by-slug/${params.slug}`,
     fetcher,
     {
-      refreshInterval: 5000, // Refresh every 5 seconds
-      revalidateOnFocus: true, // Refresh when window regains focus
+      // Do not aggressively retry on errors (e.g., 5xx)
+      shouldRetryOnError: false,
+      revalidateOnFocus: false,
       onError: (error) => console.error('Error fetching post:', error)
     }
   )

@@ -10,6 +10,7 @@ import json
 from fastapi.responses import JSONResponse
 from ..logger import logger
 from fastapi import status
+import re
 
 router = APIRouter(tags=["admin"])
 
@@ -27,6 +28,15 @@ def convert_objectids_to_strings(doc):
                 convert_objectids_to_strings(value)
         return doc
     return doc
+
+def generate_slug(title: str) -> str:
+    """Generate a URL-friendly slug from a title"""
+    if not title:
+        return ""
+    slug = title.lower().strip()
+    slug = re.sub(r'[^\w\s-]', '', slug)
+    slug = re.sub(r'[-\s]+', '-', slug)
+    return slug
 
 @router.get("/test-auth")
 async def test_auth_endpoint(request: Request):
@@ -507,6 +517,10 @@ async def create_blog_post(
     else:
         post_data["author"] = author_profile["name"]
     
+    # Ensure slug exists (from title if not provided)
+    if not post_data.get("slug") and post_data.get("title"):
+        post_data["slug"] = generate_slug(post_data["title"])
+
     result = await db.blogposts.insert_one(post_data)
     post_data["_id"] = str(result.inserted_id)
     post_data["id"] = str(result.inserted_id)
@@ -577,6 +591,10 @@ async def update_blog_post(
             update_data["authorProfile"] = author_profile
             update_data["author"] = author_profile["name"]
         
+        # Ensure slug is consistent with title when title is updated
+        if "title" in update_data and update_data["title"]:
+            update_data["slug"] = generate_slug(update_data["title"])
+
         update_data["updatedAt"] = datetime.utcnow()
         
         result = await db.blogposts.update_one(
@@ -625,6 +643,19 @@ async def patch_blog_post(
             update_data["authorProfile"] = author_profile
             update_data["author"] = author_profile["name"]
         
+        # If title provided, keep slug in sync
+        if "title" in update_data and update_data["title"]:
+            update_data["slug"] = generate_slug(update_data["title"])
+
+        # If slug missing and title not included, ensure the post has a slug by backfilling
+        if "slug" not in update_data or not update_data["slug"]:
+            try:
+                existing = await db.blogposts.find_one({"_id": ObjectId(post_id)}, {"title": 1, "slug": 1})
+                if existing and not existing.get("slug") and existing.get("title"):
+                    update_data["slug"] = generate_slug(existing["title"])
+            except Exception:
+                pass
+
         update_data["updatedAt"] = datetime.utcnow()
         
         result = await db.blogposts.update_one(

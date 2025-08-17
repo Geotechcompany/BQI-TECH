@@ -336,16 +336,26 @@ class AuthService {
     }
 
     // Add security headers to obfuscate API calls
-    const headers = {
-      'Content-Type': 'application/json',
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+    const isBlob = typeof Blob !== 'undefined' && options.body instanceof Blob;
+    const isURLSearchParams = typeof URLSearchParams !== 'undefined' && options.body instanceof URLSearchParams;
+
+    const headers: Record<string, string> = {
       'Authorization': `Bearer ${session.token}`,
       'X-Requested-With': 'XMLHttpRequest',
       'X-Client-Version': '2.4.0',
       'X-Request-ID': Math.random().toString(36).substr(2, 9),
       'Accept': 'application/json, text/plain, */*',
-      'Cache-Control': 'no-cache',
       ...((options.headers as Record<string, string>) || {})
     };
+
+    // Only set JSON content type when not sending FormData/Blob/URLSearchParams
+    if (!isFormData && !isBlob && !isURLSearchParams && !('Content-Type' in headers)) {
+      headers['Content-Type'] = 'application/json';
+    } else if ((isFormData || isBlob) && 'Content-Type' in headers) {
+      // Let the browser set the boundary for multipart or appropriate type for Blob
+      delete (headers as any)['Content-Type'];
+    }
 
     // First attempt with current token
     try {
@@ -379,13 +389,8 @@ class AuthService {
         headers: newHeaders,
         credentials: 'include',
       });
-
     } catch (error) {
       console.error('Authenticated fetch error:', error);
-      // Don't clear session on network errors, only on auth errors
-      if (error instanceof Error && error.message.includes('authentication')) {
-        this.clearSession();
-      }
       throw error;
     }
   }

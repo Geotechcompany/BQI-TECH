@@ -19,6 +19,14 @@ import { authService } from "@/lib/auth-backend"
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required").max(200, "Title must be less than 200 characters"),
+  slug: z
+    .string()
+    .max(200, "Slug must be less than 200 characters")
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+      message: "Use lowercase letters, numbers and hyphens only",
+    })
+    .optional()
+    .or(z.literal("")),
   excerpt: z.string().min(1, "Excerpt is required").max(300, "Excerpt must be less than 300 characters"),
   content: z.string().min(1, "Content is required"),
   imageUrl: z.string().min(1, "Featured image is required").url("Must be a valid URL"),
@@ -205,6 +213,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: initialData?.title || "",
+      slug: initialData?.slug || "",
       excerpt: initialData?.excerpt || "",
       content: initialData?.content || "",
       imageUrl: initialData?.imageUrl || "",
@@ -223,6 +232,14 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
       authorWebsite: initialData?.authorProfile?.socialLinks?.website || "",
     },
   })
+
+  const generateSlug = (value: string) => {
+    return value
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/[-\s]+/g, "-")
+  }
 
   const handleImageUpload = async (file: File, fieldName: 'imageUrl' | 'authorProfileImage') => {
     console.log('handleImageUpload called with:', file.name, file.type, file.size, 'for field:', fieldName)
@@ -335,10 +352,42 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
             <FormItem>
               <FormLabel>Title</FormLabel>
               <FormControl>
-                <Input placeholder="Enter blog post title" {...field} maxLength={200} />
+                <Input placeholder="Enter blog post title" {...field} maxLength={200} onBlur={(e) => {
+                  // Auto-fill slug if empty when title loses focus
+                  const currentSlug = form.getValues('slug')
+                  if (!currentSlug) {
+                    form.setValue('slug', generateSlug(e.target.value))
+                  }
+                }} />
               </FormControl>
               <FormDescription>
                 {field.value.length}/200 characters
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Slug */}
+        <FormField
+          control={form.control}
+          name="slug"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Slug</FormLabel>
+              <div className="flex gap-2">
+                <FormControl>
+                  <Input placeholder="auto-generated-from-title" {...field} maxLength={200} />
+                </FormControl>
+                <Button type="button" variant="outline" onClick={() => {
+                  const title = form.getValues('title')
+                  form.setValue('slug', generateSlug(title))
+                }}>
+                  Generate
+                </Button>
+              </div>
+              <FormDescription>
+                Lowercase, hyphen-separated (e.g., enterprise-it-consulting-guide)
               </FormDescription>
               <FormMessage />
             </FormItem>

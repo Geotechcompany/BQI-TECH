@@ -39,6 +39,9 @@ async def login(
     """Login user and return tokens"""
     try:
         db = get_database()
+        if db is None:
+            logger.error("Database not connected during login attempt")
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database not connected")
         
         # Find user by email
         user = await db.users.find_one({"email": credentials.username})

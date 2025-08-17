@@ -140,12 +140,49 @@ async def get_blog_post_by_slug(
                 {"published": True}
             ]
         })
-        
+
         logger.info(f"Query result: {'Found' if post else 'Not Found'}")
-            
+
+        # Fallback: auto-generate slug for posts missing slug and try to match by title
         if not post:
-            logger.error(f"Blog post not found with slug: {slug}")
-            raise HTTPException(status_code=404, detail="Blog post not found")
+            logger.info("No post matched by slug. Attempting fallback: match generated slug from title and persist slug...")
+            try:
+                # Find published posts missing slug
+                candidates_cursor = db.blogposts.find({
+                    "$and": [
+                        {"$or": [{"isPublished": True}, {"published": True}]},
+                        {"$or": [
+                            {"slug": {"$exists": False}},
+                            {"slug": None},
+                            {"slug": ""}
+                        ]}
+                    ]
+                }).limit(200)
+                candidates = await candidates_cursor.to_list(length=200)
+
+                matched = None
+                for candidate in candidates:
+                    title_value = candidate.get("title") or ""
+                    if not title_value:
+                        continue
+                    generated = generate_slug(title_value)
+                    if generated == slug:
+                        matched = candidate
+                        break
+
+                if matched:
+                    logger.info("Found a published post without slug whose generated title slug matches. Backfilling slug in DB.")
+                    await db.blogposts.update_one({"_id": matched["_id"]}, {"$set": {"slug": slug}})
+                    post = matched
+                    post["slug"] = slug
+                else:
+                    logger.error(f"Blog post not found with slug: {slug}")
+                    raise HTTPException(status_code=404, detail="Blog post not found")
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Fallback slug generation search failed: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
             
         # Convert ObjectId to string and format dates
         post["id"] = str(post.pop("_id"))
