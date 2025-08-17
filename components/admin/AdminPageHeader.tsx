@@ -127,7 +127,7 @@ export default function AdminPageHeader({
 
   return (
     <div 
-      className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50 flex h-16 items-center border-b w-full fixed top-0 left-0 right-0 transition-all duration-300 ease-in-out"
+      className="bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50 flex h-16 items-center border-b w-full fixed top-0 left-0 right-0 transition-all duration-300 ease-in-out"
       data-collapsed={sidebarCollapsed}
     >
       <div className={`w-full flex items-center justify-between px-4 ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>

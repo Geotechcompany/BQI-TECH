@@ -145,8 +145,8 @@ export function ApplicationsTable({
     <div className="flex flex-col gap-4">
       {/* Bulk Actions */}
       {selectedIds.length > 0 && (
-        <div className="bg-gray-50 p-4 rounded-lg flex items-center justify-between">
-          <span className="text-sm text-gray-600">
+        <div className="bg-muted/50 p-4 rounded-lg flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">
             {selectedIds.length} application(s) selected
           </span>
           <div className="flex gap-2">
@@ -190,9 +190,9 @@ export function ApplicationsTable({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted/50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 <Checkbox 
@@ -203,19 +203,19 @@ export function ApplicationsTable({
               {columns.map((column, index) => (
                 <th
                   key={index}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
                   {column.header}
                 </th>
               ))}
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-card divide-y divide-border">
             {applications.map((application) => (
-              <tr key={application.id} className="hover:bg-gray-50">
+              <tr key={application.id} className="hover:bg-muted/50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <Checkbox 
                     checked={selectedIds.includes(application.id)}
@@ -225,7 +225,7 @@ export function ApplicationsTable({
                 {columns.map((column, colIndex) => (
                   <td
                     key={colIndex}
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                    className="px-6 py-4 whitespace-nowrap text-sm text-foreground"
                   >
                     {(() => {
                       const value = column.accessor(application);

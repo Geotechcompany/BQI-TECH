@@ -132,28 +132,28 @@ export function UserManagementTable({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="min-w-full divide-y divide-slate-200">
-          <thead className="bg-slate-50">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted/50">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 md:px-6">
+              <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground md:px-6">
                 Name
               </th>
-              <th className="hidden px-4 py-3 text-left text-sm font-medium text-slate-700 md:table-cell md:px-6">
+              <th className="hidden px-4 py-3 text-left text-sm font-medium text-muted-foreground md:table-cell md:px-6">
                 Email
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 md:px-6">
+              <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground md:px-6">
                 Role
               </th>
-              <th className="px-4 py-3 text-right text-sm font-medium text-slate-700 md:px-6">
+              <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground md:px-6">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white">
+          <tbody className="divide-y divide-border bg-card">
             {users.map((user) => (
               <tr key={user.id}>
-                <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-800 md:px-6">
+                <td className="whitespace-nowrap px-4 py-4 text-sm text-foreground md:px-6">
                   <div className="flex items-center">
                     <div className="md:hidden mr-2">
                       <Avatar className="h-8 w-8">
@@ -162,15 +162,15 @@ export function UserManagementTable({
                       </Avatar>
                     </div>
                     <span className="font-medium">{user.name}</span>
-                    <div className="md:hidden ml-2 text-slate-500 text-sm">
+                    <div className="md:hidden ml-2 text-muted-foreground text-sm">
                       {user.email}
                     </div>
                   </div>
                 </td>
-                <td className="hidden whitespace-nowrap px-4 py-4 text-sm text-slate-800 md:table-cell md:px-6">
+                <td className="hidden whitespace-nowrap px-4 py-4 text-sm text-foreground md:table-cell md:px-6">
                   {user.email}
                 </td>
-                <td className="whitespace-nowrap px-4 py-4 text-sm text-slate-800 md:px-6">
+                <td className="whitespace-nowrap px-4 py-4 text-sm text-foreground md:px-6">
                   <Badge variant={user.role === 'ADMIN' ? 'default' : 'secondary'}>
                     {user.role}
                   </Badge>

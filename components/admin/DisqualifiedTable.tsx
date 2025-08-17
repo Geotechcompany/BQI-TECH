@@ -75,42 +75,42 @@ export function DisqualifiedTable({ applications, jobTitles, onView, onEdit, onD
   ];
 
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto rounded-lg border border-border">
       {applications.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center">
-          <div className="mb-4 rounded-full bg-blue-50 p-4">
-            <Ban className="h-12 w-12 text-blue-600" />
+          <div className="mb-4 rounded-full bg-primary/10 p-4">
+            <Ban className="h-12 w-12 text-primary" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-900">No Disqualified Candidates</h3>
-          <p className="mt-2 max-w-xl text-gray-500">
+          <h3 className="text-xl font-semibold text-foreground">No Disqualified Candidates</h3>
+          <p className="mt-2 max-w-xl text-muted-foreground">
             Candidates who have been disqualified from the hiring process will appear here.
             Use this status to track candidates who don't meet the requirements.
           </p>
         </div>
       ) : (
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted/50">
             <tr>
               {columns.map((column, index) => (
                 <th
                   key={index}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                 >
                   {column.header}
                 </th>
               ))}
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-card divide-y divide-border">
             {applications.map((application) => (
-              <tr key={application.id} className="hover:bg-gray-50">
+              <tr key={application.id} className="hover:bg-muted/50">
                 {columns.map((column, colIndex) => (
                   <td
                     key={colIndex}
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                    className="px-6 py-4 whitespace-nowrap text-sm text-foreground"
                   >
                     {(() => {
                       const value = column.accessor(application);

@@ -902,6 +902,104 @@ async def get_admin_applications(
         logger.error(f"Error in get_admin_applications: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/applications/{application_id}")
+async def get_admin_application(
+    application_id: str,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get a single application by ID (admin access)."""
+    try:
+        db = get_database()
+        try:
+            application = await db.applications.find_one({"_id": ObjectId(application_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid application ID format")
+
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+
+        # Convert ObjectIds
+        application["id"] = str(application.pop("_id"))
+        if "userId" in application:
+            application["userId"] = str(application["userId"]) if not isinstance(application["userId"], str) else application["userId"]
+        if "jobId" in application and not isinstance(application["jobId"], str):
+            try:
+                application["jobId"] = str(application["jobId"])
+            except Exception:
+                pass
+
+        return application
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_admin_application: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/applications/{application_id}")
+async def update_admin_application(
+    application_id: str,
+    update_data: Dict[str, Any],
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Update an application by ID (admin access)."""
+    try:
+        db = get_database()
+        try:
+            obj_id = ObjectId(application_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid application ID format")
+
+        update_data = dict(update_data or {})
+        update_data["updatedAt"] = datetime.utcnow()
+
+        result = await db.applications.update_one({"_id": obj_id}, {"$set": update_data})
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Application not found")
+
+        application = await db.applications.find_one({"_id": obj_id})
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+
+        application["id"] = str(application.pop("_id"))
+        if "userId" in application and not isinstance(application["userId"], str):
+            application["userId"] = str(application["userId"])  
+        if "jobId" in application and not isinstance(application["jobId"], str):
+            try:
+                application["jobId"] = str(application["jobId"]) 
+            except Exception:
+                pass
+        return application
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_admin_application: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/applications/{application_id}")
+async def delete_admin_application(
+    application_id: str,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Delete an application by ID (admin access)."""
+    try:
+        db = get_database()
+        try:
+            obj_id = ObjectId(application_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid application ID format")
+
+        result = await db.applications.delete_one({"_id": obj_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Application not found")
+        return {"message": "Application deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in delete_admin_application: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 @router.get("/trends")
 async def get_application_trends(
     current_user: dict = Depends(get_current_admin_user),

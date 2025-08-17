@@ -33,7 +33,7 @@ export function AdminPageLayout({
 
   return (
     <div 
-      className={cn("min-h-screen w-full flex flex-col bg-gray-100 transition-all duration-300 ease-in-out", className)}
+      className={cn("min-h-screen w-full flex flex-col bg-background text-foreground transition-all duration-300 ease-in-out", className)}
       data-collapsed={sidebarCollapsed}
     >
       {/* Header Section */}
@@ -48,18 +48,18 @@ export function AdminPageLayout({
       <div className="flex-1">
         {/* Search Filters Section */}
         {showSearch && (
-          <div className="bg-white/80 backdrop-blur-sm border-b py-4">
+          <div className="bg-card/80 backdrop-blur-sm border-b py-4">
             <div className="max-w-screen-2xl mx-auto px-4">
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="relative flex-1">
                   <input
                     type="text"
                     placeholder={searchPlaceholder}
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-input bg-background text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={searchValue}
                     onChange={(e) => onSearch?.(e.target.value)}
                   />
-                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                  <Search className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                 </div>
                 {filters}
               </div>

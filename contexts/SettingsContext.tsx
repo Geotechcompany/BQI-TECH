@@ -4,6 +4,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from "react-hot-toast";
 import { useAuth } from './AuthContext';
 import { adminApi, userApi } from '@/lib/api-backend';
+import { useTheme } from 'next-themes';
 
 interface SettingsContextType {
   emailNotifications: boolean;
@@ -18,9 +19,9 @@ interface SettingsContextType {
     email: string;
     avatarUrl?: string;
   };
-  theme: 'light' | 'dark';
+  theme: 'light' | 'dark' | 'system';
   updateSettings: (settings: Partial<SettingsContextType>) => Promise<void>;
-  updateTheme: (theme: 'light' | 'dark') => void;
+  updateTheme: (theme: 'light' | 'dark' | 'system') => void;
   isLoading: boolean;
 }
 
@@ -29,6 +30,7 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, isAdmin } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
+  const { setTheme: setSystemTheme } = useTheme();
   
   const [settings, setSettings] = useState<Omit<SettingsContextType, 'updateSettings' | 'updateTheme' | 'isLoading'>>({
     // Initialize with default values
@@ -113,20 +115,27 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateTheme = (theme: 'light' | 'dark') => {
+  const updateTheme = (theme: 'light' | 'dark' | 'system') => {
     setSettings(prev => ({ ...prev, theme }));
     // Save to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem('theme', theme);
     }
+    // Apply immediately via next-themes
+    try {
+      setSystemTheme(theme);
+    } catch {}
   };
 
   // Load theme from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
+      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system';
       if (savedTheme) {
         setSettings(prev => ({ ...prev, theme: savedTheme }));
+        try {
+          setSystemTheme(savedTheme);
+        } catch {}
       }
     }
   }, []);

@@ -29,6 +29,8 @@ import { adminApi } from "@/lib/api-backend";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { authService } from "@/lib/auth-backend";
+import { useTheme } from "next-themes";
+import { useSettings } from "@/contexts/SettingsContext";
 
 
 interface AdminSettings {
@@ -58,6 +60,8 @@ function SettingsPageContent() {
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { setTheme } = useTheme();
+  const { updateTheme } = useSettings();
 
   useEffect(() => {
     loadSettings();
@@ -196,7 +200,7 @@ function SettingsPageContent() {
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-2xl shadow-sm border border-blue-100"
+          className="p-6 rounded-2xl shadow-sm border border-border bg-card"
         >
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div className="relative group shrink-0">
@@ -226,13 +230,13 @@ function SettingsPageContent() {
             </div>
             
             <div className="space-y-2 text-center md:text-left">
-              <h2 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+              <h2 className="text-2xl md:text-3xl font-bold">
                 {user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Admin User' : 'Admin User'}
               </h2>
               <p className="text-muted-foreground text-sm md:text-base">
                 {user?.email}
               </p>
-              <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                 {user?.role || 'admin'}
               </div>
             </div>
@@ -270,7 +274,13 @@ function SettingsPageContent() {
                 <Label className="text-sm font-medium">Theme</Label>
                 <Select
                   value={settings.theme}
-                  onValueChange={(value) => updateSetting('theme', value)}
+                  onValueChange={(value) => {
+                    updateSetting('theme', value);
+                    try {
+                      setTheme(value);
+                    } catch {}
+                    updateTheme(value as any);
+                  }}
                 >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Theme" />

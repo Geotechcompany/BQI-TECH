@@ -200,18 +200,19 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
       animate={{ x: 0 }}
       transition={{ type: "spring", stiffness: 200, damping: 30 }}
       className={`
-        fixed inset-y-0 left-0 z-[9999] bg-gradient-to-b from-slate-50 to-white
+        fixed inset-y-0 left-0 z-[9999]
+        bg-card text-foreground
         shadow-xl transition-all duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         ${sidebarCollapsed ? 'w-20' : 'w-64'}
-        border-r border-slate-100
+        border-r border-border
         ${className || ''}
       `}
     >
       <div className="flex items-center justify-between mb-8 p-4">
         <motion.div
           whileHover={{ scale: 1.05 }}
-          className="flex items-center gap-2 text-slate-800"
+          className="flex items-center gap-2"
         >
           <Image
             src="/bqilogo.png"
@@ -230,21 +231,21 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
             <motion.button
               whileHover={{ scale: 1.1 }}
               onClick={() => updateSettings({ sidebarCollapsed: !sidebarCollapsed })}
-              className="hidden md:block p-2 hover:bg-slate-100 rounded-lg"
+              className="hidden md:block p-2 hover:bg-muted rounded-lg"
             >
               {sidebarCollapsed ? (
-                <ChevronRight className="w-5 h-5 text-slate-600" />
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
               ) : (
-                <ChevronLeft className="w-5 h-5 text-slate-600" />
+                <ChevronLeft className="w-5 h-5 text-muted-foreground" />
               )}
             </motion.button>
           </Tooltip>
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={onClose}
-            className="md:hidden p-2 hover:bg-slate-100 rounded-lg"
+            className="md:hidden p-2 hover:bg-muted rounded-lg"
           >
-            <X className="w-6 h-6 text-slate-600" />
+            <X className="w-6 h-6 text-muted-foreground" />
           </motion.button>
         </div>
       </div>
@@ -261,8 +262,8 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                 href="/admin/overview"
                 className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
                   ${pathname === '/admin/overview' 
-                    ? 'bg-sky-100 text-sky-600' 
-                    : 'text-slate-600 hover:bg-slate-100'}
+                    ? 'bg-primary/10 text-primary' 
+                    : 'text-muted-foreground hover:bg-muted'}
                 `}
               >
                 <LayoutDashboard className="w-5 h-5" />
@@ -273,11 +274,11 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
               href="/admin/overview"
               className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
                 ${pathname === '/admin/overview' 
-                  ? 'bg-sky-100 text-sky-600' 
-                  : 'text-slate-600 hover:bg-slate-100'}
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-muted-foreground hover:bg-muted'}
               `}
             >
-              <LayoutDashboard className="w-5 h-5 text-sky-600" />
+              <LayoutDashboard className="w-5 h-5 text-primary" />
               <span className="ml-3">Overview</span>
             </Link>
           )}
@@ -293,8 +294,8 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                     className={`
                       flex items-center justify-center w-full p-3 rounded-lg transition-colors
                       ${pathname.includes(section.items[0].href.split('/')[2]) 
-                        ? 'bg-sky-100 text-sky-600' 
-                        : 'text-slate-600 hover:bg-slate-100'}
+                        ? 'bg-primary/10 text-primary' 
+                        : 'text-muted-foreground hover:bg-muted'}
                     `}
                     whileHover={{ scale: 1.02 }}
                   >
@@ -306,7 +307,7 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                 <div
                   className={`
                     absolute left-full top-1/2 -translate-y-1/2 ml-2 
-                    bg-white shadow-xl rounded-lg border border-slate-200 
+                    bg-popover text-popover-foreground shadow-xl rounded-lg border border-border 
                     opacity-0 group-hover:opacity-100 
                     transition-opacity duration-200 ease-in-out
                     pointer-events-none group-hover:pointer-events-auto 
@@ -314,7 +315,7 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                   `}
                 >
                   <div className="p-2">
-                    <div className="text-xs font-semibold text-slate-500 mb-2 px-2">{section.title}</div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-2 px-2">{section.title}</div>
                     {section.items.map((item) => (
                       <Link
                         key={item.name}
@@ -322,8 +323,8 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                         className={`
                           flex items-center p-2 rounded-md text-sm transition-colors w-full
                           ${pathname === item.href 
-                            ? 'bg-sky-100 text-sky-600' 
-                            : 'text-slate-600 hover:bg-slate-100'}
+                            ? 'bg-primary/10 text-primary' 
+                            : 'text-muted-foreground hover:bg-muted'}
                         `}
                       >
                         <item.icon className="w-4 h-4 mr-3 shrink-0" />
@@ -341,11 +342,11 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                   className={`flex items-center w-full p-3 rounded-lg transition-colors
                     ${section.alwaysExpanded 
                       ? 'cursor-default' 
-                      : 'hover:bg-slate-100 cursor-pointer'}
+                      : 'hover:bg-muted cursor-pointer'}
                   `}
                   whileHover={{ scale: section.alwaysExpanded ? 1 : 1.02 }}
                 >
-                  <section.icon className="w-5 h-5 text-sky-600" />
+                  <section.icon className="w-5 h-5 text-primary" />
                   <span className="ml-3 text-sm font-medium">{section.title}</span>
                   {!section.alwaysExpanded && (
                     <ChevronRight
@@ -375,8 +376,8 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                             href={item.href}
                             className={`flex items-center p-2 rounded-lg text-sm transition-colors
                               ${pathname === item.href 
-                                ? 'bg-sky-100 text-sky-600' 
-                                : 'text-slate-600 hover:bg-slate-100'}
+                                ? 'bg-primary/10 text-primary' 
+                                : 'text-muted-foreground hover:bg-muted'}
                             `}
                           >
                             <item.icon className="w-4 h-4" />
@@ -403,8 +404,8 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
             <button
               onClick={() => logout()}
               className="w-full flex items-center justify-center p-3 rounded-lg
-                       bg-gradient-to-r from-sky-500 to-blue-600 text-white
-                       hover:from-sky-600 hover:to-blue-700 transition-all
+                       bg-primary text-primary-foreground
+                       hover:opacity-90 transition-all
                        shadow-sm hover:shadow-md relative overflow-hidden"
             >
               <motion.div
@@ -419,8 +420,8 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
           <button
             onClick={() => logout()}
             className="w-full flex items-center justify-center p-3 space-x-2 rounded-lg
-                     bg-gradient-to-r from-sky-500 to-blue-600 text-white
-                     hover:from-sky-600 hover:to-blue-700 transition-all
+                     bg-primary text-primary-foreground
+                     hover:opacity-90 transition-all
                      shadow-sm hover:shadow-md relative overflow-hidden"
           >
             <motion.div

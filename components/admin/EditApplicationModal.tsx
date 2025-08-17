@@ -42,7 +42,7 @@ export function EditApplicationModal({
 
   const { data: fullApplication, isLoading } = useQuery<Application>({
     queryKey: ['application', application?.id],
-    queryFn: () => api.get(`/admin/applications/${application?.id}`).then(res => res.data),
+    queryFn: () => api.get(`/api/admin/applications/${application?.id}`).then(res => res.data),
     enabled: !!application?.id && isOpen
   });
 
