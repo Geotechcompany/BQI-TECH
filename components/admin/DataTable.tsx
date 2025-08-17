@@ -118,28 +118,28 @@ export default function DataTable({
       transition={{ duration: 0.5 }}
       className="relative overflow-x-auto"
     >
-      <table className="min-w-full bg-white">
-        <thead className="bg-gradient-to-r from-blue-300 to-purple-300 text-gray-800 uppercase text-sm leading-normal">
+      <table className="min-w-full bg-card">
+        <thead className="bg-muted/50 text-muted-foreground uppercase text-sm leading-normal">
           <tr>
             <th className="py-3 px-6 text-center relative">
               <input
                 type="checkbox"
                 checked={selectedRows.size === data.length}
                 onChange={toggleSelectAll}
-                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                className="rounded border-input text-primary"
               />
             </th>
             {columns.map((column, index) => (
-              <th key={index} className={`py-3 px-6 text-left ${index === 0 ? 'sticky left-0 bg-blue-300 z-10' : ''}`}>{column.header}</th>
+              <th key={index} className={`py-3 px-6 text-left ${index === 0 ? 'sticky left-0 bg-muted/50 z-10' : ''}`}>{column.header}</th>
             ))}
-            <th className="py-3 px-6 text-center">Actions</th>
+            <th className="py-3 px-6 text-center text-muted-foreground">Actions</th>
           </tr>
         </thead>
-        <tbody className="text-gray-600 text-sm font-light">
+        <tbody className="text-sm">
           {data.map((row, rowIndex) => (
             <motion.tr
               key={row.id}
-              className="border-b border-gray-200 hover:bg-gray-50"
+              className="border-b border-border hover:bg-muted/50"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: rowIndex * 0.05 }}
@@ -149,11 +149,11 @@ export default function DataTable({
                   type="checkbox"
                   checked={selectedRows.has(rowIndex)}
                   onChange={() => toggleSelectRow(rowIndex)}
-                  className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  className="rounded border-input text-primary"
                 />
               </td>
               {columns.map((column, colIndex) => (
-                <td key={colIndex} className={`py-3 px-6 text-left whitespace-nowrap ${colIndex === 0 ? 'sticky left-0 bg-white z-10' : ''}`}>
+                <td key={colIndex} className={`py-3 px-6 text-left whitespace-nowrap text-foreground ${colIndex === 0 ? 'sticky left-0 bg-card z-10' : ''}`}>
                   {column.cell ? (
                     column.cell({ row })
                   ) : (

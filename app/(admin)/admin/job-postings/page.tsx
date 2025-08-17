@@ -7,6 +7,7 @@ import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import DataTable from "@/components/admin/DataTable";
 import { Edit, Trash2, Power, PowerOff } from "lucide-react";
 import Loader from "@/components/Loader";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/auth-backend";
@@ -256,7 +257,13 @@ export default function JobPostingsPage() {
     )
   );
 
-  if (isLoading) return <Loader/>;
+  if (isLoading) return (
+    <AdminPageLayout title="Job Postings" showSearch={false}>
+      <div className="bg-card rounded-lg border border-border p-6">
+        <TableSkeleton rows={6} columns={5} />
+      </div>
+    </AdminPageLayout>
+  );
   if (error) return <div className="text-red-500">{error}</div>;
 
   return (
