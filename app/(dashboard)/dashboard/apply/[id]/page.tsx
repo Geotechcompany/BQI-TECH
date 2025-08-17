@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter, useParams } from "next/navigation"
 import { useForm, SubmitHandler } from "react-hook-form"
@@ -140,12 +140,59 @@ function ApplicationForm() {
   };
 
   // Form setup with mode: "onSubmit" to only validate on submit
-  const { register, handleSubmit, formState, reset, setValue, setError, trigger } = useForm({
+  const { register, handleSubmit, formState, reset, setValue, setError, trigger, watch } = useForm({
     defaultValues: getDefaultValues(questions),
     resolver: zodResolver(buildFormSchema()),
     mode: "onSubmit", // Only validate on submit
     reValidateMode: "onSubmit" // Only revalidate on submit
   });
+
+  // Multistep grouping: derive steps from questions
+  const steps = useMemo(() => {
+    const basicInfoIds: string[] = []
+    const questionIds: string[] = []
+    const attachmentIds: string[] = []
+
+    for (const q of questions) {
+      const id = (q._id || q.id) as string
+      if (!id) continue
+      const qText = (q.question || '').toLowerCase()
+      if (q.type === 'file') {
+        attachmentIds.push(id)
+      } else if (qText.includes('email') || qText.includes('phone') || qText.includes('name')) {
+        basicInfoIds.push(id)
+      } else {
+        questionIds.push(id)
+      }
+    }
+
+    const result = [
+      { key: 'basic', title: 'Basic Info', fieldIds: basicInfoIds },
+      { key: 'questions', title: 'Questions', fieldIds: questionIds },
+      { key: 'attachments', title: 'Attachments', fieldIds: attachmentIds },
+    ].filter(s => s.fieldIds.length > 0)
+
+    // Fallback single step if nothing grouped
+    if (result.length === 0) {
+      return [{ key: 'all', title: 'Application', fieldIds: questions.map((q: any) => q._id || q.id).filter(Boolean) }]
+    }
+    return result
+  }, [questions])
+
+  const [currentStep, setCurrentStep] = useState(0)
+
+  const currentFieldIds = useMemo(() => steps[currentStep]?.fieldIds || [], [steps, currentStep])
+
+  const validateCurrentStep = useCallback(async () => {
+    if (currentFieldIds.length === 0) return true
+    const isValid = await trigger(currentFieldIds as any)
+    return isValid
+  }, [currentFieldIds, trigger])
+
+  const getFieldError = (fieldId: string): string | undefined => {
+    const anyErrors: any = formState.errors as any
+    return anyErrors?.[fieldId]?.message as string | undefined
+  }
 
   // Effect: Redirect if not authenticated
   useEffect(() => {
@@ -159,12 +206,7 @@ function ApplicationForm() {
     reset(getDefaultValues(questions));
   }, [questions, reset]);
 
-  // Effect: Trigger validation when questions load
-  useEffect(() => {
-    if (questions.length > 0 && !questionsLoading) {
-      trigger();
-    }
-  }, [questions, trigger, questionsLoading]);
+  // Do not auto-trigger validation on mount; validate only on Next/Submit
 
   // Effect: Handle invalid job ID
   useEffect(() => {
@@ -313,6 +355,9 @@ function ApplicationForm() {
                 placeholder={`Enter your ${question.question.toLowerCase()}`}
               />
             </div>
+            {getFieldError(fieldName) && (
+              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
+            )}
           </div>
         );
 
@@ -334,6 +379,9 @@ function ApplicationForm() {
                 ))}
               </select>
             </div>
+            {getFieldError(fieldName) && (
+              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
+            )}
           </div>
         );
 
@@ -341,7 +389,7 @@ function ApplicationForm() {
         return (
           <div key={fieldName} className="space-y-2">
             {renderLabel()}
-            <div className="space-y-3 bg-white p-3 rounded-md border border-gray-200">
+            <div className="space-y-3 bg-white dark:bg-gray-900 p-3 rounded-md border border-gray-200 dark:border-gray-800">
               {question.options?.map((option: string) => (
                 <div key={option} className="relative flex items-start">
                   <div className="flex items-center h-5">
@@ -355,13 +403,16 @@ function ApplicationForm() {
                   </div>
                   <label 
                     htmlFor={`${fieldName}-${option}`} 
-                    className="ml-3 text-sm text-gray-700 select-none cursor-pointer"
+                    className="ml-3 text-sm text-gray-700 dark:text-gray-300 select-none cursor-pointer"
                   >
                     {option}
                   </label>
                 </div>
               ))}
             </div>
+            {getFieldError(fieldName) && (
+              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
+            )}
           </div>
         );
 
@@ -415,7 +466,7 @@ function ApplicationForm() {
 
                       const data = await uploadFile(authService.getSession()?.token || '');
                       setUploadedFileUrl(data.url);
-                      setValue(fieldName, data.url);
+                      setValue(fieldName, data.url, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
                       toast.success('File uploaded successfully!');
                     } catch (error) {
                       console.error('Upload error:', error);
@@ -426,7 +477,7 @@ function ApplicationForm() {
                         toast.error(error.message || 'Failed to upload file. Please try again.');
                       }
                       setUploadedFile(null);
-                      setValue(fieldName, '');
+                      setValue(fieldName, '', { shouldValidate: true, shouldDirty: true, shouldTouch: true });
                     } finally {
                       setIsUploading(false);
                     }
@@ -434,6 +485,8 @@ function ApplicationForm() {
                 }}
                 className={`${inputClasses} file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100`}
               />
+              {/* Hidden registered field carrying uploaded file URL for validation */}
+              <input type="hidden" {...register(fieldName)} value={uploadedFileUrl || ''} readOnly />
             </div>
             {uploadedFile && (
               <div className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
@@ -456,6 +509,9 @@ function ApplicationForm() {
                 )}
               </div>
             )}
+            {getFieldError(fieldName) && (
+              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
+            )}
             {isUploading && (
               <div className="flex items-center gap-2 text-blue-600">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -473,13 +529,13 @@ function ApplicationForm() {
   return (
     <>
       <motion.div 
-        className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-50 to-gray-100"
+        className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
       >
         <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-10">
+          <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               {job?.title || 'Job Application'}
             </h1>
@@ -488,33 +544,76 @@ function ApplicationForm() {
             </p>
           </div>
 
-          <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
+          {/* Stepper */}
+          <div className="mb-6">
+            <ol className="flex items-center justify-center gap-4">
+              {steps.map((s, idx) => (
+                <li key={s.key} className="flex items-center">
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border ${
+                    idx < currentStep ? 'bg-blue-600 text-white border-blue-600' : idx === currentStep ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800' : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+                  }`}>
+                    <span className={`w-5 h-5 inline-flex items-center justify-center rounded-full border ${idx <= currentStep ? 'border-current' : 'border-gray-300 dark:border-gray-600'}`}>{idx+1}</span>
+                    <span className="whitespace-nowrap">{s.title}</span>
+                  </div>
+                  {idx < steps.length-1 && <span className="mx-2 h-px w-6 bg-gray-200 dark:bg-gray-700" />}
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 shadow-xl rounded-2xl overflow-hidden">
             <div className="p-6 md:p-8">
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div className="space-y-6">
-                  {questions.map(question => renderQuestionField(question))}
+                  {questions
+                    .filter(q => currentFieldIds.includes(q._id || q.id))
+                    .map(question => renderQuestionField(question))}
                 </div>
 
-                <div className="mt-8 pt-5 border-t border-gray-200">
-                  <Button 
-                    type="submit" 
-                    disabled={isSubmitting}
-                    className={`w-full py-3 text-lg transition-all duration-200 ${
-                      isSubmitting ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {isSubmitting ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                        <span>Submitting Application...</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center gap-2">
-                        <Send className="h-5 w-5" />
-                        <span>Submit Application</span>
-                      </div>
-                    )}
-                  </Button>
+                <div className="mt-8 pt-5 border-t border-gray-200 dark:border-gray-800 flex items-center gap-3">
+                  {currentStep > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setCurrentStep(s => Math.max(0, s-1))}
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" /> Back
+                    </Button>
+                  )}
+                  {currentStep < steps.length - 1 && (
+                    <Button
+                      type="button"
+                      className="ml-auto"
+                      onClick={async () => {
+                        const ok = await validateCurrentStep()
+                        if (ok) setCurrentStep(s => Math.min(steps.length-1, s+1))
+                        else toast.error('Please complete required fields to continue')
+                      }}
+                    >
+                      Next <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  )}
+                  {currentStep === steps.length - 1 && (
+                    <Button 
+                      type="submit" 
+                      disabled={isSubmitting}
+                      className={`ml-auto py-3 text-lg transition-all duration-200 ${
+                        isSubmitting ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {isSubmitting ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          <span>Submitting Application...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2">
+                          <Send className="h-5 w-5" />
+                          <span>Submit Application</span>
+                        </div>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </form>
             </div>
