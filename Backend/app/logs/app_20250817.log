@@ -112,3 +112,11 @@
 2025-08-17 15:02:45,767 - bqitech - INFO - Searching for blog post with slug: a-guide-to-enterprise-it-consulting
 2025-08-17 15:02:46,113 - bqitech - INFO - Query result: Found
 2025-08-17 15:02:46,114 - bqitech - INFO - Successfully prepared blog post response for slug: a-guide-to-enterprise-it-consulting
+2025-08-17 15:12:12,227 - bqitech - INFO - Received GET /blog/by-slug/a-guide-to-enterprise-it-consulting request
+2025-08-17 15:12:12,228 - bqitech - INFO - Searching for blog post with slug: a-guide-to-enterprise-it-consulting
+2025-08-17 15:12:12,650 - bqitech - INFO - Query result: Found
+2025-08-17 15:12:12,651 - bqitech - INFO - Successfully prepared blog post response for slug: a-guide-to-enterprise-it-consulting
+2025-08-17 15:12:53,082 - bqitech - INFO - Received GET /blog/by-slug/a-guide-to-enterprise-it-consulting request
+2025-08-17 15:12:53,083 - bqitech - INFO - Searching for blog post with slug: a-guide-to-enterprise-it-consulting
+2025-08-17 15:12:53,490 - bqitech - INFO - Query result: Found
+2025-08-17 15:12:53,491 - bqitech - INFO - Successfully prepared blog post response for slug: a-guide-to-enterprise-it-consulting

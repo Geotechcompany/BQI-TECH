@@ -18,6 +18,28 @@ def generate_slug(title: str) -> str:
     slug = re.sub(r'[-\s]+', '-', slug)
     return slug
 
+# Normalize author profile keys from DB (snake_case) to API (camelCase)
+def _normalize_author_profile(post: dict) -> None:
+    """Mutates the given post dict to ensure authorProfile has camelCase keys.
+
+    - profile_image -> profileImage
+    - social_links -> socialLinks
+    Safe to call if keys are missing.
+    """
+    try:
+        author_profile = post.get("authorProfile")
+        if not isinstance(author_profile, dict):
+            return
+
+        # Only set camelCase if not already present to avoid overwriting
+        if "profile_image" in author_profile and "profileImage" not in author_profile:
+            author_profile["profileImage"] = author_profile.get("profile_image")
+        if "social_links" in author_profile and "socialLinks" not in author_profile:
+            author_profile["socialLinks"] = author_profile.get("social_links")
+    except Exception:
+        # Be defensive – never break the response formatting due to normalization
+        pass
+
 router = APIRouter(
     tags=["blog"],
     include_in_schema=True
@@ -87,6 +109,9 @@ async def get_blog_posts(
             # Generate slug from title if not present
             if "slug" not in post or not post["slug"]:
                 post["slug"] = generate_slug(post["title"])
+
+            # Normalize author profile keys for frontend compatibility
+            _normalize_author_profile(post)
         
         response_data = {
             "posts": posts,
@@ -209,6 +234,9 @@ async def get_blog_post_by_slug(
         post.setdefault("imageUrl", "")
         post.setdefault("readTime", "")
         post.setdefault("slug", slug)
+
+        # Normalize author profile keys for frontend compatibility
+        _normalize_author_profile(post)
         
         # Remove internal fields that shouldn't be exposed
         post.pop("__v", None)
@@ -283,6 +311,9 @@ async def get_blog_post_by_id(
         post.setdefault("tags", [])
         post.setdefault("imageUrl", "")
         post.setdefault("readTime", "")
+
+        # Normalize author profile keys for frontend compatibility
+        _normalize_author_profile(post)
             
         # Return with CORS headers
         return JSONResponse(
