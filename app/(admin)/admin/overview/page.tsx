@@ -102,7 +102,7 @@ const MetricCard = ({
     <motion.div
       whileHover={{ y: -2, scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      className={`bg-gradient-to-br from-white to-gray-50/50 rounded-2xl border border-gray-200/60 p-6 shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer backdrop-blur-sm ${
+      className={`rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer backdrop-blur-sm ${
         isLarge ? 'lg:col-span-2' : ''
       }`}
     >
@@ -113,25 +113,25 @@ const MetricCard = ({
               <Icon className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-              {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+              <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
+              {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
             </div>
           </div>
           <div className="space-y-2">
-            <h3 className="text-3xl font-bold text-gray-900">{value.toLocaleString()}</h3>
+            <h3 className="text-3xl font-bold text-foreground">{value.toLocaleString()}</h3>
             {trend !== undefined && (
               <div className="flex items-center gap-2">
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                  trend > 0 ? 'bg-green-100 text-green-700' : trend < 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                  trend > 0 ? 'bg-emerald-500/10 text-emerald-500' : trend < 0 ? 'bg-rose-500/10 text-rose-500' : 'bg-muted text-muted-foreground'
                 }`}>
                   {trend > 0 ? (
-                    <ArrowUp className="h-3 w-3 mr-1" />
+                  <ArrowUp className="h-3 w-3 mr-1" />
                   ) : trend < 0 ? (
-                    <ArrowDown className="h-3 w-3 mr-1" />
+                  <ArrowDown className="h-3 w-3 mr-1" />
                   ) : null}
                   {trend === 0 ? 'No change' : `${Math.abs(trend)}%`}
                 </span>
-                <span className="text-xs text-gray-500">vs last month</span>
+                <span className="text-xs text-muted-foreground">vs last month</span>
               </div>
             )}
           </div>
@@ -159,18 +159,18 @@ const StatusCard = ({
   <Link href={path}>
     <motion.div
       whileHover={{ scale: 1.02 }}
-      className="bg-gradient-to-br from-white via-gray-50/30 to-gray-100/50 rounded-xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer backdrop-blur-sm"
+      className="bg-card rounded-xl border border-border p-5 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer backdrop-blur-sm"
     >
       <div className="flex items-center justify-between mb-4">
         <div className={`p-2.5 rounded-lg ${color}`}>
           <Icon className="h-5 w-5" />
         </div>
-        <span className="text-2xl font-bold text-gray-900">{count}</span>
+        <span className="text-2xl font-bold text-foreground">{count}</span>
       </div>
       <div className="space-y-2">
-        <h4 className="font-semibold text-gray-900">{title}</h4>
+        <h4 className="font-semibold text-foreground">{title}</h4>
         <Progress value={percentage} className="h-2" />
-        <p className="text-xs text-gray-500">{percentage.toFixed(1)}% of total</p>
+        <p className="text-xs text-muted-foreground">{percentage.toFixed(1)}% of total</p>
       </div>
     </motion.div>
   </Link>
@@ -370,7 +370,7 @@ export default function OverviewPage() {
 
   if (isLoading) return (
     <AdminPageLayout title="Dashboard Overview" showSearch={false}>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
+      <div className="min-h-screen">
         <div className="space-y-8 p-4 md:p-6 w-full max-w-none">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
@@ -386,13 +386,13 @@ export default function OverviewPage() {
 
   if (error) return (
     <AdminPageLayout title="Dashboard Overview" showSearch={false}>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center py-12">
-          <div className="bg-red-50 rounded-full p-4 w-16 h-16 mx-auto mb-4">
-            <XCircle className="h-8 w-8 text-red-500" />
+          <div className="bg-destructive/10 rounded-full p-4 w-16 h-16 mx-auto mb-4">
+            <XCircle className="h-8 w-8 text-destructive" />
           </div>
-          <h2 className="text-2xl font-bold mb-4 text-gray-900">Something went wrong</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
+          <h2 className="text-2xl font-bold mb-4 text-foreground">Something went wrong</h2>
+          <p className="text-muted-foreground mb-6">{error}</p>
           <Button onClick={loadDashboardData} className="bg-blue-600 hover:bg-blue-700">
             <ArrowRight className="mr-2 h-4 w-4" />
             Try Again
@@ -427,7 +427,7 @@ export default function OverviewPage() {
         </div>
       }
     >
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white">
+      <div className="min-h-screen bg-background">
         <div className="space-y-8 p-4 md:p-6 w-full max-w-none">
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -524,14 +524,14 @@ export default function OverviewPage() {
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
             {/* Application Trends Chart */}
-            <Card className="lg:col-span-3 shadow-sm border-gray-200/60">
+            <Card className="lg:col-span-3 shadow-sm border-border">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-3 text-lg">
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <TrendingUp className="h-5 w-5 text-blue-600" />
                   </div>
                   Application Trends
-                  <span className="text-sm font-normal text-gray-500">(Last 30 Days)</span>
+                  <span className="text-sm font-normal text-muted-foreground">(Last 30 Days)</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
@@ -540,9 +540,9 @@ export default function OverviewPage() {
                     <Line data={trendChartData} options={chartOptions} />
                   </div>
                 ) : (
-                  <div className="h-80 flex items-center justify-center text-gray-500">
+                  <div className="h-80 flex items-center justify-center text-muted-foreground">
                     <div className="text-center">
-                      <BarChart className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                      <BarChart className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
                       <p>No trend data available</p>
                     </div>
                   </div>
@@ -551,7 +551,7 @@ export default function OverviewPage() {
             </Card>
 
             {/* Applications by Job Pie Chart */}
-            <Card className="lg:col-span-2 shadow-sm border-gray-200/60">
+            <Card className="lg:col-span-2 shadow-sm border-border">
               <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-3 text-lg">
                   <div className="p-2 bg-green-100 rounded-lg">
@@ -566,9 +566,9 @@ export default function OverviewPage() {
                     <Doughnut data={pieChartData} options={pieChartOptions} />
                   </div>
                 ) : (
-                  <div className="h-80 flex items-center justify-center text-gray-500">
+                  <div className="h-80 flex items-center justify-center text-muted-foreground">
                     <div className="text-center">
-                      <Target className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                      <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
                       <p>No job application data</p>
                     </div>
                   </div>
@@ -587,7 +587,7 @@ export default function OverviewPage() {
                   </div>
                   Recent Applications
                 </div>
-                <Link href="/admin/applications" className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                <Link href="/admin/applications" className="text-primary hover:opacity-90 text-sm font-medium">
                   View All →
                 </Link>
               </CardTitle>
@@ -604,15 +604,15 @@ export default function OverviewPage() {
                       <motion.div
                         key={app.id}
                         whileHover={{ scale: 1.02 }}
-                        className="bg-white rounded-lg p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
+                        className="bg-card rounded-lg p-4 border border-border shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
                         onClick={() => handleViewApplication(app)}
                       >
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h2 className="text-xl font-semibold text-gray-800 line-clamp-1">
+                            <h2 className="text-xl font-semibold text-foreground line-clamp-1">
                               {app.position}
                             </h2>
-                            <p className="text-sm text-gray-600 mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                               {firstName}
                             </p>
                           </div>
@@ -621,9 +621,9 @@ export default function OverviewPage() {
                               e.stopPropagation();
                               handleViewApplication(app);
                             }}
-                            className="hover:bg-gray-100 p-1 rounded-full transition-colors"
+                            className="hover:bg-muted p-1 rounded-full transition-colors"
                           >
-                            <ArrowRight className="h-4 w-4 text-gray-500" />
+                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
                           </button>
                         </div>
                         <div className="space-y-3">
@@ -636,7 +636,7 @@ export default function OverviewPage() {
                             >
                               {app.status}
                             </Badge>
-                            <span className="text-gray-500">
+                            <span className="text-muted-foreground">
                               {new Date(app.appliedDate).toLocaleDateString()}
                             </span>
                           </div>
@@ -646,7 +646,7 @@ export default function OverviewPage() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-6 text-gray-500">
+                <div className="text-center py-6 text-muted-foreground">
                   No recent applications
                 </div>
               )}

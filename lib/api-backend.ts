@@ -349,7 +349,16 @@ export const adminApi = {
     return backendApi.request('/api/admin/notifications/mark-all-read', {
       method: 'PUT',
     });
-  }
+  },
+
+  // Audit Logs
+  getAuditLogs: (params?: {
+    skip?: number;
+    limit?: number;
+    level?: 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG';
+    search?: string;
+    date?: string; // YYYYMMDD
+  }) => backendApi.get('/api/admin/audit-logs', params),
 };
 
 export const userApi = {

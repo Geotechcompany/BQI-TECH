@@ -26,6 +26,7 @@ import {
   BarChart,
   HelpCircle,
   Bell,
+  ScrollText,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -129,6 +130,11 @@ export const menuSections: MenuSection[] = [
         name: "Notifications",
         href: "/admin/notifications",
         icon: Bell,
+      },
+      {
+        name: "Audit Logs",
+        href: "/admin/audit-logs",
+        icon: ScrollText,
       },
       {
         name: "Settings",

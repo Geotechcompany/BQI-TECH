@@ -10,6 +10,8 @@ import json
 from fastapi.responses import JSONResponse
 from ..logger import logger
 from fastapi import status
+from pathlib import Path
+import os
 import re
 
 router = APIRouter(tags=["admin"])
@@ -1666,6 +1668,108 @@ async def seed_notifications(
         "message": f"Created {len(result.inserted_ids)} sample notifications",
         "ids": [str(id) for id in result.inserted_ids]
     }
+
+# Audit Logs endpoints
+@router.get("/audit-logs")
+async def get_audit_logs(
+    current_user: dict = Depends(get_current_admin_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    level: Optional[str] = Query(None, description="Filter by log level (INFO, WARNING, ERROR, DEBUG)"),
+    search: Optional[str] = Query(None, description="Search text in log message"),
+    date: Optional[str] = Query(None, description="Specific date in YYYYMMDD to read from a particular file")
+):
+    """Return recent application logs from rotating log files.
+
+    This reads structured lines from app/logs/app_YYYYMMDD.log and exposes them
+    as simple audit entries for admin visibility.
+    """
+    try:
+        # Resolve logs directory
+        logs_dir = (Path(__file__).resolve().parent.parent / "logs").resolve()
+        if not logs_dir.exists():
+            return {"logs": [], "total": 0}
+
+        # Select files to read
+        files: list[Path] = []
+        if date:
+            candidate = logs_dir / f"app_{date}.log"
+            if candidate.exists():
+                files = [candidate]
+        if not files:
+            # Fallback to all log files sorted by modified time (newest first)
+            files = sorted(logs_dir.glob("app_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+
+        entries: list[dict[str, Any]] = []
+        total_matched = 0
+        level_upper = level.upper() if level else None
+        search_lower = search.lower() if search else None
+
+        # Read lines newest first across files until we have enough
+        for fpath in files:
+            try:
+                with fpath.open("r", encoding="utf-8", errors="ignore") as fh:
+                    lines = fh.readlines()
+            except Exception as e:
+                logger.error(f"Failed to read log file {fpath}: {e}")
+                continue
+
+            # Iterate newest first
+            for line in reversed(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                # Expected format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                parts = line.split(" - ", 3)
+                if len(parts) != 4:
+                    # Not a standard line; include as raw
+                    record = {
+                        "timestamp": None,
+                        "logger": None,
+                        "level": None,
+                        "message": line,
+                        "file": fpath.name,
+                    }
+                else:
+                    ts, logger_name, lvl, msg = parts
+                    record = {
+                        "timestamp": ts,
+                        "logger": logger_name,
+                        "level": lvl,
+                        "message": msg,
+                        "file": fpath.name,
+                    }
+
+                # Filters
+                if level_upper and (record.get("level") or "").upper() != level_upper:
+                    continue
+                if search_lower and search_lower not in (record.get("message") or "").lower():
+                    continue
+
+                # Count matches; apply pagination window afterwards
+                total_matched += 1
+                if total_matched <= skip:
+                    continue
+                if len(entries) < limit:
+                    entries.append(record)
+                else:
+                    # Collected enough
+                    break
+            if len(entries) >= limit:
+                break
+
+        return JSONResponse(
+            content={"logs": entries, "total": total_matched},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+            },
+        )
+    except Exception as e:
+        logger.error(f"Error in get_audit_logs: {str(e)}")
+        logger.exception("Full traceback:")
+        raise HTTPException(status_code=500, detail="Failed to read audit logs")
 
 @router.get("/user/application-stats")
 async def get_user_application_stats(
