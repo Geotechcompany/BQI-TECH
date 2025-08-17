@@ -1408,6 +1408,14 @@ async def get_admin_settings(
                 "type": "admin",
                 "createdAt": datetime.utcnow(),
                 "updatedAt": datetime.utcnow(),
+                # Flat fields expected by the admin UI
+                "emailNotifications": True,
+                "pushNotifications": True,
+                "autoLogout": 30,
+                "tableRowsPerPage": 25,
+                "sidebarCollapsed": False,
+                "theme": "light",
+                "language": "en",
                 "jobSettings": {
                     "autoClose": True,
                     "autoCloseAfterDays": 30,
@@ -1427,7 +1435,8 @@ async def get_admin_settings(
             }
             try:
                 result = await db.settings.insert_one(settings)
-                settings["_id"] = str(result.inserted_id)
+                # Normalize id for response
+                settings["id"] = str(result.inserted_id)
             except Exception as e:
                 logger.error(f"Error creating default settings: {str(e)}")
                 logger.exception("Full traceback:")
@@ -1435,7 +1444,15 @@ async def get_admin_settings(
         else:
             # Convert ObjectIds to strings
             convert_objectids_to_strings(settings)
-            settings["id"] = str(settings["_id"])
+            # Normalize id for response and avoid exposing _id for clients
+            settings["id"] = str(settings.get("_id")) if settings.get("_id") else settings.get("id")
+        
+        # Do not expose immutable _id in the response payload
+        if "_id" in settings:
+            try:
+                del settings["_id"]
+            except Exception:
+                pass
         
         return {"settings": settings}
     except Exception as e:
@@ -1461,6 +1478,10 @@ async def update_admin_settings(
     try:
         db = get_database()
         
+        # Sanitize incoming payload to avoid immutable fields updates
+        settings_data = dict(settings_data or {})
+        settings_data.pop("_id", None)
+        settings_data.pop("id", None)
         settings_data["updatedAt"] = datetime.utcnow()
         settings_data["type"] = "admin"
         
@@ -1477,7 +1498,12 @@ async def update_admin_settings(
         
         # Convert ObjectIds to strings
         convert_objectids_to_strings(updated_settings)
-        updated_settings["id"] = str(updated_settings["_id"])
+        updated_settings["id"] = str(updated_settings.get("_id")) if updated_settings.get("_id") else updated_settings.get("id")
+        if "_id" in updated_settings:
+            try:
+                del updated_settings["_id"]
+            except Exception:
+                pass
         
         return {"settings": updated_settings, "message": "Settings updated successfully"}
     except Exception as e:

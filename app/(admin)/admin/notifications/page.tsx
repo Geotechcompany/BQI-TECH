@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import AdminPageHeader from "@/components/admin/AdminPageHeader";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { notificationService } from "@/lib/notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -48,7 +47,7 @@ type NotificationType = 'all' | 'info' | 'warning' | 'error' | 'success';
 const getNotificationIcon = (type: string) => {
   switch (type) {
     case 'success':
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      return <CheckCircle2 className="h-5 w-5 text-emerald-500" />;
     case 'error':
       return <XCircle className="h-5 w-5 text-red-500" />;
     case 'warning':
@@ -61,13 +60,13 @@ const getNotificationIcon = (type: string) => {
 const getNotificationColors = (type: string) => {
   switch (type) {
     case 'success':
-      return 'bg-green-50 border-green-200 hover:border-green-300 dark:bg-green-950/20 dark:border-green-800';
+      return 'bg-card border-border border-l-4 border-l-emerald-500';
     case 'error':
-      return 'bg-red-50 border-red-200 hover:border-red-300 dark:bg-red-950/20 dark:border-red-800';
+      return 'bg-card border-border border-l-4 border-l-red-500';
     case 'warning':
-      return 'bg-yellow-50 border-yellow-200 hover:border-yellow-300 dark:bg-yellow-950/20 dark:border-yellow-800';
+      return 'bg-card border-border border-l-4 border-l-yellow-500';
     default:
-      return 'bg-blue-50 border-blue-200 hover:border-blue-300 dark:bg-blue-950/20 dark:border-blue-800';
+      return 'bg-card border-border border-l-4 border-l-blue-500';
   }
 };
 
@@ -178,7 +177,7 @@ export default function NotificationsPage() {
 
   if (authLoading || isLoadingNotifications) {
     return (
-      <AdminPageLayout title="Notifications">
+      <AdminPageLayout title="Notifications" showSearch={false}>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-32 w-32 border-4 border-primary border-t-transparent"></div>
         </div>
@@ -191,9 +190,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <>
-      <AdminPageHeader title="Notifications" />
-      
+    <AdminPageLayout title="Notifications" showSearch={false}>
       <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -317,7 +314,7 @@ export default function NotificationsPage() {
                     onClick={() => setTypeFilter('success')}
                     className={typeFilter === 'success' ? 'bg-primary/10' : ''}
                   >
-                    <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
+                    <CheckCircle2 className="h-4 w-4 mr-2 text-emerald-500" />
                     Success
                   </DropdownMenuItem>
                   <DropdownMenuItem 
@@ -478,6 +475,6 @@ export default function NotificationsPage() {
           )}
         </AnimatePresence>
       </div>
-    </>
+    </AdminPageLayout>
   );
 }

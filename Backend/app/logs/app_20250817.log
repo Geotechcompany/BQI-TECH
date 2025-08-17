@@ -120,3 +120,79 @@
 2025-08-17 15:12:53,083 - bqitech - INFO - Searching for blog post with slug: a-guide-to-enterprise-it-consulting
 2025-08-17 15:12:53,490 - bqitech - INFO - Query result: Found
 2025-08-17 15:12:53,491 - bqitech - INFO - Successfully prepared blog post response for slug: a-guide-to-enterprise-it-consulting
+2025-08-17 16:06:00,281 - bqitech - INFO - Received GET /blog/by-slug/a-guide-to-enterprise-it-consulting request
+2025-08-17 16:06:00,283 - bqitech - INFO - Searching for blog post with slug: a-guide-to-enterprise-it-consulting
+2025-08-17 16:06:00,656 - bqitech - INFO - Query result: Found
+2025-08-17 16:06:00,657 - bqitech - INFO - Successfully prepared blog post response for slug: a-guide-to-enterprise-it-consulting
+2025-08-17 16:08:18,037 - bqitech - ERROR - Error in update_admin_settings: Performing an update on the path '_id' would modify the immutable field '_id', full error: {'index': 0, 'code': 66, 'errmsg': "Performing an update on the path '_id' would modify the immutable field '_id'"}
+2025-08-17 16:08:18,037 - bqitech - ERROR - Full traceback:
+Traceback (most recent call last):
+  File "C:\Users\GeoffreyAudia\Desktop\BQITECH\BQI-TECH\backend\app\routers\admin.py", line 1367, in update_admin_settings
+    )
+     
+  File "C:\Python312\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 1088, in update_one
+    self._update_retryable(
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 883, in _update_retryable
+    return self.__database.client._retryable_write(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\mongo_client.py", line 1568, in _retryable_write
+    return self._retry_with_session(retryable, func, s, None)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\mongo_client.py", line 1413, in _retry_with_session
+    return self._retry_internal(retryable, func, session, bulk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\_csot.py", line 108, in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\mongo_client.py", line 1460, in _retry_internal
+    return func(session, conn, retryable)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 864, in _update
+    return self._update(
+           ^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 827, in _update
+    _check_write_command_response(result)
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\helpers.py", line 259, in _check_write_command_response
+    _raise_last_write_error(write_errors)
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\helpers.py", line 232, in _raise_last_write_error
+    raise WriteError(error.get("errmsg"), error.get("code"), error)
+pymongo.errors.WriteError: Performing an update on the path '_id' would modify the immutable field '_id', full error: {'index': 0, 'code': 66, 'errmsg': "Performing an update on the path '_id' would modify the immutable field '_id'"}
+2025-08-17 16:09:33,314 - bqitech - ERROR - Error in update_admin_settings: Performing an update on the path '_id' would modify the immutable field '_id', full error: {'index': 0, 'code': 66, 'errmsg': "Performing an update on the path '_id' would modify the immutable field '_id'"}
+2025-08-17 16:09:33,315 - bqitech - ERROR - Full traceback:
+Traceback (most recent call last):
+  File "C:\Users\GeoffreyAudia\Desktop\BQITECH\BQI-TECH\backend\app\routers\admin.py", line 1367, in update_admin_settings
+    )
+     
+  File "C:\Python312\Lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 1088, in update_one
+    self._update_retryable(
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 883, in _update_retryable
+    return self.__database.client._retryable_write(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\mongo_client.py", line 1568, in _retryable_write
+    return self._retry_with_session(retryable, func, s, None)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\mongo_client.py", line 1413, in _retry_with_session
+    return self._retry_internal(retryable, func, session, bulk)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\_csot.py", line 108, in csot_wrapper
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\mongo_client.py", line 1460, in _retry_internal
+    return func(session, conn, retryable)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 864, in _update
+    return self._update(
+           ^^^^^^^^^^^^^
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\collection.py", line 827, in _update
+    _check_write_command_response(result)
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\helpers.py", line 259, in _check_write_command_response
+    _raise_last_write_error(write_errors)
+  File "C:\Users\GeoffreyAudia\AppData\Roaming\Python\Python312\site-packages\pymongo\helpers.py", line 232, in _raise_last_write_error
+    raise WriteError(error.get("errmsg"), error.get("code"), error)
+pymongo.errors.WriteError: Performing an update on the path '_id' would modify the immutable field '_id', full error: {'index': 0, 'code': 66, 'errmsg': "Performing an update on the path '_id' would modify the immutable field '_id'"}

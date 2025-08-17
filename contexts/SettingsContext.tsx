@@ -77,15 +77,16 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       const api = isAdmin ? adminApi : userApi;
       const response = await api.getSettings();
+      const payload: any = isAdmin ? (response?.settings ?? response) : response?.settings;
       
-      if (response) {
+      if (payload) {
         setSettings(prev => ({
           ...prev,
-          ...(isAdmin ? response : response.settings),
+          ...payload,
           profile: {
             name: user?.name || '',
             email: user?.email || '',
-            avatarUrl: response.profile?.avatarUrl || prev.profile.avatarUrl
+            avatarUrl: (payload.profile?.avatarUrl) || prev.profile.avatarUrl
           }
         }));
       }

@@ -61,7 +61,7 @@ function SettingsPageContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { setTheme } = useTheme();
-  const { updateTheme } = useSettings();
+  const { updateTheme, updateSettings } = useSettings();
 
   useEffect(() => {
     loadSettings();
@@ -75,7 +75,8 @@ function SettingsPageContent() {
       
       const response = await adminApi.getSettings();
       if (response) {
-        setSettings({ ...defaultSettings, ...response });
+        const payload = (response as any).settings ?? response;
+        setSettings({ ...defaultSettings, ...payload });
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -92,7 +93,20 @@ function SettingsPageContent() {
     setIsSaving(true);
     
     try {
-      await adminApi.updateSettings(settings);
+      // Persist only known fields
+      const payload = {
+        emailNotifications: settings.emailNotifications,
+        pushNotifications: settings.pushNotifications,
+        autoLogout: settings.autoLogout,
+        tableRowsPerPage: settings.tableRowsPerPage,
+        sidebarCollapsed: settings.sidebarCollapsed,
+        theme: settings.theme,
+        language: settings.language,
+        avatar: settings.avatar,
+      };
+      await adminApi.updateSettings(payload);
+      // Reload from server to confirm persistence
+      await loadSettings();
       toast.success('Settings saved successfully');
     } catch (error) {
       console.error('Save error:', error);
@@ -302,9 +316,12 @@ function SettingsPageContent() {
                 </div>
                 <Switch
                   checked={settings.sidebarCollapsed}
-                  onCheckedChange={(checked) => 
+                  onCheckedChange={async (checked) => {
                     updateSetting('sidebarCollapsed', checked)
-                  }
+                    try {
+                      await updateSettings({ sidebarCollapsed: checked } as any)
+                    } catch {}
+                  }}
                 />
               </div>
             </div>
