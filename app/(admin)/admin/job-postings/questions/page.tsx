@@ -35,6 +35,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Toaster } from "react-hot-toast";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { DragDropContext, Droppable, Draggable, DropResult } from "react-beautiful-dnd";
 import {
   AlertDialog,
@@ -342,13 +343,13 @@ export default function QuestionsManagementPage() {
                 <tr
                   ref={provided.innerRef}
                   {...provided.draggableProps}
-                  className="border-t border-gray-200 hover:bg-gray-50"
+                  className="border-t border-border hover:bg-muted/50"
                 >
                   <td className="pl-4 py-4" {...provided.dragHandleProps}>
-                    <GripVertical className="h-5 w-5 text-gray-400 cursor-move" />
+                    <GripVertical className="h-5 w-5 text-muted-foreground cursor-move" />
                   </td>
                   {columns.map((column) => (
-                    <td key={column.accessor} className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td key={column.accessor} className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                       {column.cell ? column.cell({ row }) : row[column.accessor]}
                     </td>
                   ))}
@@ -358,7 +359,7 @@ export default function QuestionsManagementPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => onEdit(row.id)}
-                        className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50"
+                        className="p-2 text-primary hover:bg-primary/10"
                       >
                         <Edit2 className="h-4 w-4" />
                       </Button>
@@ -366,7 +367,7 @@ export default function QuestionsManagementPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => onDelete(row.id)}
-                        className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50"
+                        className="p-2 text-red-600 hover:bg-red-600/10"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -484,6 +485,11 @@ export default function QuestionsManagementPage() {
       searchValue={searchTerm}
       onSearch={setSearchTerm}
     >
+      {isLoading ? (
+        <div className="bg-card rounded-md border border-border p-6">
+          <TableSkeleton rows={8} columns={5} />
+        </div>
+      ) : (
       <div className="space-y-6">
         <div className="flex justify-end">
           <Button onClick={() => setIsAddOpen(true)}>
@@ -492,15 +498,15 @@ export default function QuestionsManagementPage() {
           </Button>
         </div>
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="bg-white rounded-md shadow-sm overflow-x-auto">
+          <div className="bg-card rounded-md border border-border overflow-x-auto">
             <table className="min-w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted/50">
                 <tr>
                   <th className="w-10 px-2"></th>
                   {columns.map((column) => (
                     <th
                       key={column.accessor}
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider"
                     >
                       {column.header}
                     </th>
@@ -518,6 +524,7 @@ export default function QuestionsManagementPage() {
           </div>
         </DragDropContext>
       </div>
+      )}
 
       <AddQuestionModal
         open={isAddOpen}
