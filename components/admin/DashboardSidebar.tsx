@@ -124,11 +124,7 @@ export const menuSections: MenuSection[] = [
         href: "/admin/user-management",
         icon: Users,
       },
-      {
-        name: "Analytics",
-        href: "/admin/analytics",
-        icon: BarChart,
-      },
+   
       {
         name: "Notifications",
         href: "/admin/notifications",

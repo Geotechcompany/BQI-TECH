@@ -37,6 +37,8 @@ import { adminApi } from "@/lib/api-backend";
 import { toast } from "react-hot-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "@/contexts/SettingsContext";
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
+import { useBackendHealth } from "@/hooks/useBackendHealth";
 
 interface Notification {
   id: string;
@@ -163,6 +165,8 @@ export default function AdminPageHeader({
 
         {/* Right Section */}
         <div className="flex items-center gap-2">
+          {/* Backend status indicator */}
+          <BackendStatusIndicator />
           {/* Theme Switcher */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -341,3 +345,57 @@ export default function AdminPageHeader({
     </div>
   );
 } 
+
+function BackendStatusIndicator() {
+  const { status, label, latencyMs, dbStatus, isLoading, refetch } = useBackendHealth()
+
+  const color = status === "healthy" ? "bg-emerald-500" : status === "degraded" ? "bg-amber-500" : "bg-red-500"
+  const pulse = status === "healthy" ? "animate-pulse" : status === "degraded" ? "animate-pulse slow" : ""
+
+  return (
+    <HoverCard openDelay={150} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <button
+          className="group inline-flex items-center gap-2 rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-white/60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800/60"
+          aria-label="Backend status"
+        >
+          <span className={`relative flex h-2.5 w-2.5 items-center justify-center`}> 
+            <span className={`absolute inline-flex h-2.5 w-2.5 rounded-full ${color} ${pulse} opacity-75`}></span>
+            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${color}`}></span>
+          </span>
+          <span className="hidden sm:block">{label}</span>
+        </button>
+      </HoverCardTrigger>
+      <HoverCardContent side="bottom" align="end" className="w-72">
+        <div className="flex items-start gap-3">
+          <div className="mt-1">
+            <span className={`inline-block h-3 w-3 rounded-full ${color}`}></span>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium">Backend API</p>
+            <p className="text-xs text-muted-foreground">
+              {status === "healthy" && "All systems operational"}
+              {status === "degraded" && "API reachable, database degraded"}
+              {status === "down" && "API unreachable"}
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-md border p-2 dark:border-gray-700">
+                <div className="text-muted-foreground">Latency</div>
+                <div className="font-medium">{latencyMs ?? "-"} ms</div>
+              </div>
+              <div className="rounded-md border p-2 dark:border-gray-700">
+                <div className="text-muted-foreground">Database</div>
+                <div className="font-medium capitalize">{dbStatus || "unknown"}</div>
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isLoading}>
+                Refresh
+              </Button>
+            </div>
+          </div>
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  )
+}
