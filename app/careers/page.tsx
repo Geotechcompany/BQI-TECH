@@ -303,8 +303,6 @@ export default function CareersPage() {
                            bg-clip-text text-transparent">{section.title}</h2>
               <p className="text-lg text-gray-600">{section.content}</p>
               
-              <h3 className="text-xl font-semibold">Our Culture and Core Values:</h3>
-              
               <ul className="space-y-4">
                 {section.points.map((point, i) => (
                   <motion.li
