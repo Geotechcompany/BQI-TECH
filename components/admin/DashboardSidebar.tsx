@@ -294,6 +294,34 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
           )}
         </motion.div>
 
+        {/* Help Link */}
+        <motion.div whileHover={{ scale: 1.02 }}>
+          {sidebarCollapsed ? (
+            <Tooltip content="Help">
+              <Link
+                href="/admin/help"
+                className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
+                  ${pathname === '/admin/help' 
+                    ? 'bg-primary/10 text-primary' 
+                    : 'text-muted-foreground hover:bg-muted'}`}
+              >
+                <HelpCircle className="w-5 h-5" />
+              </Link>
+            </Tooltip>
+          ) : (
+            <Link
+              href="/admin/help"
+              className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
+                ${pathname === '/admin/help' 
+                  ? 'bg-primary/10 text-primary' 
+                  : 'text-muted-foreground hover:bg-muted'}`}
+            >
+              <HelpCircle className="w-5 h-5 text-primary" />
+              <span className="ml-3">Help</span>
+            </Link>
+          )}
+        </motion.div>
+
         {menuSections.map((section: MenuSection) => (
           <div key={section.title} className="space-y-1">
             {sidebarCollapsed ? (

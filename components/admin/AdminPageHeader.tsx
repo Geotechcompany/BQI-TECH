@@ -27,7 +27,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
@@ -284,9 +283,11 @@ export default function AdminPageHeader({
           </DropdownMenu>
 
           {/* Help */}
-          <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Help">
-            <HelpCircle className="h-5 w-5" aria-hidden="true" />
-          </Button>
+          <Link href="/admin/help" aria-label="Help">
+            <Button variant="ghost" size="icon" className="h-9 w-9">
+              <HelpCircle className="h-5 w-5" aria-hidden="true" />
+            </Button>
+          </Link>
 
           {/* Profile */}
           <DropdownMenu>
@@ -320,7 +321,6 @@ export default function AdminPageHeader({
                   <Link href="/admin/settings" className="flex w-full items-center">
                     <Settings className="mr-2 h-4 w-4" aria-hidden="true" />
                     Settings
-                    <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
@@ -331,7 +331,6 @@ export default function AdminPageHeader({
               >
                 <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
                 Log out
-                <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
