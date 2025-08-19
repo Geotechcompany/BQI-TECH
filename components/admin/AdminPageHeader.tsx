@@ -257,7 +257,7 @@ export default function AdminPageHeader({
                               className="h-8 w-8"
                               onClick={() => markAsReadMutation.mutate(notification.id)}
                             >
-                              <Check className="h-4 w-4" />
+                              <Check className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           )}
                           <Button
@@ -266,7 +266,7 @@ export default function AdminPageHeader({
                             className="h-8 w-8 text-destructive"
                             onClick={() => deleteNotificationMutation.mutate(notification.id)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
                           </Button>
                         </div>
                       </div>
@@ -284,8 +284,8 @@ export default function AdminPageHeader({
           </DropdownMenu>
 
           {/* Help */}
-          <Button variant="ghost" size="icon" className="h-9 w-9">
-            <HelpCircle className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Help">
+            <HelpCircle className="h-5 w-5" aria-hidden="true" />
           </Button>
 
           {/* Profile */}
@@ -302,7 +302,7 @@ export default function AdminPageHeader({
                   <span className="text-sm font-medium">{user?.name || 'Admin User'}</span>
                   <span className="text-xs text-muted-foreground">{user?.role || 'admin'}</span>
                 </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -317,15 +317,8 @@ export default function AdminPageHeader({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem>
-                  <Link href="/admin/profile" className="flex w-full items-center">
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                    <DropdownMenuShortcut>⇧⌘P</DropdownMenuShortcut>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
                   <Link href="/admin/settings" className="flex w-full items-center">
-                    <Settings className="mr-2 h-4 w-4" />
+                    <Settings className="mr-2 h-4 w-4" aria-hidden="true" />
                     Settings
                     <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
                   </Link>
@@ -336,7 +329,7 @@ export default function AdminPageHeader({
                 className="text-red-600 focus:text-red-600" 
                 onClick={logout}
               >
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
                 Log out
                 <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
               </DropdownMenuItem>

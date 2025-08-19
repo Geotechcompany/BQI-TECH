@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
-  ChevronLeft,
   X,
   LogOut,
   Folder,
@@ -240,9 +239,14 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
               className="hidden md:block p-2 hover:bg-muted rounded-lg"
             >
               {sidebarCollapsed ? (
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                <Image src="/collapse-svg-black.svg" alt="Expand" width={20} height={20} className="block dark:hidden" />
               ) : (
-                <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+                <Image src="/collapse-svg-black.svg" alt="Collapse" width={20} height={20} className="block dark:hidden" />
+              )}
+              {sidebarCollapsed ? (
+                <Image src="/collapse-svg-white.svg" alt="Expand" width={20} height={20} className="hidden dark:block" />
+              ) : (
+                <Image src="/collapse-svg-white.svg" alt="Collapse" width={20} height={20} className="hidden dark:block" />
               )}
             </motion.button>
           </Tooltip>
