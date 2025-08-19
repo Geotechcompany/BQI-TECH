@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
+import { useAdminTheme } from "@/contexts/AdminThemeContext";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { adminApi } from "@/lib/api-backend";
@@ -67,7 +68,8 @@ export default function AdminPageHeader({
   onSearch 
 }: AdminPageHeaderProps) {
   const { user, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { setTheme: setGlobalTheme } = useTheme();
+  const { theme, setTheme } = useAdminTheme();
   const { sidebarCollapsed } = useSettings();
   const [searchValue, setSearchValue] = useState("");
   const queryClient = useQueryClient();
@@ -185,7 +187,7 @@ export default function AdminPageHeader({
                 <Moon className="mr-2 h-4 w-4" />
                 Dark
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("system")}>
+              <DropdownMenuItem onClick={() => setGlobalTheme("system")}>
                 <Laptop className="mr-2 h-4 w-4" />
                 System
               </DropdownMenuItem>

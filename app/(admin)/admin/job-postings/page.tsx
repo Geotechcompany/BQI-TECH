@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import DataTable from "@/components/admin/DataTable";
 import { Edit, Trash2, Power, PowerOff } from "lucide-react";
+import { DeleteJobPostingModal } from "@/components/admin/DeleteJobPostingModal";
 import Loader from "@/components/Loader";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
@@ -29,6 +30,7 @@ export default function JobPostingsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const router = useRouter();
   const { isAuthenticated, isAdmin, authLoading } = useAuth();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title?: string } | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!isAuthenticated || !isAdmin)) {
@@ -103,9 +105,8 @@ export default function JobPostingsPage() {
     router.push(`/admin/job-postings/${id}/edit`);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this job posting?")) {
-      try {
+  const confirmDelete = async (id: string) => {
+    try {
         const session = authService.getSession();
         if (!session) {
           router.push('/login');
@@ -139,12 +140,11 @@ export default function JobPostingsPage() {
           });
         }
 
-        setJobPostings(jobPostings.filter((posting) => posting.id !== id));
-        toast.success("Job posting deleted successfully");
-      } catch (err) {
-        console.error('Error deleting job posting:', err);
-        toast.error("Failed to delete job posting");
-      }
+      setJobPostings(jobPostings.filter((posting) => posting.id !== id));
+      toast.success("Job posting deleted successfully");
+    } catch (err) {
+      console.error('Error deleting job posting:', err);
+      toast.error("Failed to delete job posting");
     }
   };
 
@@ -243,7 +243,7 @@ export default function JobPostingsPage() {
       <Button
         size="sm"
         variant="ghost"
-        onClick={() => handleDelete(row.id)}
+        onClick={() => setDeleteTarget({ id: row.id, title: row.title })}
         className="p-2 text-red-600 hover:text-red-700"
       >
         <Trash2 className="h-4 w-4" />
@@ -286,6 +286,19 @@ export default function JobPostingsPage() {
             actionButtons={actionButtons}
           />
         </div>
+
+        <DeleteJobPostingModal
+          jobTitle={deleteTarget?.title}
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            if (deleteTarget) {
+              const id = deleteTarget.id
+              setDeleteTarget(null)
+              confirmDelete(id)
+            }
+          }}
+        />
       </div>
     </AdminPageLayout>
   );

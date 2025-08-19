@@ -4,14 +4,19 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { JobPosting } from "@/types/jobPosting";
 import dynamic from "next/dynamic";
 import toast from "react-hot-toast";
+import { Editor } from "@/components/editor";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
-// Dynamically import Quill to avoid SSR issues
-const ReactQuill = dynamic(() => import("react-quill"), { ssr: false });
-import "react-quill/dist/quill.snow.css"; // Import Quill styles
+// Remove ReactQuill in favor of TipTap-based Editor used across the app
 import Loader from "@/components/Loader";
+import { useAuth } from "@/contexts/AuthContext";
+import { authService } from "@/lib/auth-backend";
+import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { FormSkeleton } from "@/components/ui/skeleton";
 
 export default function EditJobPostingPage() {
   const { id } = useParams();
@@ -19,12 +24,15 @@ export default function EditJobPostingPage() {
   const [jobPosting, setJobPosting] = useState<JobPosting | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isAuthenticated, isAdmin, authLoading } = useAuth();
+  const [isFetching, setIsFetching] = useState(true);
 
   useEffect(() => {
     async function fetchJobPosting() {
       // Validate id parameter
       if (!id) {
         setError("Invalid job ID");
+        setIsFetching(false);
         return;
       }
 
@@ -43,18 +51,61 @@ export default function EditJobPostingPage() {
           isActive: true,
         };
         setJobPosting(initialJobPosting);
+        setIsFetching(false);
         return;
       }
 
       try {
-        const response = await fetch(`/api/admin/job-postings/${id}`);
+        const session = authService.getSession();
+        if (!session) {
+          router.push('/login');
+          setIsFetching(false);
+          return;
+        }
+
+        const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/admin/job-postings/${id}`, {
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.token}`,
+            'Accept': 'application/json'
+          }
+        });
+
+        if (response.status === 401) {
+          const refreshed = await authService.refreshToken();
+          if (!refreshed) {
+            router.push('/login');
+            return;
+          }
+
+          const retryResponse = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/admin/job-postings/${id}`, {
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${refreshed.access_token}`,
+              'Accept': 'application/json'
+            }
+          });
+
+          if (!retryResponse.ok) {
+            throw new Error("Failed to fetch job posting");
+          }
+          const retryData = await retryResponse.json();
+          setJobPosting(retryData);
+          setIsFetching(false);
+          return;
+        }
+
         if (!response.ok) {
           throw new Error("Failed to fetch job posting");
         }
         const data = await response.json();
         setJobPosting(data);
+        setIsFetching(false);
       } catch (err) {
         setError("Failed to load job posting. Please try again.");
+        setIsFetching(false);
       }
     }
 
@@ -91,108 +142,174 @@ export default function EditJobPostingPage() {
     setIsLoading(true); // Set loading state
 
     try {
-      const url =
-        id === "new"
-          ? "/api/admin/job-postings"
-          : `/api/admin/job-postings/${id}`;
+      const session = authService.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      const baseUrl = `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/admin/job-postings`;
+      const url = id === "new" ? baseUrl : `${baseUrl}/${id}`;
       const method = id === "new" ? "POST" : "PUT";
 
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.token}`,
+          'Accept': 'application/json'
+        },
         body: JSON.stringify(jobPosting),
       });
 
-      if (!response.ok) {
+      if (response.status === 401) {
+        const refreshed = await authService.refreshToken();
+        if (!refreshed) {
+          router.push('/login');
+          return;
+        }
+
+        const retryResponse = await fetch(url, {
+          method,
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${refreshed.access_token}`,
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(jobPosting),
+        });
+
+        if (!retryResponse.ok) {
+          throw new Error("Failed to save job posting");
+        }
+      } else if (!response.ok) {
         throw new Error("Failed to save job posting");
       }
 
-      toast.success("Job posting saved successfully!"); // Success toast
+      toast.success("Job posting saved successfully!");
       router.push("/admin/job-postings");
     } catch (err) {
       setError("Failed to save job posting. Please try again.");
-      toast.error("Failed to save job posting. Please try again."); // Error toast
+      toast.error("Failed to save job posting. Please try again.");
     } finally {
-      setIsLoading(false); // Reset loading state
+      setIsLoading(false);
     }
   };
 
-  if (!jobPosting) return <Loader/> ;
-  if (error) return <div className="text-red-500">{error}</div>;
+  if (authLoading || isFetching) {
+    return (
+      <AdminPageLayout title={id === "new" ? "Add New Job Posting" : "Edit Job Posting"} showSearch={false}>
+        <div className="max-w-2xl mx-auto">
+          <FormSkeleton />
+        </div>
+      </AdminPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminPageLayout title="Error" showSearch={false}>
+        <div className="text-destructive">{error}</div>
+      </AdminPageLayout>
+    );
+  }
+
+  if (!jobPosting) {
+    return (
+      <AdminPageLayout title={id === "new" ? "Add New Job Posting" : "Edit Job Posting"} showSearch={false}>
+        <div className="max-w-2xl mx-auto">
+          <FormSkeleton />
+        </div>
+      </AdminPageLayout>
+    );
+  }
 
   return (
-    <div className="max-w-2xl mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
-      <h1 className="text-2xl font-bold mb-6">
-        {id === "new" ? "Add New Job Posting" : "Edit Job Posting"}
-      </h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label
-            htmlFor="title"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Job Title
-          </label>
-          <Input
-            id="title"
-            name="title"
-            value={jobPosting.title}
-            onChange={handleInputChange}
-            className="mt-1"
-          />
+    <AdminPageLayout title={id === "new" ? "Add New Job Posting" : "Edit Job Posting"} showSearch={false}>
+      <div className="max-w-2xl mx-auto">
+        <div className="p-6 rounded-lg border bg-card text-foreground">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="title">Job Title</Label>
+              <Input
+                id="title"
+                name="title"
+                value={jobPosting.title}
+                onChange={handleInputChange}
+                className="mt-1"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Employment Type</Label>
+                <Select
+                  value={jobPosting.employmentType || "Full-time"}
+                  onValueChange={(v) => setJobPosting((prev) => ({ ...prev!, employmentType: v }))}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Full-time">Full-time</SelectItem>
+                    <SelectItem value="Part-time">Part-time</SelectItem>
+                    <SelectItem value="Contract">Contract</SelectItem>
+                    <SelectItem value="Internship">Internship</SelectItem>
+                    <SelectItem value="Temporary">Temporary</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Posted Date</Label>
+                <Input
+                  type="date"
+                  className="mt-1"
+                  value={(jobPosting.postedDate || new Date().toISOString()).slice(0, 10)}
+                  onChange={(e) => setJobPosting((prev) => ({ ...prev!, postedDate: new Date(e.target.value).toISOString() }))}
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="department">Department</Label>
+              <Input
+                id="department"
+                name="department"
+                value={jobPosting.department}
+                onChange={handleInputChange}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                name="location"
+                value={jobPosting.location}
+                onChange={handleInputChange}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="description">Job Description</Label>
+              <div className="mt-1 rounded-md border bg-background" id="description">
+                <Editor
+                  value={jobPosting.description}
+                  onChange={handleDescriptionChange}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <Button type="button" variant="outline" onClick={() => router.back()}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? "Saving..." : "Save Job Posting"}
+              </Button>
+            </div>
+          </form>
         </div>
-        <div>
-          <label
-            htmlFor="department"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Department
-          </label>
-          <Input
-            id="department"
-            name="department"
-            value={jobPosting.department}
-            onChange={handleInputChange}
-            className="mt-1"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="location"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Location
-          </label>
-          <Input
-            id="location"
-            name="location"
-            value={jobPosting.location}
-            onChange={handleInputChange}
-            className="mt-1"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="description"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Job Description
-          </label>
-          <ReactQuill
-            value={jobPosting.description}
-            onChange={handleDescriptionChange}
-            className="mt-1"
-          />
-        </div>
-        <div className="flex justify-end space-x-3">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isLoading}>
-            {isLoading ? "Saving..." : "Save Job Posting"}
-          </Button>
-        </div>
-      </form>
-    </div>
+      </div>
+    </AdminPageLayout>
   );
 }

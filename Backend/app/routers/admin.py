@@ -239,6 +239,13 @@ async def create_job_posting(
     job_data["updatedAt"] = datetime.utcnow()
     job_data["createdBy"] = str(current_user["_id"])
     
+    # Normalize and defaults
+    if not job_data.get("employmentType"):
+        job_data["employmentType"] = "Full-time"
+    # Allow postedDate from client, otherwise default to now
+    if not job_data.get("postedDate"):
+        job_data["postedDate"] = datetime.utcnow()
+    
     result = await db.jobpostings.insert_one(job_data)
     job_data["_id"] = str(result.inserted_id)
     job_data["id"] = str(result.inserted_id)
@@ -275,12 +282,18 @@ async def update_job_posting(
     db = get_database()
     
     try:
+        # Remove immutable and server-managed fields if present in payload
+        for key in ["_id", "id", "createdAt", "updatedAt"]:
+            if key in update_data:
+                update_data.pop(key, None)
+
         # Clean up HTML entities in description
         if "description" in update_data:
             update_data["description"] = (
                 update_data["description"]
                 .replace("&nbsp;", " ")  # Replace &nbsp; with regular space
-                .replace("\\s+", " ")    # Normalize multiple spaces using proper regex escape
+                # Simple normalization of multiple spaces (avoid regex injection in replace)
+                .replace("  ", " ")
                 .strip()                 # Trim extra spaces
             )
         
@@ -294,7 +307,13 @@ async def update_job_posting(
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Job posting not found")
         
-        return {"message": "Job posting updated successfully"}
+        # Return the updated document for UI freshness
+        updated = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
+        if not updated:
+            return {"message": "Job posting updated successfully"}
+        convert_objectids_to_strings(updated)
+        updated["id"] = str(updated["_id"])
+        return updated
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

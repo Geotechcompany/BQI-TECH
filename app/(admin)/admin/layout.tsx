@@ -7,6 +7,7 @@ import DashboardSidebar from '@/components/admin/DashboardSidebar';
 import MobileDashboardSidebar from '@/components/admin/MobileDashboardSidebar';
 import { EmailVerificationGuard } from '@/components/auth/EmailVerificationGuard';
 import { Menu } from 'lucide-react';
+import { AdminThemeProvider } from '@/contexts/AdminThemeContext';
 import { useRouter, usePathname } from 'next/navigation';
 import { toast } from "react-hot-toast";
 
@@ -76,7 +77,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <EmailVerificationGuard requireVerification={true}>
-      <div data-admin-page className="flex flex-col h-screen w-screen bg-gray-100 md:flex-row overflow-hidden">
+      <AdminThemeProvider targetId="admin-root">
+      <div id="admin-root" data-admin-page className="flex flex-col h-screen w-screen bg-gray-100 md:flex-row overflow-hidden">
         <div className="md:hidden bg-white flex justify-between items-center h-16 px-4 flex-shrink-0 z-50">
           <h1 className="text-xl font-bold text-gray-800">BQI Tech HR</h1>
           <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500">
@@ -107,6 +109,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+      </AdminThemeProvider>
     </EmailVerificationGuard>
   );
 }

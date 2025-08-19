@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Editor } from "@/components/editor";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -17,6 +19,8 @@ interface JobPosting {
   department: string;
   location: string;
   description: string;
+  employmentType: string;
+  postedDate?: string;
   isActive: boolean;
 }
 
@@ -30,6 +34,8 @@ export default function AddJobPostingPage() {
     department: "",
     location: "",
     description: "",
+    employmentType: "Full-time",
+    postedDate: new Date().toISOString(),
     isActive: true,
   });
 
@@ -165,23 +171,43 @@ export default function AddJobPostingPage() {
               />
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Employment Type</Label>
+                <Select
+                  value={jobPosting.employmentType}
+                  onValueChange={(v) => setJobPosting({ ...jobPosting, employmentType: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Full-time">Full-time</SelectItem>
+                    <SelectItem value="Part-time">Part-time</SelectItem>
+                    <SelectItem value="Contract">Contract</SelectItem>
+                    <SelectItem value="Internship">Internship</SelectItem>
+                    <SelectItem value="Temporary">Temporary</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Posted Date</Label>
+                <Input
+                  type="date"
+                  value={jobPosting.postedDate?.slice(0, 10) || ""}
+                  onChange={(e) => setJobPosting({ ...jobPosting, postedDate: new Date(e.target.value).toISOString() })}
+                />
+              </div>
+            </div>
+
             <div>
               <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={jobPosting.description}
-                onChange={(e) => {
-                  // Clean up HTML entities and normalize spaces
-                  const cleanedValue = e.target.value
-                    .replace(/&nbsp;/g, ' ')  // Replace &nbsp; with regular space
-                    .replace(/\s+/g, ' ')     // Normalize multiple spaces
-                    .trim();                  // Trim extra spaces
-                  
-                  setJobPosting({ ...jobPosting, description: cleanedValue });
-                }}
-                placeholder="Enter job description"
-                rows={6}
-              />
+              <div id="description">
+                <Editor
+                  value={jobPosting.description}
+                  onChange={(value) => setJobPosting({ ...jobPosting, description: value })}
+                />
+              </div>
             </div>
           </div>
 
