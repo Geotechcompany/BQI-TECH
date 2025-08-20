@@ -127,6 +127,14 @@ async def login(
                 "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-User-Session"
             }
         )
+    except HTTPException as http_exc:
+        # Preserve intended HTTP errors (e.g., 401 for invalid credentials)
+        try:
+            detail = http_exc.detail
+        except Exception:
+            detail = ""
+        logger.warning(f"Login HTTP error: {detail}")
+        raise http_exc
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         logger.exception("Full traceback:")
@@ -619,20 +627,32 @@ async def send_verification_code_endpoint(
         
         db = get_database()
         
-        # Find user
+        # Try to find user in main collection first
         user = await db.users.find_one({"email": email})
+        pending_registration = None
+
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-        
-        # Check if already verified
-        if user.get("isEmailVerified", False):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email is already verified"
-            )
+            # Fall back to pending registrations for users who haven't completed signup
+            pending_registration = await db.pending_registrations.find_one({"email": email})
+            if not pending_registration:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            # Check pending registration expiry
+            if pending_registration.get("expiresAt") and pending_registration["expiresAt"] < datetime.utcnow():
+                await db.pending_registrations.delete_one({"_id": pending_registration["_id"]})
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Registration expired. Please register again."
+                )
+        else:
+            # Check if already verified for existing users
+            if user.get("isEmailVerified", False):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email is already verified"
+                )
         
         # Send verification code
         code = await send_verification_code(email)

@@ -1,25 +1,45 @@
-"use client"
+"use client";
 
-import { ChevronLeft, Zap } from "lucide-react"
-import { SignupForm } from "@/components/auth/signup-form"
-import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "sonner"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import { ChevronLeft, Zap } from "lucide-react";
+import { SignupForm } from "@/components/auth/signup-form";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function SignupWrapper() {
-  const { register } = useAuth()
-  const router = useRouter()
+  const { register } = useAuth();
+  const router = useRouter();
 
-  const handleSignup = async (email: string, password: string, name: string) => {
+  const handleSignup = async (
+    email: string,
+    password: string,
+    name: string
+  ) => {
     try {
-      await register(email, password, name)
-      toast.success('Account created successfully! Please verify your email.')
-      router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`)
-    } catch (error) {
-      toast.error(error.message || 'Failed to create account')
+      await register(email, password, name);
+      toast.success("Account created successfully! Please verify your email.");
+      if (typeof window !== "undefined") {
+        localStorage.setItem("verification_email", email);
+      }
+      router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`);
+    } catch (error: any) {
+      const message = (error?.message || "").toLowerCase();
+      const requiresVerification =
+        message.includes("verify") || message.includes("verification");
+      if (requiresVerification) {
+        toast.success(
+          "Account created successfully! Please verify your email."
+        );
+        if (typeof window !== "undefined") {
+          localStorage.setItem("verification_email", email);
+        }
+        router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      toast.error(error?.message || "Failed to create account");
     }
-  }
+  };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
@@ -30,9 +50,7 @@ export default function SignupWrapper() {
           <Zap className="w-12 h-12" />
           <div className="space-y-4">
             <h2 className="text-4xl font-bold">BQI Tech Portal</h2>
-            <p className="text-lg opacity-90">
-              Join our innovative platform
-            </p>
+            <p className="text-lg opacity-90">Join our innovative platform</p>
           </div>
           <div className="flex gap-4 opacity-75">
             <span className="text-sm">v2.4.0</span>
@@ -58,5 +76,5 @@ export default function SignupWrapper() {
         </div>
       </div>
     </div>
-  )
-} 
+  );
+}
