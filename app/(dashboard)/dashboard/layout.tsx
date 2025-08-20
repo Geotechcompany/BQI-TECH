@@ -53,7 +53,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <EmailVerificationGuard requireVerification={true}>
-      <div className="flex flex-col h-screen w-screen bg-gray-50 dark:bg-gray-950 md:flex-row overflow-hidden">
+      <div id="user-root" className="flex flex-col h-screen w-screen bg-gray-50 dark:bg-gray-950 md:flex-row overflow-hidden">
         {/* Desktop Sidebar */}
         <UserDashboardSidebar 
           onClose={() => {}} 
@@ -64,7 +64,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className={`
           flex-1 flex flex-col h-full w-full overflow-hidden
           transition-all duration-300
-          ${isCollapsed ? 'md:pl-[100px]' : 'md:pl-[300px]'}
+          ${isCollapsed ? 'md:pl-[80px]' : 'md:pl-[280px]'}
           pb-20 md:pb-0
         `}>
           {/* Dashboard Header */}

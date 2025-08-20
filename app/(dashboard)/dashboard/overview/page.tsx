@@ -139,7 +139,7 @@ export default function DashboardOverview() {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#272055] via-[#31CDFF] to-[#272055] p-6 sm:p-8 lg:p-10 text-white shadow-2xl"
+        className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#272055] via-[#31CDFF] to-[#272055] p-6 sm:p-8 lg:p-10 text-white shadow-2xl border border-border"
       >
         <div className="relative z-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
@@ -219,8 +219,8 @@ export default function DashboardOverview() {
             whileHover={{ y: -4, transition: { duration: 0.2 } }}
             className="group"
           >
-            <div className={`relative overflow-hidden p-4 sm:p-6 lg:p-8 bg-gradient-to-br ${item.bgGradient} border-0 shadow-xl hover:shadow-2xl ${item.shadowColor} transition-all duration-500 group-hover:scale-105 rounded-2xl sm:rounded-3xl`}>
-              <div className="absolute inset-0 bg-gradient-to-br from-white/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className={`relative overflow-hidden p-4 sm:p-6 lg:p-8 bg-card border border-border shadow-xl hover:shadow-2xl transition-all duration-500 group-hover:scale-105 rounded-2xl sm:rounded-3xl`}>
+              <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               
               {/* Floating background decoration - adjusted for mobile */}
               <div className="absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 lg:w-32 lg:h-32 transform translate-x-8 sm:translate-x-12 lg:translate-x-16 -translate-y-8 sm:-translate-y-12 lg:-translate-y-16 bg-gradient-to-br from-white/10 to-transparent rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
@@ -228,7 +228,7 @@ export default function DashboardOverview() {
               <div className="relative z-10 space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
                   <motion.div 
-                    className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl ${item.iconBg} shadow-xl border border-white/20 group-hover:scale-110 transition-transform duration-300`}
+                    className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl ${item.iconBg} shadow-xl border border-white/10 group-hover:scale-110 transition-transform duration-300`}
                     whileHover={{ rotate: 5 }}
                   >
                     <item.icon className={`h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8 ${item.textColor}`} />
@@ -240,7 +240,7 @@ export default function DashboardOverview() {
                 </div>
                 
                 <div className="space-y-1 sm:space-y-2">
-                  <p className="text-xs sm:text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                  <p className="text-xs sm:text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                     {item.title}
                   </p>
                   <motion.p 
@@ -249,7 +249,7 @@ export default function DashboardOverview() {
                   >
                     {item.value}
                   </motion.p>
-                  <p className="text-xs text-gray-500 font-medium">
+                  <p className="text-xs text-muted-foreground font-medium">
                     {item.description}
                   </p>
                 </div>
@@ -276,9 +276,9 @@ export default function DashboardOverview() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white/90 backdrop-blur-sm p-6 sm:p-8 lg:p-10 shadow-2xl border border-gray-100/50 hover:shadow-3xl transition-all duration-700"
+          className="group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-card p-6 sm:p-8 lg:p-10 shadow-2xl border border-border hover:shadow-3xl transition-all duration-700"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-purple-50/30 to-pink-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-white/0 to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
           
           <div className="relative z-10">
             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
@@ -293,7 +293,7 @@ export default function DashboardOverview() {
                   </motion.div>
                   <div className="flex-1">
                     <motion.h2 
-                      className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1 sm:mb-2"
+                      className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground mb-1 sm:mb-2"
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.5 }}
@@ -301,7 +301,7 @@ export default function DashboardOverview() {
                       Latest Application
                     </motion.h2>
                     <motion.p 
-                      className="text-base sm:text-lg lg:text-xl font-semibold text-gray-700"
+                      className="text-base sm:text-lg lg:text-xl font-semibold text-muted-foreground"
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.6 }}
@@ -362,7 +362,7 @@ export default function DashboardOverview() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="relative overflow-hidden p-6 sm:p-8 lg:p-10 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-gray-50/80 to-gray-100/50 border-2 border-dashed border-gray-300 text-center group hover:border-gray-400 transition-all duration-500"
+          className="relative overflow-hidden p-6 sm:p-8 lg:p-10 rounded-2xl sm:rounded-3xl bg-card border border-border text-center group transition-all duration-500"
         >
           <div className="relative z-10">
             <motion.div 
@@ -370,12 +370,12 @@ export default function DashboardOverview() {
               whileHover={{ scale: 1.1 }}
               transition={{ type: "spring", stiffness: 400 }}
             >
-              <div className="p-4 sm:p-6 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 w-16 h-16 sm:w-20 sm:h-20 mx-auto flex items-center justify-center shadow-lg">
-                <FileText className="h-8 w-8 sm:h-10 sm:w-10 text-gray-500" />
+              <div className="p-4 sm:p-6 rounded-full bg-muted w-16 h-16 sm:w-20 sm:h-20 mx-auto flex items-center justify-center shadow-lg">
+                <FileText className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
               </div>
             </motion.div>
-            <h3 className="text-xl sm:text-2xl font-bold text-gray-700 mb-3 sm:mb-4">No Applications Yet</h3>
-            <p className="text-gray-600 mb-6 sm:mb-8 max-w-md mx-auto text-sm sm:text-base lg:text-lg leading-relaxed">
+            <h3 className="text-xl sm:text-2xl font-bold text-foreground mb-3 sm:mb-4">No Applications Yet</h3>
+            <p className="text-muted-foreground mb-6 sm:mb-8 max-w-md mx-auto text-sm sm:text-base lg:text-lg leading-relaxed">
               Start your journey by exploring available positions and submitting your first application.
             </p>
             <Link href="/dashboard/jobs">
@@ -391,7 +391,7 @@ export default function DashboardOverview() {
             </Link>
           </div>
           
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/20 via-purple-50/20 to-pink-50/20 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-white/0 to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
         </motion.div>
       )}
     </div>

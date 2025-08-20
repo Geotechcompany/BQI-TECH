@@ -35,16 +35,16 @@ export function HiringProgress() {
 
   if (isLoading) {
     return (
-      <div className="relative overflow-hidden rounded-3xl bg-white/80 backdrop-blur-sm p-8 shadow-xl border border-gray-100/50">
+      <div className="relative overflow-hidden rounded-3xl bg-card p-8 shadow-xl border border-border">
         <div className="space-y-6 animate-pulse">
           <div className="flex items-center justify-between">
-            <div className="h-6 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg w-32"></div>
-            <div className="h-5 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full w-20"></div>
+            <div className="h-6 bg-muted rounded-lg w-32"></div>
+            <div className="h-5 bg-muted rounded-full w-20"></div>
           </div>
-          <div className="h-3 bg-gradient-to-r from-gray-200 to-gray-300 rounded-full"></div>
+          <div className="h-3 bg-muted rounded-full"></div>
           <div className="flex justify-between">
-            <div className="h-4 bg-gradient-to-r from-gray-200 to-gray-300 rounded w-24"></div>
-            <div className="h-4 bg-gradient-to-r from-gray-200 to-gray-300 rounded w-20"></div>
+            <div className="h-4 bg-muted rounded w-24"></div>
+            <div className="h-4 bg-muted rounded w-20"></div>
           </div>
         </div>
       </div>
@@ -122,25 +122,25 @@ export function HiringProgress() {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group relative overflow-hidden rounded-3xl bg-white/80 backdrop-blur-sm p-8 shadow-xl border border-gray-100/50 hover:shadow-2xl transition-all duration-500"
+      className="group relative overflow-hidden rounded-3xl bg-card p-8 shadow-xl border border-border hover:shadow-2xl transition-all duration-500"
     >
       {/* Background Gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 to-purple-50/30 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       
       <div className="relative z-10 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-2xl bg-gradient-to-br ${currentStageColor.bg} ${currentStageColor.border} border-2 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+            <div className={`p-3 rounded-2xl bg-white/5 border border-white/10 shadow-lg group-hover:scale-110 transition-transform duration-300`}>
               <StatusIcon className={`h-6 w-6 ${currentStageColor.text}`} />
             </div>
             <div>
-              <h3 className="text-xl font-bold text-gray-900 mb-1">Hiring Progress</h3>
-              <p className="text-sm text-gray-600">Track your application journey</p>
+              <h3 className="text-xl font-bold text-foreground mb-1">Hiring Progress</h3>
+              <p className="text-sm text-muted-foreground">Track your application journey</p>
             </div>
           </div>
           <motion.div 
-            className={`px-4 py-2 rounded-full text-sm font-bold ${currentStageColor.bg} ${currentStageColor.text} border-2 ${currentStageColor.border} shadow-lg`}
+            className={`px-4 py-2 rounded-full text-sm font-bold bg-white/5 ${currentStageColor.text} border border-white/10 shadow-lg`}
             whileHover={{ scale: 1.05 }}
             transition={{ type: "spring", stiffness: 400 }}
           >
@@ -153,7 +153,7 @@ export function HiringProgress() {
           <div className="relative">
             <Progress 
               value={progress} 
-              className="h-4 bg-gray-100 shadow-inner rounded-full overflow-hidden" 
+              className="h-4 bg-muted shadow-inner rounded-full overflow-hidden" 
             />
             <div 
               className={`absolute top-0 left-0 h-full bg-gradient-to-r ${currentStageColor.gradient} rounded-full transition-all duration-1000 ease-out shadow-lg`}
@@ -168,9 +168,9 @@ export function HiringProgress() {
                 <div className={`w-3 h-3 rounded-full transition-all duration-300 ${
                   index <= currentStageIndex 
                     ? `bg-gradient-to-r ${currentStageColor.gradient} shadow-lg` 
-                    : 'bg-gray-200'
+                    : 'bg-muted'
                 }`} />
-                <span className="text-xs font-medium text-gray-500 text-center max-w-16 leading-tight">
+                <span className="text-xs font-medium text-muted-foreground text-center max-w-16 leading-tight">
                   {stage.replace(' ', '\n')}
                 </span>
               </div>
@@ -179,8 +179,8 @@ export function HiringProgress() {
         </div>
         
         {/* Status Summary */}
-        <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-          <div className="text-sm text-gray-600">
+        <div className="flex justify-between items-center pt-4 border-t border-border">
+          <div className="text-sm text-muted-foreground">
             <span className="font-semibold">Stage:</span> {hasApplications ? `${currentStageIndex + 1} of ${data.stages.length}` : 'Not Started'}
           </div>
           <div className={`flex items-center gap-2 font-bold ${currentStageColor.text}`}>

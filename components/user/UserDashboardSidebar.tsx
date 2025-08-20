@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
@@ -75,11 +76,11 @@ export default function UserDashboardSidebar({
           initial={{ width: 280 }}
           animate={{ width: isCollapsed ? 80 : 280 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-[9998] bg-white/95 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/60 dark:border-gray-800 shadow-xl flex-shrink-0"
+          className="hidden md:flex flex-col fixed left-0 top-0 bottom-0 z-[9998] bg-card text-foreground shadow-xl flex-shrink-0"
         >
           <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="h-10 flex items-center justify-between px-4 border-b border-gray-100/80 dark:border-gray-800 mb-4">
+            <div className="h-10 flex items-center justify-between px-4 border-b border-border mb-4">
               {!isCollapsed && (
                 <Link href="/dashboard" className="flex items-center space-x-3 group">
                   <div className="w-16 h-5 relative transition-transform group-hover:scale-105">
@@ -107,9 +108,13 @@ export default function UserDashboardSidebar({
                 variant="ghost"
                 size="icon"
                 onClick={() => onCollapse?.(!isCollapsed)}
-                className="ml-auto hover:bg-gray-100/80 dark:hover:bg-gray-800 rounded-xl transition-all duration-200 hover:scale-105"
+                className="ml-auto hover:bg-muted rounded-xl transition-all duration-200 hover:scale-105"
               >
-                <ChevronRight className={`h-4 w-4 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
+                {/* Collapse/Expand icon using theme-aware SVGs */}
+                <span className={`transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`}>
+                  <Image src="/collapse-svg-black.svg" alt="Collapse" width={20} height={20} className="block dark:hidden" />
+                  <Image src="/collapse-svg-white.svg" alt="Collapse" width={20} height={20} className="hidden dark:block" />
+                </span>
               </Button>
             </div>
 
@@ -126,14 +131,14 @@ export default function UserDashboardSidebar({
                             "flex items-center justify-center px-4 py-3 rounded-xl transition-all duration-200 relative group",
                             pathname === tab.href
                               ? "bg-gradient-to-r from-[#31CDFF]/10 to-[#272055]/10 text-[#272055] dark:text-white shadow-sm border border-[#31CDFF]/20"
-                              : "text-gray-600 dark:text-gray-300 hover:bg-gray-50/80 dark:hover:bg-gray-800/60 hover:text-[#272055] dark:hover:text-white"
+                              : "text-muted-foreground hover:bg-muted hover:text-[#272055] dark:hover:text-white"
                           )}
                         >
                           <div className={cn(
                             "p-2 rounded-lg transition-all duration-200",
                             pathname === tab.href 
                               ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md" 
-                              : "bg-gray-100/60 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
+                              : "bg-muted text-muted-foreground group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
                           )}>
                             <tab.icon className="h-5 w-5" />
                           </div>
@@ -150,14 +155,14 @@ export default function UserDashboardSidebar({
                         "flex items-center px-4 py-3 rounded-xl transition-all duration-200 relative group",
                         pathname === tab.href
                           ? "bg-gradient-to-r from-[#31CDFF]/10 to-[#272055]/10 text-[#272055] dark:text-white shadow-sm border border-[#31CDFF]/20"
-                          : "text-gray-600 dark:text-gray-300 hover:bg-gray-50/80 dark:hover:bg-gray-800/60 hover:text-[#272055] dark:hover:text-white"
+                          : "text-muted-foreground hover:bg-muted hover:text-[#272055] dark:hover:text-white"
                       )}
                     >
                       <div className={cn(
                         "p-2 rounded-lg transition-all duration-200",
                         pathname === tab.href 
                           ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md" 
-                          : "bg-gray-100/60 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
+                          : "bg-muted text-muted-foreground group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
                       )}>
                         <tab.icon className="h-5 w-5" />
                       </div>
@@ -177,11 +182,11 @@ export default function UserDashboardSidebar({
             </nav>
 
             {/* Footer - User Profile */}
-            <div className="p-4 border-t border-gray-100/80 dark:border-gray-800">
+            <div className="p-4 border-t border-border">
               {!isCollapsed ? (
                 <Link 
                   href="/dashboard/settings"
-                  className="group flex items-center space-x-3 p-4 rounded-xl hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50 transition-all duration-300 cursor-pointer border border-transparent hover:border-gray-200/60"
+                  className="group flex items-center space-x-3 p-4 rounded-xl transition-all duration-300 cursor-pointer border border-transparent hover:bg-muted"
                 >
                   <div className="relative">
                     <Avatar className="h-12 w-12 ring-2 ring-white shadow-lg group-hover:ring-[#31CDFF]/30 transition-all duration-300 group-hover:shadow-xl">
@@ -215,7 +220,7 @@ export default function UserDashboardSidebar({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Link href="/dashboard/settings" className="group">
-                        <Avatar className="h-12 w-12 ring-2 ring-white dark:ring-gray-900 shadow-lg group-hover:ring-[#31CDFF]/30 transition-all duration-300 group-hover:shadow-xl group-hover:scale-105">
+                        <Avatar className="h-12 w-12 ring-2 ring-card shadow-lg group-hover:ring-[#31CDFF]/30 transition-all duration-300 group-hover:shadow-xl group-hover:scale-105">
                           <AvatarImage 
                             src={user?.avatar}
                             alt={displayName}

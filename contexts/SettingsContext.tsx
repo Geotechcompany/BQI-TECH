@@ -118,14 +118,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const updateTheme = (theme: 'light' | 'dark' | 'system') => {
     setSettings(prev => ({ ...prev, theme }));
-    // Save to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem('theme', theme);
+      // Scope theme class to user dashboard root so public pages are unaffected
+      const root = document.getElementById('user-root');
+      if (root) {
+        root.classList.remove('light', 'dark');
+        if (theme === 'dark') root.classList.add('dark');
+        if (theme === 'light') root.classList.add('light');
+      }
     }
-    // Apply immediately via next-themes
-    try {
-      setSystemTheme(theme);
-    } catch {}
+    // Also update system/theme for components that rely on next-themes
+    try { setSystemTheme(theme); } catch {}
   };
 
   // Load theme from localStorage on mount
@@ -134,9 +138,13 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system';
       if (savedTheme) {
         setSettings(prev => ({ ...prev, theme: savedTheme }));
-        try {
-          setSystemTheme(savedTheme);
-        } catch {}
+        const root = document.getElementById('user-root');
+        if (root) {
+          root.classList.remove('light', 'dark');
+          if (savedTheme === 'dark') root.classList.add('dark');
+          if (savedTheme === 'light') root.classList.add('light');
+        }
+        try { setSystemTheme(savedTheme); } catch {}
       }
     }
   }, []);
