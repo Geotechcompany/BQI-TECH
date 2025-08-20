@@ -27,6 +27,7 @@ export default function SignupWrapper() {
       const message = (error?.message || "").toLowerCase();
       const requiresVerification =
         message.includes("verify") || message.includes("verification");
+      const alreadyRegistered = message.includes("email already registered");
       if (requiresVerification) {
         toast.success(
           "Account created successfully! Please verify your email."
@@ -35,6 +36,12 @@ export default function SignupWrapper() {
           localStorage.setItem("verification_email", email);
         }
         router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`);
+        return;
+      }
+      if (alreadyRegistered) {
+        toast.error(
+          "Email already registered. Please sign in or use a different email."
+        );
         return;
       }
       toast.error(error?.message || "Failed to create account");
