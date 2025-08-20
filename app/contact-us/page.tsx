@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, ChevronRight, Send } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { publicApi } from '@/lib/api-backend';
 
 // Define an interface for the form data
 interface FormData {
@@ -65,17 +66,10 @@ export default function ContactUsPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/contact/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to send message');
+      const result = await publicApi.submitContact(formData);
+      if (result?.status !== 'success') {
+        throw new Error(result?.detail || result?.message || 'Failed to send message');
       }
-
       window.location.href = '/contact-us/confirmation';
     } catch (error) {
       console.error('Error sending message:', error);
