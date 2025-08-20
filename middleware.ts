@@ -8,6 +8,7 @@ const publicPaths = [
   '/sign-up',
   '/forgot-password',
   '/reset-password',
+  '/auth/verify-email',
   '/about',
   '/contact-us',
   '/services',
