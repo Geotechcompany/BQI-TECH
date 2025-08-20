@@ -1,4 +1,24 @@
-## BQI Tech Platform
+<p align="center">
+  <img src="public/bqilogo.png" alt="BQI Tech" width="140" />
+</p>
+
+<div align="center">
+
+# BQI Tech Platform
+
+<strong>Modern hiring, content, and operations stack for BQI Tech</strong>
+
+<br/>
+
+<a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-14-000?logo=next.js" alt="Next.js"/></a>
+<a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white" alt="TypeScript"/></a>
+<a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-3.x-38bdf8?logo=tailwindcss&logoColor=white" alt="Tailwind"/></a>
+<a href="https://ui.shadcn.com/"><img src="https://img.shields.io/badge/shadcn/ui-Components-111827" alt="shadcn/ui"/></a>
+<a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-Python-05998B?logo=fastapi&logoColor=white" alt="FastAPI"/></a>
+<a href="https://www.mongodb.com/"><img src="https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb&logoColor=white" alt="MongoDB"/></a>
+<a><img src="https://img.shields.io/badge/License-MIT-orange" alt="MIT"/></a>
+
+</div>
 
 A modern full‑stack application consisting of:
 - Next.js 14 App Router frontend (TypeScript, Tailwind, shadcn/ui, Radix UI)
