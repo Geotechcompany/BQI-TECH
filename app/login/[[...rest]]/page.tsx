@@ -22,6 +22,8 @@ export default function LoginPage() {
     const message = searchParams.get('message')
     if (message === 'Successfully logged out') {
       setShowLogoutSuccess(true)
+      // Hide after 3 seconds
+      setTimeout(() => setShowLogoutSuccess(false), 3000)
       // Clear the query parameter to avoid showing the message on refresh
       router.replace('/login')
     }
