@@ -111,6 +111,9 @@ function EmailVerificationContent() {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [initialEmailSent, setInitialEmailSent] = useState(false);
+  // Guards to prevent duplicate verification submits/toasts
+  const isVerifyingRef = useRef(false);
+  const hasShownSuccessRef = useRef(false);
 
   // Constants for duplicate prevention
   const RESEND_COOLDOWN = 30000; // 30 seconds cooldown between resends
@@ -186,6 +189,9 @@ function EmailVerificationContent() {
   // Memoize onSubmit to prevent unnecessary re-renders
   const onSubmit = useCallback(
     async (data: z.infer<typeof otpSchema>) => {
+      if (isVerifyingRef.current || status === "loading") {
+        return;
+      }
       if (!email) {
         toast.error(
           "No email found. Please start the verification process again."
@@ -194,6 +200,7 @@ function EmailVerificationContent() {
         return;
       }
 
+      isVerifyingRef.current = true;
       setStatus("loading");
       try {
         const response = await fetch(
@@ -246,7 +253,10 @@ function EmailVerificationContent() {
 
         const result = responseData;
         setStatus("success");
-        toast.success("Email verified successfully!");
+        if (!hasShownSuccessRef.current) {
+          toast.success("Email verified successfully!");
+          hasShownSuccessRef.current = true;
+        }
 
         // Try to refresh user profile to update verification status
         try {
@@ -274,9 +284,11 @@ function EmailVerificationContent() {
           position: "top-center",
         });
         setOtp("");
+      } finally {
+        isVerifyingRef.current = false;
       }
     },
-    [email, router, updateEmailVerificationStatus]
+    [email, router, updateEmailVerificationStatus, status]
   );
 
   // Effect to handle email retrieval and redirect logic
@@ -360,10 +372,10 @@ function EmailVerificationContent() {
 
   // Auto-submit when OTP is complete (memoized to prevent unnecessary re-renders)
   const handleOtpSubmit = useCallback(() => {
-    if (otp.length === 6) {
+    if (otp.length === 6 && !isVerifyingRef.current && status !== "loading") {
       handleSubmit(onSubmit)();
     }
-  }, [otp, handleSubmit, onSubmit]);
+  }, [otp, handleSubmit, onSubmit, status]);
 
   useEffect(() => {
     handleOtpSubmit();
