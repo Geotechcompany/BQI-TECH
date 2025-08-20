@@ -24,9 +24,14 @@ export default function SignupWrapper() {
         localStorage.setItem("verification_email", normalized);
         // Pre-mark verification as sent to prevent auto-resend on the verify page
         localStorage.setItem(`verification_auto_sent_${normalized}`, "true");
-        localStorage.setItem(`verification_last_send_time_${normalized}`, Date.now().toString());
+        localStorage.setItem(
+          `verification_last_send_time_${normalized}`,
+          Date.now().toString()
+        );
       }
-      router.push(`/auth/verify-email?email=${encodeURIComponent(email)}&sent=1`);
+      router.push(
+        `/auth/verify-email?email=${encodeURIComponent(email)}&sent=1`
+      );
     } catch (error: any) {
       const message = (error?.message || "").toLowerCase();
       const requiresVerification =
@@ -44,9 +49,14 @@ export default function SignupWrapper() {
           const normalized = email.trim().toLowerCase();
           localStorage.setItem("verification_email", normalized);
           localStorage.setItem(`verification_auto_sent_${normalized}`, "true");
-          localStorage.setItem(`verification_last_send_time_${normalized}`, Date.now().toString());
+          localStorage.setItem(
+            `verification_last_send_time_${normalized}`,
+            Date.now().toString()
+          );
         }
-        router.push(`/auth/verify-email?email=${encodeURIComponent(email)}&sent=1`);
+        router.push(
+          `/auth/verify-email?email=${encodeURIComponent(email)}&sent=1`
+        );
         return;
       }
       if (alreadyRegistered) {
