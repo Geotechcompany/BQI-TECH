@@ -203,9 +203,13 @@ class AuthService {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
+        const detail = error?.detail || error?.error || 'Registration failed';
         console.error('Registration error response:', error);
-        throw new Error(error.detail || 'Registration failed');
+        if (response.status === 429) {
+          throw new Error(`Rate limit exceeded. ${detail}`);
+        }
+        throw new Error(detail);
       }
 
       // After successful registration, login the user
