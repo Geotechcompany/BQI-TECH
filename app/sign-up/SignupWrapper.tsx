@@ -28,7 +28,10 @@ export default function SignupWrapper() {
       const requiresVerification =
         message.includes("verify") || message.includes("verification");
       const alreadyRegistered = message.includes("email already registered");
-      const rateLimited = message.includes("rate limit exceeded") || message.includes("too many requests") || message.includes("429");
+      const rateLimited =
+        message.includes("rate limit exceeded") ||
+        message.includes("too many requests") ||
+        message.includes("429");
       if (requiresVerification) {
         toast.success(
           "Account created successfully! Please verify your email."
@@ -47,7 +50,7 @@ export default function SignupWrapper() {
       }
       if (rateLimited) {
         toast.error(
-          "Too many attempts. Please wait a minute before trying again.",
+          "Too many attempts. Please wait a minute before trying again."
         );
         return;
       }
