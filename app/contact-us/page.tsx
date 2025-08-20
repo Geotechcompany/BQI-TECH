@@ -269,12 +269,14 @@ export default function ContactUsPage() {
 
             <div className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 overflow-hidden">
               <iframe 
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3988.8176744277105!2d36.80943661475403!3d-1.2635390990699898!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x182f17366e8d5d8f%3A0x1b3b7bd8d8a9d4a0!2sThe%20Piano%2C%20Brookside%20Dr%2C%20Nairobi!5e0!3m2!1sen!2sus!4v1637310000000!5m2!1sen!2sus"
+                src="https://www.google.com/maps?q=The+Piano,+8th+Floor,+Brookside+Drive,+Westlands,+Nairobi,+Kenya&output=embed"
                 width="100%" 
                 height="300" 
                 style={{border:0}} 
                 allowFullScreen={true} 
                 loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="Office location map"
                 className="w-full"
               ></iframe>
             </div>
