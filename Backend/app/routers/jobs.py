@@ -106,10 +106,28 @@ async def get_job_questions(
             
         # Get questions for this job
         questions = []
-        if "questions" in job:
+        if "questions" in job and job["questions"]:
             # Convert question IDs to ObjectIds
-            question_ids = [ObjectId(qid) for qid in job["questions"]]
-            questions = await db.jobquestions.find({"_id": {"$in": question_ids}}).to_list(None)
+            try:
+                question_ids = [ObjectId(qid) for qid in job["questions"]]
+                questions = await db.jobquestions.find({"_id": {"$in": question_ids}}).sort("order", 1).to_list(None)
+            except Exception as e:
+                logger.warning(f"Failed to resolve job.questions list for job {job_id}: {e}")
+                questions = []
+        
+        # Fallback: some setups link questions via jobId/jobIds on the question docs
+        if not questions:
+            try:
+                str_job_id = str(job["_id"]) if isinstance(job.get("_id"), ObjectId) else job.get("_id", job_id)
+                questions = await db.jobquestions.find({
+                    "$or": [
+                        {"jobId": str_job_id},
+                        {"jobIds": {"$in": [str_job_id]}}
+                    ]
+                }).sort("order", 1).to_list(None)
+            except Exception as e:
+                logger.warning(f"Fallback question lookup failed for job {job_id}: {e}")
+                questions = []
             
         # Convert ObjectIds to strings
         for question in questions:

@@ -116,6 +116,10 @@ function ApplicationForm() {
           schema = z.string()
             .min(1, { message: `Please select an option for ${question.question.toLowerCase()}` });
           break;
+        case 'boolean':
+          schema = z.string()
+            .min(1, { message: `${question.question} is required` });
+          break;
         case 'file':
           schema = z.string()
             .min(1, { message: `Please upload a file for ${question.question.toLowerCase()}` });
@@ -140,7 +144,7 @@ function ApplicationForm() {
   };
 
   // Form setup with mode: "onSubmit" to only validate on submit
-  const { register, handleSubmit, formState, reset, setValue, setError, trigger, watch } = useForm({
+  const { register, handleSubmit, formState, reset, setValue, setError, trigger, watch, getValues, clearErrors } = useForm({
     defaultValues: getDefaultValues(questions),
     resolver: zodResolver(buildFormSchema()),
     mode: "onSubmit", // Only validate on submit
@@ -184,10 +188,30 @@ function ApplicationForm() {
   const currentFieldIds = useMemo(() => steps[currentStep]?.fieldIds || [], [steps, currentStep])
 
   const validateCurrentStep = useCallback(async () => {
-    if (currentFieldIds.length === 0) return true
-    const isValid = await trigger(currentFieldIds as any)
-    return isValid
-  }, [currentFieldIds, trigger])
+    if (currentFieldIds.length === 0) return { ok: true, errors: [] as string[] }
+
+    // Only validate fields in the current step (ignore others entirely)
+    let manualOk = true
+    const missingMessages: string[] = []
+    const values = getValues()
+    clearErrors(currentFieldIds as any)
+    for (const fieldId of currentFieldIds) {
+      const q = questions.find((qq: any) => (qq._id || qq.id) === fieldId)
+      if (!q) continue
+      if (q.required) {
+        const raw = values[fieldId as any]
+        const str = typeof raw === 'string' ? raw.trim() : ''
+        if (!str) {
+          manualOk = false
+          const msg = `${q.question} is required`
+          missingMessages.push(msg)
+          setError(fieldId as any, { type: 'manual', message: msg })
+        }
+      }
+    }
+
+    return { ok: manualOk, errors: missingMessages }
+  }, [currentFieldIds, getValues, clearErrors, setError, questions])
 
   const getFieldError = (fieldId: string): string | undefined => {
     const anyErrors: any = formState.errors as any
@@ -416,6 +440,37 @@ function ApplicationForm() {
           </div>
         );
 
+      case 'boolean':
+        return (
+          <div key={fieldName} className="space-y-2">
+            {renderLabel()}
+            <div className="space-y-3 bg-white dark:bg-gray-900 p-3 rounded-md border border-gray-200 dark:border-gray-800">
+              {['Yes', 'No'].map((option) => (
+                <div key={option} className="relative flex items-start">
+                  <div className="flex items-center h-5">
+                    <input
+                      type="radio"
+                      {...register(fieldName)}
+                      value={option}
+                      id={`${fieldName}-${option}`}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                    />
+                  </div>
+                  <label 
+                    htmlFor={`${fieldName}-${option}`} 
+                    className="ml-3 text-sm text-gray-700 dark:text-gray-300 select-none cursor-pointer"
+                  >
+                    {option}
+                  </label>
+                </div>
+              ))}
+            </div>
+            {getFieldError(fieldName) && (
+              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
+            )}
+          </div>
+        );
+
       case 'file':
         return (
           <div key={fieldName} className="space-y-2">
@@ -585,9 +640,13 @@ function ApplicationForm() {
                       type="button"
                       className="ml-auto"
                       onClick={async () => {
-                        const ok = await validateCurrentStep()
-                        if (ok) setCurrentStep(s => Math.min(steps.length-1, s+1))
-                        else toast.error('Please complete required fields to continue')
+                        const result = await validateCurrentStep()
+                        if (result.ok) {
+                          setCurrentStep(s => Math.min(steps.length-1, s+1))
+                        } else {
+                          // Show the first concrete error so users know which field to fix
+                          toast.error(result.errors[0] || 'Please complete required fields to continue')
+                        }
                       }}
                     >
                       Next <ArrowRight className="h-4 w-4 ml-2" />
@@ -685,6 +744,9 @@ function getDefaultValues(questions: Array<{ _id?: string; id?: string; type: st
         acc[fieldName] = '';
         break;
       case 'radio':
+        acc[fieldName] = '';
+        break;
+      case 'boolean':
         acc[fieldName] = '';
         break;
       case 'file':
