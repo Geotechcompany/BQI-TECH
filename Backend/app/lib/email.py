@@ -236,3 +236,59 @@ async def send_contact_form_email(
     except Exception as e:
         logger.error(f"Failed to send contact form email: {str(e)}")
         return False 
+
+async def send_contact_confirmation_email(
+    name: str,
+    email: str,
+    service: str = 'Not specified',
+    message: str = ''
+) -> bool:
+    """Send an acknowledgement email to the user who submitted the contact form."""
+    try:
+        message_obj = MIMEMultipart()
+        message_obj["From"] = settings.from_email
+        message_obj["To"] = email
+        message_obj["Subject"] = "We received your message – BQI Tech"
+
+        body = f"""
+        <html>
+        <body>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
+                </div>
+                <h2 style="color: #1f2937;">Thanks, {name} — we’ve got your message</h2>
+                <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
+                    This is a quick confirmation that we received your inquiry.
+                    Our team will review it and get back to you shortly.
+                </p>
+                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                    <p style="margin: 0; color: #111827;">Service interest: <strong>{service}</strong></p>
+                    <p style="white-space: pre-wrap; margin-top: 8px; color: #374151;">{message}</p>
+                </div>
+                <p style="color: #4b5563; font-size: 14px;">
+                    If you didn’t submit this request, please ignore this email.
+                </p>
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+                        You can also reach us at {settings.hr_email}
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        message_obj.attach(MIMEText(body, "html"))
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
+            server.login(settings.smtp_user, settings.smtp_pass)
+            text = message_obj.as_string()
+            server.sendmail(settings.from_email, email, text)
+
+        logger.info(f"Contact confirmation email sent successfully to {email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send contact confirmation email to {email}: {str(e)}")
+        return False
