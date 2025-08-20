@@ -20,9 +20,13 @@ export default function SignupWrapper() {
       await register(email, password, name);
       toast.success("Account created successfully! Please verify your email.");
       if (typeof window !== "undefined") {
-        localStorage.setItem("verification_email", email);
+        const normalized = email.trim().toLowerCase();
+        localStorage.setItem("verification_email", normalized);
+        // Pre-mark verification as sent to prevent auto-resend on the verify page
+        localStorage.setItem(`verification_auto_sent_${normalized}`, "true");
+        localStorage.setItem(`verification_last_send_time_${normalized}`, Date.now().toString());
       }
-      router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`);
+      router.push(`/auth/verify-email?email=${encodeURIComponent(email)}&sent=1`);
     } catch (error: any) {
       const message = (error?.message || "").toLowerCase();
       const requiresVerification =
@@ -37,9 +41,12 @@ export default function SignupWrapper() {
           "Account created successfully! Please verify your email."
         );
         if (typeof window !== "undefined") {
-          localStorage.setItem("verification_email", email);
+          const normalized = email.trim().toLowerCase();
+          localStorage.setItem("verification_email", normalized);
+          localStorage.setItem(`verification_auto_sent_${normalized}`, "true");
+          localStorage.setItem(`verification_last_send_time_${normalized}`, Date.now().toString());
         }
-        router.push(`/auth/verify-email?email=${encodeURIComponent(email)}`);
+        router.push(`/auth/verify-email?email=${encodeURIComponent(email)}&sent=1`);
         return;
       }
       if (alreadyRegistered) {

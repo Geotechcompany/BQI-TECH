@@ -87,12 +87,26 @@ function EmailVerificationContent() {
   const getEmailFromSources = useCallback(() => {
     // Priority 1: Search Params
     const emailFromParams = searchParams.get("email");
+    const sentFlag = searchParams.get("sent");
 
     // Priority 2: User Object
     const emailFromUser = user?.email;
 
     // Priority 3: Local Storage (safely accessed)
     const emailFromStorage = safeLocalStorage.getItem("verification_email");
+    // If signup marked 'sent', mark auto-sent guard here as well
+    if (emailFromParams && sentFlag === "1") {
+      try {
+        localStorage.setItem(
+          `verification_auto_sent_${emailFromParams}`,
+          "true"
+        );
+        localStorage.setItem(
+          `verification_last_send_time_${emailFromParams}`,
+          Date.now().toString()
+        );
+      } catch {}
+    }
 
     return emailFromParams || emailFromUser || emailFromStorage;
   }, [searchParams, user]);
@@ -271,12 +285,13 @@ function EmailVerificationContent() {
         // Clear verification tracking for this email
         clearVerificationTracking(email);
 
-        // Redirect to appropriate dashboard based on user role
-        const redirectPath =
-          result.user?.role === "admin" ? "/admin" : "/dashboard";
+        // Clean redirect to login after verification
+        const redirectPath = `/login?verified=1${
+          email ? `&email=${encodeURIComponent(email)}` : ""
+        }`;
         setTimeout(() => {
-          router.push(redirectPath);
-        }, 1500);
+          router.replace(redirectPath);
+        }, 1000);
       } catch (error) {
         setStatus("error");
         toast.error(error.message || "Verification failed", {

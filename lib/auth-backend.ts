@@ -1,5 +1,5 @@
-import { ResponseDecoder } from './response-decoder';
-import { ResponseDecryption } from './encryption-decoder';
+import { ResponseDecoder } from "./response-decoder";
+import { ResponseDecryption } from "./encryption-decoder";
 
 interface User {
   id: string;
@@ -24,17 +24,18 @@ interface SessionData {
   refreshToken: string;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000';
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:10000";
 
 // Token storage utilities
-const TOKEN_KEY = 'auth_token';
-const USER_KEY = 'user_data';
+const TOKEN_KEY = "auth_token";
+const USER_KEY = "user_data";
 
 class AuthService {
-  private SESSION_KEY = 'auth_session';
+  private SESSION_KEY = "auth_session";
 
   private static instance: AuthService;
-  
+
   static getInstance(): AuthService {
     if (!AuthService.instance) {
       AuthService.instance = new AuthService();
@@ -44,7 +45,7 @@ class AuthService {
 
   // Store auth data in localStorage
   private setAuthData(token: string, user: User): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.setItem(TOKEN_KEY, token);
       localStorage.setItem(USER_KEY, JSON.stringify(user));
     }
@@ -52,22 +53,22 @@ class AuthService {
 
   // Get stored auth data
   private getAuthData(): { token: string | null; user: User | null } {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return { token: null, user: null };
     }
 
     const token = localStorage.getItem(TOKEN_KEY);
     const userData = localStorage.getItem(USER_KEY);
-    
+
     return {
       token,
-      user: userData ? JSON.parse(userData) : null
+      user: userData ? JSON.parse(userData) : null,
     };
   }
 
   // Clear auth data
   private clearAuthData(): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
     }
@@ -75,26 +76,26 @@ class AuthService {
 
   // Set session data
   setSession(session: SessionData): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
     }
   }
 
   // Get current session
   getSession(): SessionData | null {
-    if (typeof window === 'undefined') return null;
-    
+    if (typeof window === "undefined") return null;
+
     const session = localStorage.getItem(this.SESSION_KEY);
-    
+
     if (!session) {
       return null;
     }
-    
+
     try {
       const parsedSession = JSON.parse(session);
       return parsedSession;
     } catch (error) {
-      console.error('Error parsing session:', error);
+      console.error("Error parsing session:", error);
       this.clearSession();
       return null;
     }
@@ -102,16 +103,19 @@ class AuthService {
 
   // Clear session data
   clearSession(): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       localStorage.removeItem(this.SESSION_KEY);
     }
   }
 
   // Decode/Decrypt API response if encoded or encrypted
-  private async decodeResponse(response: Response, userId?: string): Promise<any> {
-    if (response.headers.get('content-type')?.includes('application/json')) {
+  private async decodeResponse(
+    response: Response,
+    userId?: string
+  ): Promise<any> {
+    if (response.headers.get("content-type")?.includes("application/json")) {
       const data = await response.json();
-      
+
       // First try decryption (for encrypted responses)
       try {
         const decrypted = await ResponseDecryption.decrypt(data, userId);
@@ -129,22 +133,22 @@ class AuthService {
     try {
       // Use URLSearchParams for form data as required by FastAPI
       const formData = new URLSearchParams();
-      formData.append('username', email.toLowerCase());
-      formData.append('password', password);
+      formData.append("username", email.toLowerCase());
+      formData.append("password", password);
 
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          "Content-Type": "application/x-www-form-urlencoded",
         },
         body: formData,
-        credentials: 'include',
+        credentials: "include",
       });
 
       if (!response.ok) {
         const error = await response.json();
-        console.error('Login error response:', error);
-        throw new Error(error.detail || 'Login failed');
+        console.error("Login error response:", error);
+        throw new Error(error.detail || "Login failed");
       }
 
       const rawData = await response.json();
@@ -155,67 +159,77 @@ class AuthService {
       } catch (error) {
         data = ResponseDecoder.decode(rawData);
       }
-      
+
       if (!data.access_token || !data.refresh_token || !data.user) {
-        console.error('Invalid login response:', data);
-        throw new Error('Invalid login response');
+        console.error("Invalid login response:", data);
+        throw new Error("Invalid login response");
       }
 
       // Normalize user ID
       const user = {
         ...data.user,
-        id: data.user.id || data.user._id
+        id: data.user.id || data.user._id,
       };
-      
+
       // Store session data
       const sessionData: SessionData = {
         user,
         token: data.access_token,
-        refreshToken: data.refresh_token
+        refreshToken: data.refresh_token,
       };
-      
+
       this.setSession(sessionData);
-      
+
       return {
         ...data,
-        user
+        user,
       };
     } catch (error) {
-      console.error('Login error:', error);
+      console.error("Login error:", error);
       this.clearSession();
       throw error;
     }
   }
 
-  // Register new user
-  async register(email: string, password: string, name: string): Promise<AuthResponse> {
+  // Register new user (no auto-login; returns initiation info only)
+  async register(
+    email: string,
+    password: string,
+    name: string
+  ): Promise<{ message: string; email: string }> {
     try {
       // Use FormData as required by the backend
       const formData = new FormData();
-      formData.append('email', email.toLowerCase());
-      formData.append('password', password);
-      formData.append('name', name);
+      formData.append("email", email.toLowerCase());
+      formData.append("password", password);
+      formData.append("name", name);
 
       const response = await fetch(`${BACKEND_URL}/api/auth/signup`, {
-        method: 'POST',
+        method: "POST",
         body: formData,
-        credentials: 'include',
+        credentials: "include",
       });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        const detail = error?.detail || error?.error || 'Registration failed';
-        console.error('Registration error response:', error);
+        const detail = error?.detail || error?.error || "Registration failed";
+        console.error("Registration error response:", error);
         if (response.status === 429) {
           throw new Error(`Rate limit exceeded. ${detail}`);
         }
         throw new Error(detail);
       }
 
-      // After successful registration, login the user
-      return await this.login(email, password);
+      // Return server message and normalized email; do not login
+      const result = await response.json().catch(() => ({}));
+      return {
+        message:
+          result?.message ||
+          "Registration initiated. Please verify your email.",
+        email: result?.email || email.toLowerCase(),
+      };
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error("Registration error:", error);
       throw error;
     }
   }
@@ -224,13 +238,13 @@ class AuthService {
   async logout(): Promise<void> {
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/logout`, {
-        method: 'POST',
+        method: "POST",
         headers: this.getAuthHeader(),
-        credentials: 'include',
+        credentials: "include",
       });
 
       if (!response.ok) {
-        throw new Error('Logout failed');
+        throw new Error("Logout failed");
       }
 
       // Clear session data
@@ -238,11 +252,11 @@ class AuthService {
       this.clearAuthData();
 
       // Redirect to login page with success message
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login?message=Successfully logged out';
+      if (typeof window !== "undefined") {
+        window.location.href = "/login?message=Successfully logged out";
       }
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
       throw error;
     }
   }
@@ -251,24 +265,24 @@ class AuthService {
   async refreshToken(): Promise<AuthResponse | null> {
     try {
       const session = this.getSession();
-      
+
       if (!session?.refreshToken) {
         this.clearSession();
         return null;
       }
       const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          refresh_token: session.refreshToken
+          refresh_token: session.refreshToken,
         }),
-        credentials: 'include',
+        credentials: "include",
       });
 
       if (!response.ok) {
-        console.error('Token refresh failed:', response.status);
+        console.error("Token refresh failed:", response.status);
         this.clearSession();
         return null;
       }
@@ -281,9 +295,9 @@ class AuthService {
       } catch (error) {
         data = ResponseDecoder.decode(rawData);
       }
-      
+
       if (!data.access_token || !data.refresh_token) {
-        console.error('Invalid refresh response:', data);
+        console.error("Invalid refresh response:", data);
         this.clearSession();
         return null;
       }
@@ -292,19 +306,19 @@ class AuthService {
       const newSession: SessionData = {
         user: session.user,
         token: data.access_token,
-        refreshToken: data.refresh_token
+        refreshToken: data.refresh_token,
       };
-      
+
       this.setSession(newSession);
-      
+
       return {
         access_token: data.access_token,
         refresh_token: data.refresh_token,
-        token_type: 'bearer',
-        user: session.user
+        token_type: "bearer",
+        user: session.user,
       };
     } catch (error) {
-      console.error('Token refresh error:', error);
+      console.error("Token refresh error:", error);
       this.clearSession();
       return null;
     }
@@ -323,7 +337,10 @@ class AuthService {
 
   isAdmin(): boolean {
     const user = this.getCurrentUser();
-    return user?.role?.toUpperCase() === 'ADMIN' || user?.role?.toUpperCase() === 'SUPER_ADMIN';
+    return (
+      user?.role?.toUpperCase() === "ADMIN" ||
+      user?.role?.toUpperCase() === "SUPER_ADMIN"
+    );
   }
 
   getAuthHeader(): { Authorization: string } | {} {
@@ -331,34 +348,45 @@ class AuthService {
     return session?.token ? { Authorization: `Bearer ${session.token}` } : {};
   }
 
-      // Authenticated fetch with automatic token refresh
-  async authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  // Authenticated fetch with automatic token refresh
+  async authenticatedFetch(
+    url: string,
+    options: RequestInit = {}
+  ): Promise<Response> {
     const session = this.getSession();
-    
+
     if (!session?.token) {
-      throw new Error('No authentication token');
+      throw new Error("No authentication token");
     }
 
     // Add security headers to obfuscate API calls
-    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-    const isBlob = typeof Blob !== 'undefined' && options.body instanceof Blob;
-    const isURLSearchParams = typeof URLSearchParams !== 'undefined' && options.body instanceof URLSearchParams;
+    const isFormData =
+      typeof FormData !== "undefined" && options.body instanceof FormData;
+    const isBlob = typeof Blob !== "undefined" && options.body instanceof Blob;
+    const isURLSearchParams =
+      typeof URLSearchParams !== "undefined" &&
+      options.body instanceof URLSearchParams;
 
     const headers: Record<string, string> = {
-      'Authorization': `Bearer ${session.token}`,
-      'X-Requested-With': 'XMLHttpRequest',
-      'X-Client-Version': '2.4.0',
-      'X-Request-ID': Math.random().toString(36).substr(2, 9),
-      'Accept': 'application/json, text/plain, */*',
-      ...((options.headers as Record<string, string>) || {})
+      Authorization: `Bearer ${session.token}`,
+      "X-Requested-With": "XMLHttpRequest",
+      "X-Client-Version": "2.4.0",
+      "X-Request-ID": Math.random().toString(36).substr(2, 9),
+      Accept: "application/json, text/plain, */*",
+      ...((options.headers as Record<string, string>) || {}),
     };
 
     // Only set JSON content type when not sending FormData/Blob/URLSearchParams
-    if (!isFormData && !isBlob && !isURLSearchParams && !('Content-Type' in headers)) {
-      headers['Content-Type'] = 'application/json';
-    } else if ((isFormData || isBlob) && 'Content-Type' in headers) {
+    if (
+      !isFormData &&
+      !isBlob &&
+      !isURLSearchParams &&
+      !("Content-Type" in headers)
+    ) {
+      headers["Content-Type"] = "application/json";
+    } else if ((isFormData || isBlob) && "Content-Type" in headers) {
       // Let the browser set the boundary for multipart or appropriate type for Blob
-      delete (headers as any)['Content-Type'];
+      delete (headers as any)["Content-Type"];
     }
 
     // First attempt with current token
@@ -366,7 +394,7 @@ class AuthService {
       const response = await fetch(url, {
         ...options,
         headers,
-        credentials: 'include',
+        credentials: "include",
       });
 
       // If token is valid, return response
@@ -376,25 +404,25 @@ class AuthService {
 
       // If 401, try to refresh token
       const refreshResult = await this.refreshToken();
-      
+
       if (!refreshResult) {
         this.clearSession();
-        throw new Error('Authentication failed');
+        throw new Error("Authentication failed");
       }
 
       // Retry with new token
       const newHeaders = {
         ...headers,
-        'Authorization': `Bearer ${refreshResult.access_token}`
+        Authorization: `Bearer ${refreshResult.access_token}`,
       };
 
       return await fetch(url, {
         ...options,
         headers: newHeaders,
-        credentials: 'include',
+        credentials: "include",
       });
     } catch (error) {
-      console.error('Authenticated fetch error:', error);
+      console.error("Authenticated fetch error:", error);
       throw error;
     }
   }
@@ -408,8 +436,10 @@ class AuthService {
   // Refresh user profile data
   async refreshUserProfile(): Promise<SessionData | null> {
     try {
-      const response = await this.authenticatedFetch(`${BACKEND_URL}/api/users/profile`);
-      
+      const response = await this.authenticatedFetch(
+        `${BACKEND_URL}/api/users/profile`
+      );
+
       if (response.ok) {
         const rawProfileData = await response.json();
         // Try decryption with user ID first, then obfuscation decoding
@@ -417,11 +447,14 @@ class AuthService {
         try {
           const currentSession = this.getSession();
           const userId = currentSession?.user?.id;
-          profileData = await ResponseDecryption.decrypt(rawProfileData, userId);
+          profileData = await ResponseDecryption.decrypt(
+            rawProfileData,
+            userId
+          );
         } catch (error) {
           profileData = ResponseDecoder.decode(rawProfileData);
         }
-        
+
         // Update session with new profile data
         const currentSession = this.getSession();
         if (currentSession) {
@@ -430,17 +463,17 @@ class AuthService {
             user: {
               ...currentSession.user,
               ...profileData,
-              isEmailVerified: profileData.isEmailVerified || false
-            }
+              isEmailVerified: profileData.isEmailVerified || false,
+            },
           };
           this.setSession(updatedSession);
           return updatedSession;
         }
       }
-      
+
       return null;
     } catch (error) {
-      console.error('Error refreshing user profile:', error);
+      console.error("Error refreshing user profile:", error);
       return null;
     }
   }
@@ -453,12 +486,15 @@ export { authService };
 export type { User, AuthResponse, SessionData };
 
 // Export convenience methods
-export const login = (email: string, password: string) => authService.login(email, password);
-export const register = (email: string, password: string, name: string) => authService.register(email, password, name);
+export const login = (email: string, password: string) =>
+  authService.login(email, password);
+export const register = (email: string, password: string, name: string) =>
+  authService.register(email, password, name);
 export const logout = () => authService.logout();
 export const getSession = () => authService.getSession();
 export const getCurrentUser = () => authService.getCurrentUser();
 export const isAuthenticated = () => authService.isAuthenticated();
 export const isAdmin = () => authService.isAdmin();
 export const getAuthHeader = () => authService.getAuthHeader();
-export const authenticatedFetch = (url: string, options?: RequestInit) => authService.authenticatedFetch(url, options);
+export const authenticatedFetch = (url: string, options?: RequestInit) =>
+  authService.authenticatedFetch(url, options);
