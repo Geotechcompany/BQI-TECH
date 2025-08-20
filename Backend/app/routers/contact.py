@@ -3,12 +3,12 @@ from fastapi.responses import JSONResponse
 from typing import Dict, Any
 import logging
 import traceback
-from app.lib.email import send_contact_form_email
+from app.lib.email import send_contact_form_email, send_contact_confirmation_email
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # Set to DEBUG to get more detailed logs
 
-router = APIRouter(prefix="/contact", tags=["contact"])
+router = APIRouter(tags=["contact"])
 
 @router.post("/submit")
 async def submit_contact_form(
@@ -62,6 +62,17 @@ async def submit_contact_form(
                 detail="Failed to send contact form email"
             )
         
+        # Fire-and-forget confirmation to user (non-blocking)
+        try:
+            _ = await send_contact_confirmation_email(
+                name=form_data['name'],
+                email=form_data['email'],
+                service=form_data.get('service', 'Not specified'),
+                message=form_data['message']
+            )
+        except Exception as _e:
+            logger.warning(f"Contact confirmation email failed but will not block response: {_e}")
+
         # Log successful submission
         logger.info(f"Contact form submitted by {form_data['email']}")
         
