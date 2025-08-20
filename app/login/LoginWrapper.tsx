@@ -1,10 +1,11 @@
 "use client"
 
-import { Zap } from "lucide-react"
+import { ChevronLeft, Zap } from "lucide-react"
 import { LoginForm } from "@/components/LoginForm"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "react-hot-toast"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export default function LoginWrapper() {
   const { login } = useAuth()
@@ -46,6 +47,15 @@ export default function LoginWrapper() {
       {/* Right Panel - Login Form */}
       <div className="flex items-center justify-center p-8 bg-background">
         <div className="relative z-10 bg-background p-8 rounded-lg shadow-2xl w-full max-w-md">
+          <div className="mb-4">
+            <Link
+              href="/"
+              className="flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Back to Home
+            </Link>
+          </div>
           <LoginForm onLogin={handleLogin} onError={handleError} />
         </div>
       </div>
