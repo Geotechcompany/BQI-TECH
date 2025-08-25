@@ -114,6 +114,12 @@ function ApplicationForm() {
               .regex(/^\+?[0-9\s-()]{10,}$/, { 
                 message: 'Please enter a valid phone number (at least 10 digits)' 
               });
+          } else if (question.question.toLowerCase().includes('salary')) {
+            schema = z.string()
+              .min(1, { message: `${question.question} is required` })
+              .regex(/^\d+(?:\.\d+)?$/, {
+                message: 'Please enter a valid number for salary'
+              });
           } else {
             schema = z.string()
               .min(1, { message: `${question.question} is required` });
@@ -201,28 +207,40 @@ function ApplicationForm() {
   const validateCurrentStep = useCallback(async () => {
     if (currentFieldIds.length === 0) return { ok: true, errors: [] as string[] }
 
-    // Only validate fields in the current step (ignore others entirely)
-    let manualOk = true
-    const missingMessages: string[] = []
-    const values = getValues()
+    // Run schema-based validation for only the fields in the current step
     clearErrors(currentFieldIds as any)
+    const valid = await trigger(currentFieldIds as any)
+
+    if (valid) {
+      return { ok: true, errors: [] as string[] }
+    }
+
+    // Collect concrete error messages for the fields in this step
+    const stepErrors: string[] = []
     for (const fieldId of currentFieldIds) {
-      const q = questions.find((qq: any) => (qq._id || qq.id) === fieldId)
-      if (!q) continue
-      if (q.required) {
+      const anyErrors: any = formState.errors as any
+      const msg = anyErrors?.[fieldId]?.message as string | undefined
+      if (msg) stepErrors.push(msg)
+    }
+
+    // Fallback: ensure required fields also surface a message if none provided
+    if (stepErrors.length === 0) {
+      const values = getValues()
+      for (const fieldId of currentFieldIds) {
+        const q = questions.find((qq: any) => (qq._id || qq.id) === fieldId)
+        if (!q || !q.required) continue
         const raw = values[fieldId as any]
         const str = typeof raw === 'string' ? raw.trim() : ''
         if (!str) {
-          manualOk = false
           const msg = `${q.question} is required`
-          missingMessages.push(msg)
+          stepErrors.push(msg)
           setError(fieldId as any, { type: 'manual', message: msg })
         }
       }
     }
 
-    return { ok: manualOk, errors: missingMessages }
-  }, [currentFieldIds, getValues, clearErrors, setError, questions])
+    return { ok: false, errors: stepErrors }
+  }, [currentFieldIds, trigger, clearErrors, formState.errors, getValues, questions, setError])
 
   const getFieldError = (fieldId: string): string | undefined => {
     const anyErrors: any = formState.errors as any
@@ -395,6 +413,8 @@ function ApplicationForm() {
               <input
                 {...register(fieldName)}
                 className={inputClasses}
+                type={String(question.question).toLowerCase().includes('salary') ? 'number' : 'text'}
+                inputMode={String(question.question).toLowerCase().includes('salary') ? 'decimal' : undefined}
                 placeholder={`Enter your ${question.question.toLowerCase()}`}
               />
             </div>
