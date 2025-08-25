@@ -85,7 +85,7 @@ def send_verification_email(email: str, verification_code: str) -> bool:
         <body>
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="text-align: center; margin-bottom: 30px;">
-                    <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
+                    <img src="https://bqitech.com/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
                 </div>
                 
                 <h2 style="color: #1f2937;">Email Verification</h2>
@@ -342,4 +342,5 @@ async def send_application_confirmation_email(
         return True
     except Exception as e:
         logger.error(f"Failed to send application confirmation email to {applicant_email}: {str(e)}")
+
         return False
