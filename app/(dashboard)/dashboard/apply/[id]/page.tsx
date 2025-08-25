@@ -34,6 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { userApi } from "@/lib/api-backend"
 
 function ApplicationForm() {
   const router = useRouter()
@@ -61,6 +62,16 @@ function ApplicationForm() {
       return response.json();
     },
     enabled: !!id
+  })
+
+  // Check if user has already applied for this job
+  const { data: hasApplied = false, isLoading: hasAppliedLoading } = useQuery({
+    queryKey: ['hasApplied', id, user?.id],
+    queryFn: async () => {
+      if (!id) return false
+      return userApi.hasApplied(String(id))
+    },
+    enabled: !!id && !!user,
   })
 
   // Fetch job-specific questions
@@ -225,6 +236,14 @@ function ApplicationForm() {
     }
   }, [user, authLoading, router, id]);
 
+  // Effect: Redirect if already applied
+  useEffect(() => {
+    if (hasApplied) {
+      toast.error('You have already applied for this position');
+      router.push('/dashboard/applications');
+    }
+  }, [hasApplied, router])
+
   // Effect: Update form when questions change
   useEffect(() => {
     reset(getDefaultValues(questions));
@@ -241,7 +260,7 @@ function ApplicationForm() {
   }, [id, router]);
 
   // Loading states
-  const isLoading = authLoading || jobLoading || questionsLoading;
+  const isLoading = authLoading || jobLoading || questionsLoading || hasAppliedLoading;
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
