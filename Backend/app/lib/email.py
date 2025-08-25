@@ -292,3 +292,54 @@ async def send_contact_confirmation_email(
     except Exception as e:
         logger.error(f"Failed to send contact confirmation email to {email}: {str(e)}")
         return False
+
+async def send_application_confirmation_email(
+    applicant_email: str,
+    applicant_name: str = "Applicant",
+    job_title: str = "the position"
+) -> bool:
+    """Send a confirmation email to the applicant after successful application submission."""
+    try:
+        message_obj = MIMEMultipart()
+        message_obj["From"] = settings.from_email
+        message_obj["To"] = applicant_email
+        message_obj["Subject"] = "We received your application – BQI Tech"
+
+        body = f"""
+        <html>
+        <body>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
+                </div>
+                <h2 style="color: #1f2937;">Thanks, {applicant_name} — your application is in!</h2>
+                <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
+                    We’ve received your application for <strong>{job_title}</strong>.
+                    Our hiring team will review your information and get back to you soon.
+                </p>
+                <p style="color: #4b5563; font-size: 14px;">
+                    You can track your application status anytime from your dashboard.
+                </p>
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+                        If you have questions, contact us at {settings.hr_email}
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        message_obj.attach(MIMEText(body, "html"))
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
+            server.login(settings.smtp_user, settings.smtp_pass)
+            text = message_obj.as_string()
+            server.sendmail(settings.from_email, applicant_email, text)
+
+        logger.info(f"Application confirmation email sent successfully to {applicant_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send application confirmation email to {applicant_email}: {str(e)}")
+        return False

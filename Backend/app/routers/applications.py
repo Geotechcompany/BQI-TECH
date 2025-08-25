@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Body, Depends, Request, sta
 from fastapi.responses import JSONResponse
 from typing import List, Optional, Dict, Any
 from app.database import get_database, is_connected
+from app.lib.email import send_application_confirmation_email
 from datetime import datetime
 from bson import ObjectId
 from app.auth import get_current_user
@@ -110,6 +111,37 @@ async def submit_application(
         else:
             logger.warning("Could not verify application in database after insertion")
         
+        # Try to send confirmation email (non-blocking for response)
+        try:
+            # Extract applicant email and name from answers if present
+            answers = application_data.get("answers", [])
+            applicant_email = None
+            applicant_name = "Applicant"
+            for a in answers:
+                q_text = str(a.get("questionText", "")).lower()
+                if applicant_email is None and ("email" in q_text):
+                    applicant_email = a.get("answer")
+                if "name" in q_text and isinstance(a.get("answer"), str) and len(a.get("answer").strip()) > 0:
+                    applicant_name = a.get("answer").strip()
+
+            # Fetch job title if possible
+            job_title = "the position"
+            try:
+                job = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
+                if job and job.get("title"):
+                    job_title = job.get("title")
+            except Exception:
+                pass
+
+            if applicant_email:
+                await send_application_confirmation_email(
+                    applicant_email=applicant_email,
+                    applicant_name=applicant_name,
+                    job_title=job_title
+                )
+        except Exception as email_err:
+            logger.error(f"Failed to send application confirmation email: {str(email_err)}")
+
         return {
             "message": "Application submitted successfully",
             "application": application_data
