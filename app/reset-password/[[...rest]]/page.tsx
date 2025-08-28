@@ -14,30 +14,39 @@ import { FieldError } from "react-hook-form";
 import toast from "react-hot-toast";
 import Link from "next/link";
 
-const formSchema = z.object({
-  password: z.string()
-    .min(8, "Password must be at least 8 characters"),
-  confirmPassword: z.string()
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"]
-});
+const formSchema = z
+  .object({
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 export default function ResetPasswordPage() {
   const [isValidToken, setIsValidToken] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams.get("token");
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
-    resolver: zodResolver(formSchema)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(formSchema),
   });
 
   useEffect(() => {
     const validateToken = async () => {
       try {
-        const response = await fetch(`/api/auth/validate-reset-token?token=${token}`);
-        if (!response.ok) throw new Error('Invalid or expired token');
+        const response = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000"
+          }/api/auth/validate-reset-token?token=${token}`
+        );
+        if (!response.ok) throw new Error("Invalid or expired token");
         setIsValidToken(true);
       } catch (error) {
         toast.error(error.message);
@@ -51,22 +60,27 @@ export default function ResetPasswordPage() {
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
-      const response = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password: data.password })
-      });
+      const response = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000"
+        }/api/auth/reset-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, password: data.password }),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Password reset failed');
+        throw new Error(errorData.error || "Password reset failed");
       }
 
       toast.success("Password updated successfully!");
       // Redirect to login after 2 seconds
-      setTimeout(() => window.location.href = '/login', 2000);
+      setTimeout(() => (window.location.href = "/login"), 2000);
     } catch (error) {
-      toast.error(error.message || 'Failed to reset password');
+      toast.error(error.message || "Failed to reset password");
     }
   };
 
@@ -86,7 +100,10 @@ export default function ResetPasswordPage() {
           <p className="text-muted-foreground">
             The password reset link is invalid or has expired
           </p>
-          <Link href="/forgot-password" className="text-[#31CDFF] hover:underline">
+          <Link
+            href="/forgot-password"
+            className="text-[#31CDFF] hover:underline"
+          >
             Request new reset link
           </Link>
         </div>
@@ -106,10 +123,7 @@ export default function ResetPasswordPage() {
           <p className="text-muted-foreground">Enter your new password</p>
         </div>
 
-        <motion.form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-6"
-        >
+        <motion.form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="password">New Password</Label>
@@ -120,7 +134,9 @@ export default function ResetPasswordPage() {
                 className="h-12 focus:ring-2 focus:ring-[#31CDFF]"
               />
               {errors.password && (
-                <p className="text-sm text-red-500">{(errors.password as FieldError).message}</p>
+                <p className="text-sm text-red-500">
+                  {(errors.password as FieldError).message}
+                </p>
               )}
             </div>
 
@@ -133,7 +149,9 @@ export default function ResetPasswordPage() {
                 className="h-12 focus:ring-2 focus:ring-[#31CDFF]"
               />
               {errors.confirmPassword && (
-                <p className="text-sm text-red-500">{(errors.confirmPassword as FieldError).message}</p>
+                <p className="text-sm text-red-500">
+                  {(errors.confirmPassword as FieldError).message}
+                </p>
               )}
             </div>
 
@@ -148,4 +166,4 @@ export default function ResetPasswordPage() {
       </motion.div>
     </div>
   );
-} 
+}

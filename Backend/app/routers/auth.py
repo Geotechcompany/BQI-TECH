@@ -30,6 +30,13 @@ class LoginCredentials(BaseModel):
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
 @router.post("/login")
 @limiter.limit("5/minute")
 async def login(
@@ -614,6 +621,94 @@ async def verify_email(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+# ---------------------- Password Reset Flow ----------------------
+def _generate_reset_token() -> str:
+    import secrets
+    return secrets.token_urlsafe(48)
+
+
+@router.post("/forgot-password")
+@limiter.limit("5/minute")
+async def forgot_password(request: Request, data: ForgotPasswordRequest):
+    """Start password reset: create token, email link. Always return 200 for privacy."""
+    try:
+        db = get_database()
+        email = data.email.strip().lower()
+
+        user = await db.users.find_one({"email": {"$regex": f"^{email}$", "$options": "i"}})
+
+        if user:
+            token = _generate_reset_token()
+            expires_at = datetime.utcnow() + timedelta(hours=1)
+            await db.password_resets.update_one(
+                {"email": email},
+                {"$set": {"email": email, "token": token, "expiresAt": expires_at, "createdAt": datetime.utcnow()}},
+                upsert=True,
+            )
+
+            # Build reset link for frontend
+            frontend_url = os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000")
+            reset_link = f"{frontend_url}/reset-password?token={token}"
+            from app.lib.email import send_password_reset_email
+
+            try:
+                await send_password_reset_email(email=email, reset_link=reset_link)
+            except Exception as e:
+                logging.warning(f"Failed sending reset email to {email}: {e}")
+
+        # Always succeed to avoid user enumeration
+        origin = request.headers.get("origin", "http://localhost:3000")
+        return JSONResponse(
+            content={"message": "If the email exists, a reset link has been sent."},
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+            },
+        )
+    except Exception as e:
+        logger.error(f"forgot_password error: {e}")
+        # Still hide errors from client
+        return {"message": "If the email exists, a reset link has been sent."}
+
+
+@router.get("/validate-reset-token")
+async def validate_reset_token(token: str):
+    """Validate reset token for the frontend page guard."""
+    db = get_database()
+    rec = await db.password_resets.find_one({"token": token})
+    if not rec or rec.get("expiresAt") < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    return {"valid": True, "email": rec.get("email")}
+
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """Finalize reset: verify token, update password, revoke token."""
+    try:
+        db = get_database()
+        rec = await db.password_resets.find_one({"token": data.token})
+        if not rec or rec.get("expiresAt") < datetime.utcnow():
+            raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+        email = rec["email"]
+        hashed = get_password_hash(data.password)
+        result = await db.users.update_one({"email": email}, {"$set": {"password": hashed, "updatedAt": datetime.utcnow()}})
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Burn the token
+        await db.password_resets.delete_one({"_id": rec["_id"]})
+
+        return {"message": "Password reset successful"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"reset_password error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to reset password")
 
 @router.post("/send-verification-code")
 @limiter.limit("5/minute")

@@ -172,6 +172,20 @@ async def initialize_database_indexes():
 			name="users_email_unique",
 			unique=True
 		)
+
+		# Password reset tokens: TTL and unique token index
+		await ensure_index(
+			_database.password_resets,
+			["expiresAt"],
+			name="password_resets_ttl",
+			expireAfterSeconds=0
+		)
+		await ensure_index(
+			_database.password_resets,
+			["token"],
+			name="password_resets_token_unique",
+			unique=True
+		)
 		
 		logger.info("Database indexes initialized successfully")
 		

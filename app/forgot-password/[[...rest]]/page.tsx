@@ -19,23 +19,32 @@ const formSchema = z.object({
 
 export default function ForgotPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useForm({
-    resolver: zodResolver(formSchema)
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(formSchema),
   });
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: data.email })
-      });
+      const response = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000"
+        }/api/auth/forgot-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: data.email }),
+        }
+      );
 
       const responseData = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(responseData.error || 'Failed to send reset email');
+        throw new Error(responseData.error || "Failed to send reset email");
       }
 
       toast.success("Reset email sent! Check your inbox.");
@@ -74,7 +83,10 @@ export default function ForgotPasswordPage() {
           animate={{ opacity: 1, y: 0 }}
           className="relative z-10 bg-background p-8 rounded-lg shadow-2xl w-full max-w-md"
         >
-          <Link href="/login" className="flex items-center text-sm text-[#31CDFF] hover:text-[#31CDFF]/90 mb-8">
+          <Link
+            href="/login"
+            className="flex items-center text-sm text-[#31CDFF] hover:text-[#31CDFF]/90 mb-8"
+          >
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to login
           </Link>
@@ -110,7 +122,9 @@ export default function ForgotPasswordPage() {
                   className="h-12 focus:ring-2 focus:ring-[#31CDFF]"
                 />
                 {errors.email && (
-                  <p className="text-sm text-red-500">{(errors.email as FieldError).message}</p>
+                  <p className="text-sm text-red-500">
+                    {(errors.email as FieldError).message}
+                  </p>
                 )}
               </div>
 
@@ -144,4 +158,4 @@ export default function ForgotPasswordPage() {
       </div>
     </div>
   );
-} 
+}

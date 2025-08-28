@@ -344,3 +344,58 @@ async def send_application_confirmation_email(
         logger.error(f"Failed to send application confirmation email to {applicant_email}: {str(e)}")
 
         return False
+
+
+def build_reset_password_email(reset_link: str) -> MIMEMultipart:
+    """Create a password reset email message object."""
+    message = MIMEMultipart()
+    message["From"] = settings.from_email
+    # "To" is set by the caller
+    message["Subject"] = "Reset your password – BQI Tech"
+
+    body = f"""
+    <html>
+    <body>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
+            </div>
+            <h2 style="color: #1f2937;">Reset your password</h2>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
+                We received a request to reset your password. Click the button below to set a new password. This link will expire in 60 minutes.
+            </p>
+            <p style="text-align: center; margin: 24px 0;">
+                <a href="{reset_link}" style="background: #2563eb; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Reset Password</a>
+            </p>
+            <p style="color: #6b7280; font-size: 14px;">
+                If the button doesn't work, copy and paste this URL into your browser:<br/>
+                <a href="{reset_link}">{reset_link}</a>
+            </p>
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+                    If you didn't request this, you can safely ignore this email.
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    message.attach(MIMEText(body, "html"))
+    return message
+
+
+async def send_password_reset_email(email: str, reset_link: str) -> bool:
+    """Send a password reset email with a secure link."""
+    try:
+        message = build_reset_password_email(reset_link)
+        message["To"] = email
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
+            server.login(settings.smtp_user, settings.smtp_pass)
+            server.sendmail(settings.from_email, email, message.as_string())
+        logger.info(f"Password reset email sent to {email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send password reset email to {email}: {str(e)}")
+        return False
