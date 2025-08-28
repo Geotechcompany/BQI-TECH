@@ -1,21 +1,22 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Button } from "@/components/ui/button";
-import { 
-  User,
-  UserCog,
-  Shield,
-  Mail
-} from "lucide-react";
+import { User, UserCog, Shield, Mail } from "lucide-react";
 import { UserManagementTable } from "@/components/admin/UserManagementTable";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { User as UserType } from "@/src/types/user";
 import { toast } from "react-hot-toast";
 import { Pagination } from "@/components/Pagination";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import { adminApi } from "@/lib/api-backend";
 
@@ -26,9 +27,10 @@ export default function UserManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: usersData, isLoading } = useQuery({
-    queryKey: ['admin-users', currentPage],
+    queryKey: ["admin-users", currentPage],
     queryFn: async () => {
       const skip = (currentPage - 1) * itemsPerPage;
       const res = await adminApi.getUsers({ skip, limit: itemsPerPage });
@@ -40,6 +42,17 @@ export default function UserManagementPage() {
     },
   });
 
+  // Client-side filter for current page
+  const filteredUsers: UserType[] = (usersData?.data || []).filter((u) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      u.name?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q) ||
+      (u.role || "").toLowerCase().includes(q)
+    );
+  });
+
   const queryClient = useQueryClient();
 
   const deleteUser = useMutation({
@@ -47,56 +60,59 @@ export default function UserManagementPage() {
       return adminApi.deleteUser(userId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
-      toast.success('User deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("User deleted successfully");
     },
     onError: () => {
-      toast.error('Failed to delete user');
-    }
+      toast.error("Failed to delete user");
+    },
   });
 
   const handleViewProfile = (userId: string) => {
     // Implement navigation to user profile
-    window.open(`/admin/users/${userId}`, '_blank');
+    window.open(`/admin/users/${userId}`, "_blank");
   };
 
   const handleResetPassword = async (userId: string) => {
     try {
-      const response = await fetch(`/api/admin/users/${userId}/reset-password`, {
-        method: 'POST'
-      });
-      
-      if (!response.ok) throw new Error('Failed to reset password');
-      toast.success('Password reset email sent');
+      const response = await fetch(
+        `/api/admin/users/${userId}/reset-password`,
+        {
+          method: "POST",
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to reset password");
+      toast.success("Password reset email sent");
     } catch (error) {
-      toast.error('Failed to reset password');
+      toast.error("Failed to reset password");
     }
   };
 
   const handleDeleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
+    if (confirm("Are you sure you want to delete this user?")) {
       deleteUser.mutate(userId);
     }
   };
 
   const bulkUpdate = useMutation({
     mutationFn: async (role: string) => {
-      const response = await fetch('/api/admin/users/bulk', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/admin/users/bulk", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userIds: selectedUsers,
-          role
-        })
+          role,
+        }),
       });
-      if (!response.ok) throw new Error('Bulk update failed');
+      if (!response.ok) throw new Error("Bulk update failed");
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setSelectedUsers([]);
-      toast.success('Bulk update successful');
-    }
+      toast.success("Bulk update successful");
+    },
   });
 
   const handlePageChange = (page: number) => {
@@ -117,7 +133,11 @@ export default function UserManagementPage() {
     }
 
     if (action === "DELETE") {
-      if (confirm(`Are you sure you want to delete ${selectedUsers.length} users?`)) {
+      if (
+        confirm(
+          `Are you sure you want to delete ${selectedUsers.length} users?`
+        )
+      ) {
         bulkDelete.mutate(selectedUsers);
       }
     } else {
@@ -127,25 +147,28 @@ export default function UserManagementPage() {
 
   const bulkDelete = useMutation({
     mutationFn: async (userIds: string[]) => {
-      const response = await fetch('/api/admin/users/bulk', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds })
+      const response = await fetch("/api/admin/users/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds }),
       });
-      if (!response.ok) throw new Error('Bulk delete failed');
+      if (!response.ok) throw new Error("Bulk delete failed");
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setSelectedUsers([]);
-      toast.success('Bulk delete successful');
-    }
+      toast.success("Bulk delete successful");
+    },
   });
 
   return (
     <>
       <AdminPageLayout
         title="User Management"
+        searchPlaceholder="Search users by name, email or role"
+        onSearch={setSearchQuery}
+        searchValue={searchQuery}
         breadcrumb="User Management"
         headerActions={
           <div className="flex gap-4">
@@ -169,7 +192,7 @@ export default function UserManagementPage() {
         }
       >
         <UserManagementTable
-          users={usersData?.data || []}
+          users={filteredUsers}
           isLoading={isLoading || deleteUser.isPending}
           selectedUsers={selectedUsers}
           onSelectionChange={setSelectedUsers}
@@ -178,7 +201,7 @@ export default function UserManagementPage() {
           onDelete={handleDeleteUser}
           onEdit={(user) => setEditingUser(user)}
         />
-        
+
         <Pagination
           currentPage={currentPage}
           totalPages={Math.ceil((usersData?.total || 0) / itemsPerPage)}
@@ -194,4 +217,4 @@ export default function UserManagementPage() {
       />
     </>
   );
-} 
+}
