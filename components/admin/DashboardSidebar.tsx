@@ -124,7 +124,7 @@ export const menuSections: MenuSection[] = [
         href: "/admin/user-management",
         icon: Users,
       },
-   
+
       {
         name: "Notifications",
         href: "/admin/notifications",
@@ -151,14 +151,18 @@ interface DashboardSidebarProps {
 }
 
 // Tooltip component for collapsed sidebar
-const Tooltip = ({ children, content, position = "right" }: { 
-  children: React.ReactNode; 
-  content: string; 
-  position?: "right" | "left" 
+const Tooltip = ({
+  children,
+  content,
+  position = "right",
+}: {
+  children: React.ReactNode;
+  content: string;
+  position?: "right" | "left";
 }) => (
   <div className="relative group">
     {children}
-    <div 
+    <div
       className={`
         absolute z-50 px-2 py-1 text-xs font-medium
         bg-black text-white rounded-md shadow-lg
@@ -170,27 +174,33 @@ const Tooltip = ({ children, content, position = "right" }: {
       `}
     >
       {content}
-      <div 
+      <div
         className={`
           absolute top-1/2 -translate-y-1/2 w-2 h-2 
           bg-black rotate-45
           ${position === "right" ? "-left-1" : "-right-1"}
-        `} 
+        `}
       />
     </div>
   </div>
 );
 
-export default function DashboardSidebar({ isOpen, onClose, className }: DashboardSidebarProps) {
+export default function DashboardSidebar({
+  isOpen,
+  onClose,
+  className,
+}: DashboardSidebarProps) {
   const { sidebarCollapsed, updateSettings } = useSettings();
   const { logout } = useAuth();
   const pathname = usePathname();
-  const [expandedSection, setExpandedSection] = useState<string | null>('Workspace');
+  const [expandedSection, setExpandedSection] = useState<string | null>(
+    "Workspace"
+  );
 
-  if (pathname === '/admin/login') return null;
+  if (pathname === "/admin/login") return null;
 
   const toggleSection = (title: string) => {
-    const section = menuSections.find(s => s.title === title);
+    const section = menuSections.find((s) => s.title === title);
     if (section?.alwaysExpanded) return; // Don't toggle always expanded sections
     setExpandedSection(expandedSection === title ? null : title);
   };
@@ -208,10 +218,10 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
         fixed inset-y-0 left-0 z-[9999]
         bg-card text-foreground
         shadow-xl transition-all duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        ${sidebarCollapsed ? 'w-20' : 'w-64'}
-        border-r border-border
-        ${className || ''}
+        ${isOpen ? "translate-x-0" : "-translate-x-full"}
+        ${sidebarCollapsed ? "w-20" : "w-64"}
+        border-r-0
+        ${className || ""}
       `}
     >
       <div className="flex items-center justify-between mb-8 p-4">
@@ -230,23 +240,51 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
             <span className="font-bold text-lg">HR PORTAL</span>
           )}
         </motion.div>
-        
+
         <div className="flex gap-2">
-          <Tooltip content={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}>
+          <Tooltip
+            content={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
             <motion.button
               whileHover={{ scale: 1.1 }}
-              onClick={() => updateSettings({ sidebarCollapsed: !sidebarCollapsed })}
+              onClick={() =>
+                updateSettings({ sidebarCollapsed: !sidebarCollapsed })
+              }
               className="hidden md:block p-2 hover:bg-muted rounded-lg"
             >
               {sidebarCollapsed ? (
-                <Image src="/collapse-svg-black.svg" alt="Expand" width={20} height={20} className="block dark:hidden" />
+                <Image
+                  src="/collapse-svg-black.svg"
+                  alt="Expand"
+                  width={20}
+                  height={20}
+                  className="block dark:hidden"
+                />
               ) : (
-                <Image src="/collapse-svg-black.svg" alt="Collapse" width={20} height={20} className="block dark:hidden" />
+                <Image
+                  src="/collapse-svg-black.svg"
+                  alt="Collapse"
+                  width={20}
+                  height={20}
+                  className="block dark:hidden"
+                />
               )}
               {sidebarCollapsed ? (
-                <Image src="/collapse-svg-white.svg" alt="Expand" width={20} height={20} className="hidden dark:block" />
+                <Image
+                  src="/collapse-svg-white.svg"
+                  alt="Expand"
+                  width={20}
+                  height={20}
+                  className="hidden dark:block"
+                />
               ) : (
-                <Image src="/collapse-svg-white.svg" alt="Collapse" width={20} height={20} className="hidden dark:block" />
+                <Image
+                  src="/collapse-svg-white.svg"
+                  alt="Collapse"
+                  width={20}
+                  height={20}
+                  className="hidden dark:block"
+                />
               )}
             </motion.button>
           </Tooltip>
@@ -262,18 +300,17 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
 
       <nav className="space-y-2 px-4 pb-20 overflow-y-auto max-h-[calc(100vh-200px)]">
         {/* Standalone Overview Link */}
-        <motion.div
-          whileHover={{ scale: 1.02 }}
-          className="space-y-2"
-        >
+        <motion.div whileHover={{ scale: 1.02 }} className="space-y-2">
           {sidebarCollapsed ? (
             <Tooltip content="Overview">
               <Link
                 href="/admin/overview"
                 className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
-                  ${pathname === '/admin/overview' 
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:bg-muted'}
+                  ${
+                    pathname === "/admin/overview"
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted"
+                  }
                 `}
               >
                 <LayoutDashboard className="w-5 h-5" />
@@ -283,9 +320,11 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
             <Link
               href="/admin/overview"
               className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
-                ${pathname === '/admin/overview' 
-                  ? 'bg-primary/10 text-primary' 
-                  : 'text-muted-foreground hover:bg-muted'}
+                ${
+                  pathname === "/admin/overview"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted"
+                }
               `}
             >
               <LayoutDashboard className="w-5 h-5 text-primary" />
@@ -301,9 +340,11 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
               <Link
                 href="/admin/help"
                 className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
-                  ${pathname === '/admin/help' 
-                    ? 'bg-primary/10 text-primary' 
-                    : 'text-muted-foreground hover:bg-muted'}`}
+                  ${
+                    pathname === "/admin/help"
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
               >
                 <HelpCircle className="w-5 h-5" />
               </Link>
@@ -312,9 +353,11 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
             <Link
               href="/admin/help"
               className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
-                ${pathname === '/admin/help' 
-                  ? 'bg-primary/10 text-primary' 
-                  : 'text-muted-foreground hover:bg-muted'}`}
+                ${
+                  pathname === "/admin/help"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
             >
               <HelpCircle className="w-5 h-5 text-primary" />
               <span className="ml-3">Help</span>
@@ -331,16 +374,18 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                   <motion.button
                     className={`
                       flex items-center justify-center w-full p-3 rounded-lg transition-colors
-                      ${pathname.includes(section.items[0].href.split('/')[2]) 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'text-muted-foreground hover:bg-muted'}
+                      ${
+                        pathname.includes(section.items[0].href.split("/")[2])
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground hover:bg-muted"
+                      }
                     `}
                     whileHover={{ scale: 1.02 }}
                   >
                     <section.icon className="w-5 h-5" />
                   </motion.button>
                 </Tooltip>
-                
+
                 {/* Hover dropdown for collapsed sidebar */}
                 <div
                   className={`
@@ -353,20 +398,26 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                   `}
                 >
                   <div className="p-2">
-                    <div className="text-xs font-semibold text-muted-foreground mb-2 px-2">{section.title}</div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-2 px-2">
+                      {section.title}
+                    </div>
                     {section.items.map((item) => (
                       <Link
                         key={item.name}
                         href={item.href}
                         className={`
                           flex items-center p-2 rounded-md text-sm transition-colors w-full
-                          ${pathname === item.href 
-                            ? 'bg-primary/10 text-primary' 
-                            : 'text-muted-foreground hover:bg-muted'}
+                          ${
+                            pathname === item.href
+                              ? "bg-primary/10 text-primary"
+                              : "text-muted-foreground hover:bg-muted"
+                          }
                         `}
                       >
                         <item.icon className="w-4 h-4 mr-3 shrink-0" />
-                        <span className="font-medium truncate">{item.name}</span>
+                        <span className="font-medium truncate">
+                          {item.name}
+                        </span>
                       </Link>
                     ))}
                   </div>
@@ -378,18 +429,22 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                 <motion.button
                   onClick={() => toggleSection(section.title)}
                   className={`flex items-center w-full p-3 rounded-lg transition-colors
-                    ${section.alwaysExpanded 
-                      ? 'cursor-default' 
-                      : 'hover:bg-muted cursor-pointer'}
+                    ${
+                      section.alwaysExpanded
+                        ? "cursor-default"
+                        : "hover:bg-muted cursor-pointer"
+                    }
                   `}
                   whileHover={{ scale: section.alwaysExpanded ? 1 : 1.02 }}
                 >
                   <section.icon className="w-5 h-5 text-primary" />
-                  <span className="ml-3 text-sm font-medium">{section.title}</span>
+                  <span className="ml-3 text-sm font-medium">
+                    {section.title}
+                  </span>
                   {!section.alwaysExpanded && (
                     <ChevronRight
                       className={`w-4 h-4 ml-auto transition-transform ${
-                        isExpanded(section) ? 'rotate-90' : ''
+                        isExpanded(section) ? "rotate-90" : ""
                       }`}
                     />
                   )}
@@ -399,7 +454,7 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                   {isExpanded(section) && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
+                      animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
                       className="ml-8 space-y-1"
                     >
@@ -413,9 +468,11 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
                           <Link
                             href={item.href}
                             className={`flex items-center p-2 rounded-lg text-sm transition-colors
-                              ${pathname === item.href 
-                                ? 'bg-primary/10 text-primary' 
-                                : 'text-muted-foreground hover:bg-muted'}
+                              ${
+                                pathname === item.href
+                                  ? "bg-primary/10 text-primary"
+                                  : "text-muted-foreground hover:bg-muted"
+                              }
                             `}
                           >
                             <item.icon className="w-4 h-4" />
@@ -475,4 +532,3 @@ export default function DashboardSidebar({ isOpen, onClose, className }: Dashboa
     </motion.aside>
   );
 }
-

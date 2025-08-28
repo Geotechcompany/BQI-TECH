@@ -19,7 +19,12 @@ import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/AuthContext";
 import { User } from "@/types/user";
 import Logo from "@/components/logo";
@@ -57,16 +62,18 @@ interface SidebarProps {
   onCollapse?: (collapsed: boolean) => void;
 }
 
-export default function UserDashboardSidebar({ 
+export default function UserDashboardSidebar({
   onClose,
   isCollapsed = false,
-  onCollapse
+  onCollapse,
 }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useAuth();
 
-  const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'User';
-  const userInitial = displayName[0]?.toUpperCase() || 'U';
+  const displayName = user
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email
+    : "User";
+  const userInitial = displayName[0]?.toUpperCase() || "U";
 
   return (
     <>
@@ -80,9 +87,12 @@ export default function UserDashboardSidebar({
         >
           <div className="flex flex-col h-full">
             {/* Header */}
-            <div className="h-10 flex items-center justify-between px-4 border-b border-border mb-4">
+            <div className="h-10 flex items-center justify-between px-4 mb-4">
               {!isCollapsed && (
-                <Link href="/dashboard" className="flex items-center space-x-3 group">
+                <Link
+                  href="/dashboard"
+                  className="flex items-center space-x-3 group"
+                >
                   <div className="w-16 h-5 relative transition-transform group-hover:scale-105">
                     <Logo />
                   </div>
@@ -91,7 +101,10 @@ export default function UserDashboardSidebar({
               {isCollapsed && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Link href="/dashboard" className="flex items-center justify-center w-full group">
+                    <Link
+                      href="/dashboard"
+                      className="flex items-center justify-center w-full group"
+                    >
                       <div className="w-8 h-8 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105 border border-white/20">
                         <div className="w-6 h-4 relative">
                           <Logo />
@@ -111,9 +124,25 @@ export default function UserDashboardSidebar({
                 className="ml-auto hover:bg-muted rounded-xl transition-all duration-200 hover:scale-105"
               >
                 {/* Collapse/Expand icon using theme-aware SVGs */}
-                <span className={`transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`}>
-                  <Image src="/collapse-svg-black.svg" alt="Collapse" width={20} height={20} className="block dark:hidden" />
-                  <Image src="/collapse-svg-white.svg" alt="Collapse" width={20} height={20} className="hidden dark:block" />
+                <span
+                  className={`transition-transform duration-300 ${
+                    isCollapsed ? "rotate-180" : ""
+                  }`}
+                >
+                  <Image
+                    src="/collapse-svg-black.svg"
+                    alt="Collapse"
+                    width={20}
+                    height={20}
+                    className="block dark:hidden"
+                  />
+                  <Image
+                    src="/collapse-svg-white.svg"
+                    alt="Collapse"
+                    width={20}
+                    height={20}
+                    className="hidden dark:block"
+                  />
                 </span>
               </Button>
             </div>
@@ -134,12 +163,14 @@ export default function UserDashboardSidebar({
                               : "text-muted-foreground hover:bg-muted hover:text-[#272055] dark:hover:text-white"
                           )}
                         >
-                          <div className={cn(
-                            "p-2 rounded-lg transition-all duration-200",
-                            pathname === tab.href 
-                              ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md" 
-                              : "bg-muted text-muted-foreground group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
-                          )}>
+                          <div
+                            className={cn(
+                              "p-2 rounded-lg transition-all duration-200",
+                              pathname === tab.href
+                                ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md"
+                                : "bg-muted text-muted-foreground group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
+                            )}
+                          >
                             <tab.icon className="h-5 w-5" />
                           </div>
                         </Link>
@@ -158,21 +189,29 @@ export default function UserDashboardSidebar({
                           : "text-muted-foreground hover:bg-muted hover:text-[#272055] dark:hover:text-white"
                       )}
                     >
-                      <div className={cn(
-                        "p-2 rounded-lg transition-all duration-200",
-                        pathname === tab.href 
-                          ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md" 
-                          : "bg-muted text-muted-foreground group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
-                      )}>
+                      <div
+                        className={cn(
+                          "p-2 rounded-lg transition-all duration-200",
+                          pathname === tab.href
+                            ? "bg-gradient-to-br from-[#31CDFF] to-[#272055] text-white shadow-md"
+                            : "bg-muted text-muted-foreground group-hover:bg-[#31CDFF]/10 group-hover:text-[#31CDFF]"
+                        )}
+                      >
                         <tab.icon className="h-5 w-5" />
                       </div>
-                      <span className="ml-4 font-medium text-sm">{tab.label}</span>
+                      <span className="ml-4 font-medium text-sm">
+                        {tab.label}
+                      </span>
                       {pathname === tab.href && (
                         <motion.div
                           layoutId="activeIndicator"
                           className="absolute right-2 w-2 h-2 bg-gradient-to-br from-[#31CDFF] to-[#272055] rounded-full"
                           initial={false}
-                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 500,
+                            damping: 30,
+                          }}
                         />
                       )}
                     </Link>
@@ -184,13 +223,13 @@ export default function UserDashboardSidebar({
             {/* Footer - User Profile */}
             <div className="p-4 border-t border-border">
               {!isCollapsed ? (
-                <Link 
+                <Link
                   href="/dashboard/settings"
                   className="group flex items-center space-x-3 p-4 rounded-xl transition-all duration-300 cursor-pointer border border-transparent hover:bg-muted"
                 >
                   <div className="relative">
                     <Avatar className="h-12 w-12 ring-2 ring-white shadow-lg group-hover:ring-[#31CDFF]/30 transition-all duration-300 group-hover:shadow-xl">
-                      <AvatarImage 
+                      <AvatarImage
                         src={user?.avatar}
                         alt={displayName}
                         className="object-cover"
@@ -203,14 +242,18 @@ export default function UserDashboardSidebar({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate group-hover:text-[#272055] dark:group-hover:text-white transition-colors">
-                      {user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : user?.email || 'User'}
+                      {user?.firstName
+                        ? `${user.firstName} ${user.lastName || ""}`.trim()
+                        : user?.email || "User"}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {user?.firstName ? user?.email : ''}
+                      {user?.firstName ? user?.email : ""}
                     </p>
                     <div className="flex items-center mt-1">
                       <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                      <span className="text-xs text-green-600 font-medium">Online</span>
+                      <span className="text-xs text-green-600 font-medium">
+                        Online
+                      </span>
                     </div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-[#31CDFF] transition-colors" />
@@ -221,7 +264,7 @@ export default function UserDashboardSidebar({
                     <TooltipTrigger asChild>
                       <Link href="/dashboard/settings" className="group">
                         <Avatar className="h-12 w-12 ring-2 ring-card shadow-lg group-hover:ring-[#31CDFF]/30 transition-all duration-300 group-hover:shadow-xl group-hover:scale-105">
-                          <AvatarImage 
+                          <AvatarImage
                             src={user?.avatar}
                             alt={displayName}
                             className="object-cover"
@@ -268,11 +311,11 @@ export function MobileBottomTabs() {
                     className="flex flex-col items-center justify-center relative px-3 py-2 rounded-2xl"
                     whileTap={{ scale: 0.9 }}
                     whileHover={{ scale: 1.05 }}
-                    transition={{ 
-                      type: "spring", 
-                      stiffness: 400, 
+                    transition={{
+                      type: "spring",
+                      stiffness: 400,
                       damping: 17,
-                      duration: 0.15
+                      duration: 0.15,
                     }}
                   >
                     {/* Active indicator background */}
@@ -281,15 +324,15 @@ export function MobileBottomTabs() {
                         layoutId="activeTabMobile"
                         className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-blue-600/20 rounded-2xl border border-blue-200/50"
                         initial={false}
-                        transition={{ 
-                          type: "spring", 
-                          stiffness: 500, 
+                        transition={{
+                          type: "spring",
+                          stiffness: 500,
                           damping: 35,
-                          duration: 0.3
+                          duration: 0.3,
                         }}
                       />
                     )}
-                    
+
                     {/* Icon container */}
                     <div className="relative z-10 mb-1">
                       <motion.div
@@ -298,23 +341,23 @@ export function MobileBottomTabs() {
                         }}
                         transition={{ duration: 0.2 }}
                       >
-                        <tab.icon 
+                        <tab.icon
                           className={cn(
                             "h-6 w-6 transition-all duration-300",
-                            isActive 
-                              ? "text-blue-600 drop-shadow-sm" 
+                            isActive
+                              ? "text-blue-600 drop-shadow-sm"
                               : "text-gray-500"
-                          )} 
+                          )}
                         />
                       </motion.div>
                     </div>
-                    
+
                     {/* Label */}
-                    <motion.span 
+                    <motion.span
                       className={cn(
                         "text-xs font-medium transition-all duration-300 relative z-10",
-                        isActive 
-                          ? "text-blue-600 font-semibold" 
+                        isActive
+                          ? "text-blue-600 font-semibold"
                           : "text-gray-500"
                       )}
                       animate={{
