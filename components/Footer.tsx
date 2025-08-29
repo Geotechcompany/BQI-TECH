@@ -283,10 +283,10 @@ function Footer() {
               >
                 <Phone className="mr-3 h-5 w-5 text-pink-400 flex-shrink-0" />
                 <Link 
-                  href="tel:+254011229528"
+                  href="tel:+2547023260658"
                   className="text-gray-300 group-hover:text-white transition-colors"
                 >
-                  +254 (0)11 229 5287
+                  +254 702326065
                 </Link>
               </motion.div>
 
