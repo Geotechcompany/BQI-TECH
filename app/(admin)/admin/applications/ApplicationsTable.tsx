@@ -130,15 +130,15 @@ export function ApplicationsTable({
         </Link>
       ) : 'N/A'
     },
-    {
-      header: "Answers",
-      accessor: (row: Application) => row.answers?.map(a => 
-        `${a.questionText}: ${a.answer}`
-      ).join('\n') || 'N/A',
-      cell: (value: string) => (
-        <pre className="whitespace-pre-wrap text-sm">{value}</pre>
-      )
-    }
+    // {
+    //   header: "Answers",
+    //   accessor: (row: Application) => row.answers?.map(a => 
+    //     `${a.questionText}: ${a.answer}`
+    //   ).join('\n') || 'N/A',
+    //   cell: (value: string) => (
+    //     <pre className="whitespace-pre-wrap text-sm">{value}</pre>
+    //   )
+    // }
   ];
 
   return (
