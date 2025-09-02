@@ -32,6 +32,7 @@ export function ViewApplicationModal({
   onClose,
 }: ViewApplicationModalProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
 
   if (!application) return null;
 
@@ -45,6 +46,42 @@ export function ViewApplicationModal({
       link.click();
       document.body.removeChild(link);
       setIsLoading(false);
+    }
+  };
+
+  const isLikelyUrl = (value: unknown) => {
+    if (typeof value !== 'string') return false;
+    try {
+      // Basic validation via URL constructor
+      // Also accept strings starting with www.
+      if (value.startsWith('www.')) return true;
+      // eslint-disable-next-line no-new
+      new URL(value);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const isResumeQuestion = (text: unknown) => {
+    const q = (typeof text === 'string' ? text : '').toLowerCase();
+    return q.includes('upload resume') || q.includes('resume/cv') || q.includes('cv');
+  };
+
+  const getPreviewUrl = (url: string | null | undefined) => {
+    if (!url) return '';
+    try {
+      const parsed = new URL(url);
+      const isPdfPath = /\.pdf($|\?)/i.test(parsed.pathname + parsed.search);
+      const isDropbox = parsed.hostname.includes('dropbox.com') || parsed.hostname.includes('dropboxusercontent.com');
+
+      // Route through our proxy to bypass X-Frame-Options and CORS for allowed hosts
+      const proxied = `/api/proxy?url=${encodeURIComponent(parsed.toString())}`;
+      // If it's a direct PDF, the proxy will stream as application/pdf inline
+      // For non-PDFs, many providers still send a PDF or preview-able content; proxy handles headers
+      return proxied;
+    } catch {
+      return url;
     }
   };
 
@@ -172,9 +209,29 @@ export function ViewApplicationModal({
                       <p className="text-sm sm:text-base font-medium text-gray-700 mb-2 leading-relaxed">
                         {answer.questionText}
                       </p>
-                      <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 leading-relaxed break-words">
-                        {answer.answer || 'No answer provided'}
-                      </div>
+                      {!isResumeQuestion(answer?.questionText) || !isLikelyUrl(answer?.answer) ? (
+                        <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 leading-relaxed break-words">
+                          {answer.answer || 'No answer provided'}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 break-all">
+                            <Link href={String(answer.answer)} target="_blank" className="text-blue-600 underline">
+                              {String(answer.answer)}
+                            </Link>
+                          </div>
+                          <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
+                            <iframe
+                              title="Resume Preview"
+                              src={getPreviewUrl(String(answer.answer))}
+                              className="w-full h-full"
+                              referrerPolicy="no-referrer"
+                              allow="fullscreen"
+                              onError={() => setPreviewError(true)}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )) || (
@@ -193,34 +250,54 @@ export function ViewApplicationModal({
                   <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 flex-shrink-0" />
                   <span>Attached Documents</span>
                 </h4>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="p-3 sm:p-4 bg-gray-50 rounded-lg space-y-3 sm:space-y-4">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="p-2 sm:p-3 bg-white rounded-lg shadow-sm flex-shrink-0">
                       <FileTextIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm sm:text-base font-medium text-gray-700 truncate">
-                        Candidate CV
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-400">
-                        Uploaded {formatDate(application.appliedDate)}
-                      </p>
+                      <p className="text-sm sm:text-base font-medium text-gray-700 truncate">Candidate CV</p>
+                      <p className="text-xs sm:text-sm text-gray-400">Uploaded {formatDate(application.appliedDate)}</p>
                     </div>
+                    <Link
+                      href={application.cvUrl}
+                      target="_blank"
+                      className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
+                    >
+                      <span>Open in new tab</span>
+                      <ArrowUpRightIcon className="w-4 h-4" />
+                    </Link>
                   </div>
-                  <Link
-                    href={application.cvUrl}
-                    target="_blank"
-                    className="w-full sm:w-auto min-h-[44px] flex items-center justify-center gap-2 px-4 py-2 text-blue-600 hover:text-blue-700 text-sm sm:text-base font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200 flex-shrink-0"
-                  >
-                    <span>View Document</span>
-                    <ArrowUpRightIcon className="w-4 h-4" />
-                  </Link>
+
+                  {!previewError ? (
+                    <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <iframe
+                        title="CV Preview"
+                        src={getPreviewUrl(application.cvUrl)}
+                        className="w-full h-full"
+                        referrerPolicy="no-referrer"
+                        allow="fullscreen"
+                        onError={() => setPreviewError(true)}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-600">
+                      Unable to preview this document inline. You can
+                      {" "}
+                      <Link href={application.cvUrl} target="_blank" className="text-blue-600 underline">
+                        open it in a new tab
+                      </Link>
+                      .
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {/* Bottom padding for mobile scroll */}
             <div className="h-4 sm:h-0" />
+            
+            
           </div>
         </div>
       </DialogContent>
