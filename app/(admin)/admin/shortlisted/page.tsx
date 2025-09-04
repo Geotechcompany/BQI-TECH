@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { ShortlistedTable } from "@/components/admin/ShortlistedTable";
 import useSWR from "swr";
@@ -14,6 +14,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/auth-backend";
 import { adminApi } from "@/lib/api-backend";
 import { toast } from "react-hot-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 const fetcher = async (url: string) => {
   const session = authService.getSession();
@@ -72,6 +74,41 @@ export default function ShortlistedPage() {
   const [editApplication, setEditApplication] = useState<Application | null>(null);
   const [deleteApplicationId, setDeleteApplicationId] = useState<string | null>(null);
   const [jobTitles, setJobTitles] = useState<Record<string, string>>({});
+  const [selectedPosition, setSelectedPosition] = useState<string>("all");
+  const [jobFilterOptions, setJobFilterOptions] = useState<string[]>([]);
+
+  const { data: applications = [], error, isLoading: isDataLoading, mutate } = useSWR<Application[]>(
+    isAuthenticated && isAdmin ? '/applications/shortlisted' : null,
+    fetcher
+  );
+
+  const isUUID = (str: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+
+  const getApplicationPosition = (app: Application): string => {
+    if (app.position) {
+      if (isUUID(app.position)) return jobTitles[app.position] || app.jobDetails?.title || app.position;
+      return app.position;
+    }
+    return (
+      app.jobDetails?.title ||
+      app.answers?.find(a => a.questionText?.toLowerCase().includes("position"))?.answer ||
+      "N/A"
+    );
+  };
+
+  const normalize = (value: string): string => {
+    return value.trim().replace(/\s+/g, " ");
+  };
+
+  const positionOptions = useMemo(() => {
+    return ["all", ...jobFilterOptions];
+  }, [jobFilterOptions]);
+
+  const filteredApplications = useMemo(() => {
+    if (selectedPosition === "all") return applications;
+    return (applications || []).filter(app => normalize(getApplicationPosition(app)) === selectedPosition);
+  }, [applications, selectedPosition, jobTitles]);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -81,10 +118,7 @@ export default function ShortlistedPage() {
     }
   }, [isAuthenticated, isAdmin, authLoading, router]);
 
-  const { data: applications = [], error, isLoading: isDataLoading, mutate } = useSWR<Application[]>(
-    isAuthenticated && isAdmin ? '/applications/shortlisted' : null,
-    fetcher
-  );
+  
 
   useEffect(() => {
     const fetchJobTitles = async () => {
@@ -94,13 +128,18 @@ export default function ShortlistedPage() {
                     jobsResponse.jobPostings ? jobsResponse.jobPostings : [];
         
         const jobTitlesMap: Record<string, string> = {};
+        const optionSet = new Set<string>();
         jobs.forEach((job: any) => {
           const jobId = job.id || (job._id ? String(job._id) : null);
           if (jobId && job.title) {
             jobTitlesMap[jobId] = job.title;
           }
+          if (job?.title) {
+            optionSet.add(normalize(String(job.title)));
+          }
         });
         setJobTitles(jobTitlesMap);
+        setJobFilterOptions(Array.from(optionSet).sort((a, b) => a.localeCompare(b)));
       } catch (error) {
         console.error('Failed to fetch job titles:', error);
         toast.error('Failed to fetch job titles');
@@ -231,9 +270,26 @@ export default function ShortlistedPage() {
   return (
     <AdminPageLayout title="Shortlisted Applications" showSearch={false}>
       <div className="p-6">
+        <div className="mb-4 flex items-end gap-4">
+          <div className="w-64">
+            <Label htmlFor="position-filter">Filter by position</Label>
+            <Select value={selectedPosition} onValueChange={setSelectedPosition}>
+              <SelectTrigger id="position-filter">
+                <SelectValue placeholder="Select position" />
+              </SelectTrigger>
+              <SelectContent>
+                {positionOptions.map(option => (
+                  <SelectItem key={option} value={option}>
+                    {option === "all" ? "All Positions" : option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <ShortlistedTable
-            applications={applications}
+            applications={filteredApplications}
             jobTitles={jobTitles}
             onView={handleView}
             onEdit={handleEdit}
