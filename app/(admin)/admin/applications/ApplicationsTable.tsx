@@ -36,11 +36,11 @@ const isUUID = (str: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 
 // Enhanced helper function for robust data extraction
-const extractDataFromAnswers = (answers: any[], type: 'name' | 'email' | 'position', userDetails?: any): string => {
+const extractDataFromAnswers = (answers: any[], type: 'name' | 'email' | 'position', user?: any): string => {
   if (!Array.isArray(answers)) {
-    // If no answers array, check if we have userDetails
-    if (type === 'name' && userDetails?.name) return userDetails.name;
-    if (type === 'email' && userDetails?.email) return userDetails.email;
+    // If no answers array, check if we have user data
+    if (type === 'name' && user?.name) return user.name;
+    if (type === 'email' && user?.email) return user.email;
     return type === 'name' ? 'No Application Data' : type === 'email' ? 'No Contact Info' : '';
   }
   
@@ -48,9 +48,9 @@ const extractDataFromAnswers = (answers: any[], type: 'name' | 'email' | 'positi
   
   switch (type) {
     case 'name':
-      // First check userDetails
-      if (userDetails?.name && userDetails.name.trim() !== '') {
-        return userDetails.name.trim();
+      // First check user data
+      if (user?.name && user.name.trim() !== '') {
+        return user.name.trim();
       }
       
       // Try various name field combinations
@@ -97,9 +97,9 @@ const extractDataFromAnswers = (answers: any[], type: 'name' | 'email' | 'positi
       return 'Incomplete Application';
       
     case 'email':
-      // First check userDetails
-      if (userDetails?.email && userDetails.email.trim() !== '') {
-        return userDetails.email.trim();
+      // First check user data
+      if (user?.email && user.email.trim() !== '') {
+        return user.email.trim();
       }
       
       keywords = ['email', 'e-mail', 'email address', 'contact email', 'e mail'];
@@ -183,7 +183,7 @@ export function ApplicationsTable({
         }
         
         // Fallback: Extract from answers using enhanced logic
-        const extractedName = extractDataFromAnswers(row.answers || [], 'name', row.userDetails);
+        const extractedName = extractDataFromAnswers(row.answers || [], 'name', row.user);
         return extractedName;
       }
     },
@@ -197,7 +197,7 @@ export function ApplicationsTable({
         }
         
         // Fallback: Extract from answers using enhanced logic
-        const extractedEmail = extractDataFromAnswers(row.answers || [], 'email', row.userDetails);
+        const extractedEmail = extractDataFromAnswers(row.answers || [], 'email', row.user);
         return extractedEmail;
       }
     },
