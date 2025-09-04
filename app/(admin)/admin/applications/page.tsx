@@ -71,9 +71,20 @@ export default function ApplicationsPage() {
   }, [jobFilterOptions]);
 
   const filteredApplications = useMemo(() => {
-    if (!selectedPosition || selectedPosition === "all") return applications;
-    return (applications || []).filter(app => normalize(getApplicationPosition(app)) === selectedPosition);
-  }, [applications, selectedPosition]);
+    let filtered = applications || [];
+    
+    // Filter by position
+    if (selectedPosition && selectedPosition !== "all") {
+      filtered = filtered.filter(app => normalize(getApplicationPosition(app)) === selectedPosition);
+    }
+    
+    // Filter by status
+    if (selectedStatus && selectedStatus !== "all") {
+      filtered = filtered.filter(app => app.status === selectedStatus);
+    }
+    
+    return filtered;
+  }, [applications, selectedPosition, selectedStatus]);
 
 
   // Sort options
@@ -93,6 +104,18 @@ export default function ApplicationsPage() {
     setSortBy(option.field);
     setSortOrder(option.order);
     setCurrentPage(1); // Reset to first page when sorting changes
+  };
+
+  // Handle status filter change
+  const handleStatusChange = (status: string) => {
+    setSelectedStatus(status === "all" ? "" : status);
+    setCurrentPage(1); // Reset to first page when filter changes
+  };
+
+  // Handle position filter change
+  const handlePositionChange = (position: string) => {
+    setSelectedPosition(position === "all" ? "" : position);
+    setCurrentPage(1); // Reset to first page when filter changes
   };
 
   // Check authentication
@@ -138,23 +161,137 @@ export default function ApplicationsPage() {
       const total = typeof response.total === 'number' ? response.total : 0;
 
       // Map the new structure to match existing application interface
-      const mappedApplications = applications.map(app => ({
-        ...app,
-        id: app.id,
-        name: app.userDetails?.name || app.answers?.find(a => 
-          a.questionText?.toLowerCase().includes('first name'))?.answer + ' ' + 
-          app.answers?.find(a => a.questionText?.toLowerCase().includes('last name'))?.answer || 'N/A',
-        email: app.userDetails?.email || app.answers?.find(a => 
-          a.questionText?.toLowerCase().includes('email'))?.answer || 'N/A',
-        phoneNumber: app.answers?.find(a => 
-          a.questionText?.toLowerCase().includes('phone'))?.answer || 'N/A',
-        position: app.position || app.jobDetails?.title || 'N/A',
-        status: app.status || 'New',
-        appliedDate: new Date(app.appliedDate),
-        cvUrl: app.cvUrl,
-        jobId: app.jobId,
-        jobDetails: app.jobDetails
-      }));
+      const mappedApplications = applications.map(app => {
+        // Helper function to safely extract answer by question keywords - more flexible approach
+        const getAnswerByKeywords = (keywords: string[]) => {
+          if (!app.answers || !Array.isArray(app.answers)) return null;
+          
+          const found = app.answers.find(a => {
+            if (!a?.questionText || typeof a.questionText !== 'string') return false;
+            const questionLower = a.questionText.toLowerCase();
+            return keywords.some(keyword => questionLower.includes(keyword.toLowerCase()));
+          });
+          
+          return found?.answer || null;
+        };
+        
+        // Enhanced helper function for better name extraction
+        const getNameFromAnswers = () => {
+          // First check if we have userDetails with name
+          if (app.userDetails?.name && app.userDetails.name.trim() !== '') {
+            return app.userDetails.name.trim();
+          }
+          
+          // If no answers array, return placeholder indicating missing data
+          if (!app.answers || !Array.isArray(app.answers) || app.answers.length === 0) {
+            return 'No Application Data';
+          }
+          
+          // Try various name field combinations
+          const firstName = getAnswerByKeywords(['first name', 'firstname', 'given name', 'forename']) || '';
+          const lastName = getAnswerByKeywords(['last name', 'lastname', 'surname', 'family name']) || '';
+          
+          // If we have both parts, combine them
+          if (firstName && lastName) {
+            return `${firstName} ${lastName}`.trim();
+          }
+          
+          // Try single name fields
+          const fullName = getAnswerByKeywords(['full name', 'name', 'your name', 'applicant name']) || '';
+          if (fullName) return fullName;
+          
+          // Try the first or last name alone if we only have one
+          if (firstName) return firstName;
+          if (lastName) return lastName;
+          
+          // Last resort: look for ANY field that might contain a name
+          const possibleNameField = app.answers.find(a => {
+            if (!a?.questionText || !a?.answer) return false;
+            const question = a.questionText.toLowerCase();
+            const answer = String(a.answer).trim();
+            
+            // Skip obvious non-name fields
+            if (question.includes('email') || question.includes('phone') || 
+                question.includes('position') || question.includes('experience') ||
+                question.includes('cv') || question.includes('resume') ||
+                answer.includes('@') || answer.length < 2) {
+              return false;
+            }
+            
+            // Look for fields that likely contain names
+            return question.includes('name') || 
+                   (answer.length > 2 && answer.length < 50 && 
+                    /^[a-zA-Z\s'-]+$/.test(answer));
+          });
+          
+          if (possibleNameField) {
+            return String(possibleNameField.answer).trim();
+          }
+          
+          // Indicate that this is an incomplete application
+          return 'Incomplete Application';
+        };
+
+        // Enhanced email extraction
+        const getEmailFromAnswers = () => {
+          // First check userDetails
+          if (app.userDetails?.email && app.userDetails.email.trim() !== '') {
+            return app.userDetails.email.trim();
+          }
+          
+          // If no answers, return placeholder
+          if (!app.answers || !Array.isArray(app.answers) || app.answers.length === 0) {
+            return 'No Contact Info';
+          }
+          
+          // Extract from answers
+          const email = getAnswerByKeywords(['email', 'e-mail', 'email address', 'contact email', 'e mail']) || '';
+          
+          if (email && email.includes('@')) {
+            return email;
+          }
+          
+          // Look for any field that looks like an email
+          const emailField = app.answers.find(a => {
+            const answer = String(a?.answer || '').trim();
+            return answer.includes('@') && answer.includes('.');
+          });
+          
+          return emailField ? String(emailField.answer).trim() : 'No Email Provided';
+        };
+
+        // Extract name components with enhanced logic - prioritize existing processed data
+        const extractedName = app.name && app.name.trim() !== '' ? app.name.trim() : getNameFromAnswers();
+        
+        // Build full name
+        let fullName = extractedName;
+
+        // Extract email with enhanced logic - prioritize existing processed data
+        const email = app.email && app.email.trim() !== '' ? app.email.trim() : getEmailFromAnswers();
+
+        // Extract phone number
+        const phoneNumber = getAnswerByKeywords(['phone', 'phone number', 'mobile', 'contact', 'telephone']) || 'N/A';
+
+        // Extract position
+        const position = app.position && app.position.trim() !== '' ? app.position.trim() :
+                        app.jobDetails?.title || 
+                        getAnswerByKeywords(['position', 'job title', 'role', 'job']) || 
+                        'N/A';
+
+        return {
+          ...app,
+          id: app.id || app._id,
+          name: fullName,
+          email: email,
+          phoneNumber: phoneNumber,
+          position: position,
+          status: app.status || 'New',
+          appliedDate: new Date(app.appliedDate),
+          cvUrl: app.cvUrl || '',
+          jobId: app.jobId,
+          jobDetails: app.jobDetails
+        };
+      });
 
       setApplications(mappedApplications);
       setTotalPages(Math.ceil(total / itemsPerPage) || 1);
@@ -362,7 +499,7 @@ export default function ApplicationsPage() {
         <div className="mb-4 flex items-end gap-4">
           <div className="w-64">
             <Label htmlFor="position-filter">Filter by position</Label>
-            <Select value={selectedPosition || "all"} onValueChange={setSelectedPosition}>
+            <Select value={selectedPosition || "all"} onValueChange={handlePositionChange}>
               <SelectTrigger id="position-filter">
                 <SelectValue placeholder="Select position" />
               </SelectTrigger>
@@ -372,6 +509,27 @@ export default function ApplicationsPage() {
                     {option === "all" ? "All Positions" : option}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="w-64">
+            <Label htmlFor="status-filter">Filter by status</Label>
+            <Select value={selectedStatus || "all"} onValueChange={handleStatusChange}>
+              <SelectTrigger id="status-filter">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="New">New</SelectItem>
+                <SelectItem value="Applied">Applied</SelectItem>
+                <SelectItem value="In Review">In Review</SelectItem>
+                <SelectItem value="Technical Assessment">Technical Assessment</SelectItem>
+                <SelectItem value="Interviewing">Interviewing</SelectItem>
+                <SelectItem value="Shortlisted">Shortlisted</SelectItem>
+                <SelectItem value="Hired">Hired</SelectItem>
+                <SelectItem value="Rejected">Rejected</SelectItem>
+                <SelectItem value="Disqualified">Disqualified</SelectItem>
               </SelectContent>
             </Select>
           </div>
