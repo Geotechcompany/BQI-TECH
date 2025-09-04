@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ApplicationsTable } from "./ApplicationsTable";
 import { EditApplicationModal } from "@/components/admin/EditApplicationModal";
 import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
@@ -26,6 +26,8 @@ import { authService } from "@/lib/auth-backend";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api-backend";
 import { useAuthErrorHandler } from "@/hooks/useAuthErrorHandler";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Add sort options type
 type SortOption = {
@@ -48,12 +50,31 @@ export default function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [jobTitles, setJobTitles] = useState<Record<string, string>>({});
+  const [jobFilterOptions, setJobFilterOptions] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<string>("createdAt");
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const [viewApplication, setViewApplication] = useState<Application | null>(null);
   const [editApplication, setEditApplication] = useState<Application | null>(null);
   const [deleteApplicationId, setDeleteApplicationId] = useState<string | null>(null);
+  const normalize = (value: string): string => {
+    return value?.trim().replace(/\s+/g, " ") || "";
+  };
+
+  const getApplicationPosition = (app: Application): string => {
+    if (app.position) return normalize(String(app.position));
+    return normalize(app.jobDetails?.title || "");
+  };
+
+  const positionOptions = useMemo(() => {
+    return ["all", ...jobFilterOptions];
+  }, [jobFilterOptions]);
+
+  const filteredApplications = useMemo(() => {
+    if (!selectedPosition || selectedPosition === "all") return applications;
+    return (applications || []).filter(app => normalize(getApplicationPosition(app)) === selectedPosition);
+  }, [applications, selectedPosition]);
+
 
   // Sort options
   const sortOptions: SortOption[] = [
@@ -167,6 +188,28 @@ export default function ApplicationsPage() {
       fetchApplications();
     }
   }, [isAuthenticated, isAdmin, currentPage, selectedStatus, searchTerm, sortBy, sortOrder]);
+
+  // Fetch job postings for position filter values
+  useEffect(() => {
+    const fetchJobPostings = async () => {
+      try {
+        const jobsResponse = await adminApi.getJobPostings();
+        const jobs = Array.isArray(jobsResponse) ? jobsResponse : (jobsResponse?.jobPostings || []);
+        const optionSet = new Set<string>();
+        jobs.forEach((job: any) => {
+          if (job?.title) optionSet.add(normalize(String(job.title)));
+        });
+        setJobFilterOptions(Array.from(optionSet).sort((a, b) => a.localeCompare(b)));
+      } catch (e) {
+        // Non-blocking: if it fails, filter just won't show options
+        console.error("Failed to fetch job postings for filter:", e);
+      }
+    };
+
+    if (isAuthenticated && isAdmin) {
+      fetchJobPostings();
+    }
+  }, [isAuthenticated, isAdmin]);
 
   // Handlers
   const handleView = (id: string) => {
@@ -316,9 +359,26 @@ export default function ApplicationsPage() {
       }
     >
       <div className="flex flex-col">
+        <div className="mb-4 flex items-end gap-4">
+          <div className="w-64">
+            <Label htmlFor="position-filter">Filter by position</Label>
+            <Select value={selectedPosition || "all"} onValueChange={setSelectedPosition}>
+              <SelectTrigger id="position-filter">
+                <SelectValue placeholder="Select position" />
+              </SelectTrigger>
+              <SelectContent>
+                {positionOptions.map(option => (
+                  <SelectItem key={option} value={option}>
+                    {option === "all" ? "All Positions" : option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <ApplicationsTable
-            applications={applications}
+            applications={filteredApplications}
             jobTitles={jobTitles}
             onView={handleView}
             onEdit={handleEdit}
