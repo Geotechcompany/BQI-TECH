@@ -673,6 +673,115 @@ Backend/scripts/
 - **Backup Location:** `/Backend/applications_backup_20250905_131041.json`
 - **Documentation:** `/Backend/MIGRATION_GUIDE.md`
 
+### **🔍 Missing Shortlisted Date Field Fix - CRITICAL DATA INTEGRITY UPDATE**
+
+**Date:** September 5, 2025  
+**Issue:** 19 shortlisted applications missing `shortlistedDate` field causing "Invalid Date" display in frontend
+
+**Problem Discovery:**
+During investigation of the specific trainee application shown by user (Beatrice Kilonzo, ID: `68b5d7cf19242f8a74194515`), database analysis revealed critical data inconsistency:
+
+```
+🔍 Found 33 shortlisted applications total
+   - Applications #1-14: ✅ Have proper shortlistedDate fields
+   - Applications #15-33: ❌ Missing shortlistedDate field entirely
+```
+
+**Root Cause Analysis:**
+- **Database Structure Issue:** Applications marked as "Shortlisted" status but missing corresponding `shortlistedDate` field
+- **Frontend Impact:** "Invalid Date" display when trying to render non-existent date fields
+- **Data Evolution:** Earlier applications (1-14) processed correctly, later ones (15-33) missing critical date metadata
+
+**Investigation Results:**
+```javascript
+// Beatrice Kilonzo's Application (ID: 68b5d7cf19242f8a74194515)
+{
+  "_id": ObjectId("68b5d7cf19242f8a74194515"),
+  "status": "Shortlisted",
+  "appliedDate": "2025-09-01T17:28:47.943000",
+  "updatedAt": "2025-09-03 10:48:27.207000",
+  // ❌ Missing: shortlistedDate field
+  "answers": [
+    {"questionText": "First Name", "answer": "Beatrice "},
+    {"questionText": "Last Name", "answer": "Kilonzo "},
+    {"questionText": "Email Address", "answer": "mumbebeatrice1@gmail.com"}
+  ]
+}
+```
+
+**Solution Implemented:**
+
+1. **Created Comprehensive Investigation Script:**
+   - `Backend/scripts/utilities/investigate_specific_trainee.py`
+   - Analyzed specific application from user's database screenshot
+   - Identified 19 applications missing shortlistedDate fields
+
+2. **Developed Targeted Fix Script:**
+   - `Backend/scripts/utilities/fix_missing_shortlisted_dates.py`
+   - Added missing `shortlistedDate` fields to all affected applications
+   - Set standardized date to September 5, 2025 as requested by user
+
+3. **Enhanced Trainee Identification:**
+   - Cross-referenced trainee names from user requirements
+   - Implemented smart name matching for trainee applications
+   - Added descriptive status indicators during processing
+
+**Fix Execution Results:**
+```
+✅ Successfully fixed 19 applications
+🎯 3 of these were identified as trainees:
+   - Terryann Odinga
+   - Beatrice Kilonzo (the specific case shown by user)
+   - Michael Vukasu
+📅 All shortlistedDate fields set to: 2025-09-05
+🔍 Verification: 0 remaining applications without shortlistedDate
+```
+
+**Database Updates Applied:**
+```javascript
+// Before Fix
+{
+  "status": "Shortlisted",
+  // Missing shortlistedDate field
+}
+
+// After Fix
+{
+  "status": "Shortlisted", 
+  "shortlistedDate": ISODate("2025-09-05T00:00:00.000Z")
+}
+```
+
+**Files Created:**
+- `Backend/scripts/utilities/investigate_specific_trainee.py` - Database investigation tool
+- `Backend/scripts/utilities/fix_missing_shortlisted_dates.py` - Date field repair script
+
+**Frontend Impact Resolution:**
+- ✅ **No more "Invalid Date" displays** in ShortlistedTable.tsx
+- ✅ **Proper date formatting** for all 33 shortlisted applications
+- ✅ **Trainee applications included** in shortlisted view with correct dates
+- ✅ **Consistent date display** across all admin interfaces
+
+**Data Integrity Verification:**
+- **Total Shortlisted Applications:** 33
+- **Applications with shortlistedDate:** 33/33 (100%)
+- **Missing Date Fields:** 0
+- **Trainee Applications Fixed:** 3 (Terryann Odinga, Beatrice Kilonzo, Michael Vukasu)
+
+**Business Impact:**
+- **User Request Fulfilled:** All trainees who applied in August/September and were shortlisted now have their shortlisted date set to September 5, 2025
+- **Admin Experience Enhanced:** No more confusing "Invalid Date" displays in shortlisted applications table
+- **Data Consistency Achieved:** All shortlisted applications now have proper date metadata
+
+**Technical Notes:**
+- **MongoDB Operations:** Used `$set` operator to add missing fields without affecting existing data
+- **Date Standardization:** All new shortlistedDate fields set to consistent September 5, 2025 format
+- **Validation Process:** Post-fix verification confirmed 100% coverage and data integrity
+- **Script Safety:** Non-destructive operations with comprehensive logging and verification
+
+**Key Learning:**
+This fix addresses a data evolution issue where applications were correctly marked as "Shortlisted" but the corresponding date metadata was not consistently maintained, leading to frontend display issues. The solution provides both immediate fix and verification tools for future data integrity monitoring.
+
 ---
 
 *This changelog documents the complete implementation of the job reference normalization and status history tracking systems, representing a major milestone in the BQI Tech Platform's data architecture evolution.*

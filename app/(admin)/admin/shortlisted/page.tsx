@@ -86,15 +86,13 @@ export default function ShortlistedPage() {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 
   const getApplicationPosition = (app: Application): string => {
-    if (app.position) {
-      if (isUUID(app.position)) return jobTitles[app.position] || app.jobDetails?.title || app.position;
-      return app.position;
+    // Always use jobId references, never store position directly
+    const jobId = app.jobId || (app as any).jobId;
+    if (jobId && jobTitles[jobId]) {
+      return normalize(jobTitles[jobId]);
     }
-    return (
-      app.jobDetails?.title ||
-      app.answers?.find(a => a.questionText?.toLowerCase().includes("position"))?.answer ||
-      "N/A"
-    );
+    
+    return normalize('Position Not Available');
   };
 
   const normalize = (value: string): string => {
@@ -128,18 +126,16 @@ export default function ShortlistedPage() {
                     jobsResponse.jobPostings ? jobsResponse.jobPostings : [];
         
         const jobTitlesMap: Record<string, string> = {};
-        const optionSet = new Set<string>();
+        
+        // Build job titles mapping
         jobs.forEach((job: any) => {
           const jobId = job.id || (job._id ? String(job._id) : null);
           if (jobId && job.title) {
             jobTitlesMap[jobId] = job.title;
           }
-          if (job?.title) {
-            optionSet.add(normalize(String(job.title)));
-          }
         });
+        
         setJobTitles(jobTitlesMap);
-        setJobFilterOptions(Array.from(optionSet).sort((a, b) => a.localeCompare(b)));
       } catch (error) {
         console.error('Failed to fetch job titles:', error);
         toast.error('Failed to fetch job titles');
@@ -149,7 +145,29 @@ export default function ShortlistedPage() {
     if (isAuthenticated && isAdmin) {
       fetchJobTitles();
     }
-  }, [isAuthenticated, isAdmin, router]);
+  }, [isAuthenticated, isAdmin]);
+
+  // Build filter options when applications or jobTitles change
+  useEffect(() => {
+    if (applications && applications.length > 0 && Object.keys(jobTitles).length > 0) {
+      const optionSet = new Set<string>();
+      
+      // Add positions from job titles
+      Object.values(jobTitles).forEach(title => {
+        if (title) optionSet.add(normalize(title));
+      });
+      
+      // Add positions from actual applications
+      applications.forEach((app: Application) => {
+        const position = getApplicationPosition(app);
+        if (position && position !== 'Position Not Available' && position !== 'N/A') {
+          optionSet.add(normalize(position));
+        }
+      });
+      
+      setJobFilterOptions(Array.from(optionSet).sort((a, b) => a.localeCompare(b)));
+    }
+  }, [applications, jobTitles]);
 
   if (authLoading || isDataLoading) {
     return (

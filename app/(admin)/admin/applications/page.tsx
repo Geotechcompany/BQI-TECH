@@ -62,8 +62,13 @@ export default function ApplicationsPage() {
   };
 
   const getApplicationPosition = (app: Application): string => {
-    if (app.position) return normalize(String(app.position));
-    return normalize(app.jobDetails?.title || "");
+    // Always use jobId references, never store position directly
+    const jobId = app.jobId || (app as any).jobId;
+    if (jobId && jobTitles[jobId]) {
+      return normalize(jobTitles[jobId]);
+    }
+    
+    return normalize('Position Not Available');
   };
 
   const positionOptions = useMemo(() => {
@@ -347,6 +352,26 @@ export default function ApplicationsPage() {
       fetchJobPostings();
     }
   }, [isAuthenticated, isAdmin]);
+
+  // Build additional filter options from actual application positions
+  useEffect(() => {
+    if (applications && applications.length > 0 && Object.keys(jobTitles).length > 0) {
+      const additionalOptions = new Set<string>();
+      
+      applications.forEach((app: Application) => {
+        const position = getApplicationPosition(app);
+        if (position && position !== 'Position Not Available' && position !== 'N/A') {
+          additionalOptions.add(normalize(position));
+        }
+      });
+      
+      // Merge with existing job filter options
+      setJobFilterOptions(prev => {
+        const combined = new Set([...prev, ...Array.from(additionalOptions)]);
+        return Array.from(combined).sort((a, b) => a.localeCompare(b));
+      });
+    }
+  }, [applications, jobTitles]);
 
   // Handlers
   const handleView = (id: string) => {
