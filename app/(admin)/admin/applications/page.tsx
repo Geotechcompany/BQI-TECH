@@ -83,8 +83,30 @@ export default function ApplicationsPage() {
       filtered = filtered.filter(app => app.status === selectedStatus);
     }
     
+    // Filter by search term (client-side)
+    if (searchTerm && searchTerm.trim() !== "") {
+      const needle = searchTerm.toLowerCase();
+      filtered = filtered.filter((app) => {
+        const valuesToSearch: Array<string> = [
+          String(app.name || ""),
+          String(app.email || ""),
+          String(app.phoneNumber || ""),
+          String(getApplicationPosition(app) || ""),
+          String(app.status || ""),
+        ];
+        // Include answers text if present
+        if (Array.isArray((app as any).answers)) {
+          (app as any).answers.forEach((a: any) => {
+            if (a?.questionText) valuesToSearch.push(String(a.questionText));
+            if (a?.answer) valuesToSearch.push(String(a.answer));
+          });
+        }
+        return valuesToSearch.some((val) => val.toLowerCase().includes(needle));
+      });
+    }
+    
     return filtered;
-  }, [applications, selectedPosition, selectedStatus]);
+  }, [applications, selectedPosition, selectedStatus, searchTerm]);
 
 
   // Sort options
@@ -324,7 +346,7 @@ export default function ApplicationsPage() {
     if (isAuthenticated && isAdmin) {
       fetchApplications();
     }
-  }, [isAuthenticated, isAdmin, currentPage, selectedStatus, searchTerm, sortBy, sortOrder]);
+  }, [isAuthenticated, isAdmin, currentPage, selectedStatus, sortBy, sortOrder]);
 
   // Fetch job postings for position filter values
   useEffect(() => {
