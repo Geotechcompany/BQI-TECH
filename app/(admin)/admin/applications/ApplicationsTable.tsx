@@ -118,7 +118,51 @@ const extractDataFromAnswers = (answers: any[], type: 'name' | 'email' | 'positi
       return emailField ? String(emailField.answer).trim() : 'No Email Provided';
       
     case 'position':
-      keywords = ['position', 'job title', 'role', 'position applied for', 'desired position', 'job role'];
+      keywords = ['position', 'job title', 'role', 'position applied for', 'desired position', 'job role', 'applying for'];
+      const position = getAnswerByKeywords(answers, keywords);
+      if (position && position.trim() !== '') {
+        // Exclude motivation/description answers that are too long or contain certain phrases
+        const positionAnswer = position.trim();
+        
+        // Skip if it looks like a motivation/description (too long, contains personal pronouns, etc.)
+        if (positionAnswer.length > 50 || 
+            positionAnswer.toLowerCase().includes('desire') ||
+            positionAnswer.toLowerCase().includes('motivation') ||
+            positionAnswer.toLowerCase().includes('learn') ||
+            positionAnswer.toLowerCase().includes('my ') ||
+            positionAnswer.toLowerCase().includes('i am') ||
+            positionAnswer.toLowerCase().includes('because')) {
+          // This looks like a motivation answer, not a position
+          return '';
+        }
+        
+        return positionAnswer;
+      }
+      
+      // Look specifically for job title questions (avoid motivation questions)
+      const jobTitleAnswer = answers.find(a => {
+        if (!a?.questionText || !a?.answer) return false;
+        const question = a.questionText.toLowerCase();
+        const answer = String(a.answer).trim();
+        
+        // Look for specific position/job title questions but exclude motivation questions
+        return (question.includes('job title') || 
+                question.includes('position applied') ||
+                question.includes('desired position') ||
+                (question.includes('position') && !question.includes('motivation') && !question.includes('applying'))) && 
+               answer.length > 2 && answer.length < 100 &&
+               !answer.toLowerCase().includes('desire') &&
+               !answer.toLowerCase().includes('motivation');
+      });
+      
+      if (jobTitleAnswer) {
+        return String(jobTitleAnswer.answer).trim();
+      }
+      
+      return '';
+      
+    default:
+      keywords = [];
       break;
   }
   
@@ -204,24 +248,37 @@ export function ApplicationsTable({
     { 
       header: "Position", 
       accessor: (row: Application) => {
-        // First try the processed position field (from database)
-        if (row.position && row.position.trim() !== '' && row.position !== 'N/A' && !isUUID(row.position)) {
-          return row.position;
+        // First try the processed position field (from database) - clean it
+        if (row.position && row.position.trim() !== '' && row.position.trim() !== 'N/A' && !isUUID(row.position)) {
+          return row.position.trim(); // Remove trailing spaces
         }
         
         // If position is a UUID, look up job title
         if (row.position && isUUID(row.position)) {
-          return jobTitles[row.position] || row.position;
+          const jobTitle = jobTitles[row.position];
+          if (jobTitle && jobTitle.trim() !== '') {
+            return jobTitle.trim();
+          }
+          // If UUID but no job title found, fall through to other methods
         }
         
         // Fallback to job details
-        if (row.jobDetails?.title) {
-          return row.jobDetails.title;
+        if (row.jobDetails?.title && row.jobDetails.title.trim() !== '') {
+          return row.jobDetails.title.trim();
         }
         
-        // Last resort: Extract from answers using enhanced logic
+        // Extract from answers using enhanced logic
         const extractedPosition = extractDataFromAnswers(row.answers || [], 'position');
-        return extractedPosition || 'N/A';
+        if (extractedPosition && extractedPosition.trim() !== '' && extractedPosition !== 'N/A') {
+          return extractedPosition.trim();
+        }
+        
+        // If we have a jobId but no position, show a descriptive message
+        if (row.jobId || (row as any).jobId) {
+          return 'Position Not Available';
+        }
+        
+        return 'N/A';
       },
       cell: (value: string) => value
     },

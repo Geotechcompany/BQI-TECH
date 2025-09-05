@@ -22,41 +22,221 @@ interface ShortlistedTableProps {
 const isUUID = (str: string) => 
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 
+// Enhanced helper function for robust data extraction (same as ApplicationsTable)
+const extractDataFromAnswers = (answers: any[], type: 'name' | 'email' | 'position', user?: any): string => {
+  if (!Array.isArray(answers)) {
+    // If no answers array, check if we have user data
+    if (type === 'name' && user?.name) return user.name;
+    if (type === 'email' && user?.email) return user.email;
+    return type === 'name' ? 'No Application Data' : type === 'email' ? 'No Contact Info' : '';
+  }
+  
+  let keywords: string[] = [];
+  
+  switch (type) {
+    case 'name':
+      // First check user data
+      if (user?.name && user.name.trim() !== '') {
+        return user.name.trim();
+      }
+      
+      // Try various name field combinations
+      const firstName = getAnswerByKeywords(answers, ['first name', 'firstname', 'given name', 'forename']);
+      const lastName = getAnswerByKeywords(answers, ['last name', 'lastname', 'surname', 'family name']);
+      
+      // If we have both parts, combine them
+      if (firstName && lastName) {
+        return `${firstName} ${lastName}`.trim();
+      }
+      
+      // Try single name fields
+      const fullName = getAnswerByKeywords(answers, ['full name', 'name', 'your name', 'applicant name']);
+      if (fullName) return fullName;
+      
+      // Try the first or last name alone if we only have one
+      if (firstName) return firstName;
+      if (lastName) return lastName;
+      
+      // Last resort: look for ANY field that might contain a name
+      const possibleNameField = answers.find(a => {
+        if (!a?.questionText || !a?.answer) return false;
+        const question = a.questionText.toLowerCase();
+        const answer = String(a.answer).trim();
+        
+        // Skip obvious non-name fields
+        if (question.includes('email') || question.includes('phone') || 
+            question.includes('position') || question.includes('experience') ||
+            question.includes('cv') || question.includes('resume') ||
+            answer.includes('@') || answer.length < 2) {
+          return false;
+        }
+        
+        // Look for fields that likely contain names
+        return question.includes('name') || 
+               (answer.length > 2 && answer.length < 50 && 
+                /^[a-zA-Z\s'-]+$/.test(answer));
+      });
+      
+      if (possibleNameField) {
+        return String(possibleNameField.answer).trim();
+      }
+      
+      return 'Incomplete Application';
+      
+    case 'email':
+      // First check user data
+      if (user?.email && user.email.trim() !== '') {
+        return user.email.trim();
+      }
+      
+      keywords = ['email', 'e-mail', 'email address', 'contact email', 'e mail'];
+      const email = getAnswerByKeywords(answers, keywords);
+      
+      if (email && email.includes('@')) {
+        return email;
+      }
+      
+      // Look for any field that looks like an email
+      const emailField = answers.find(a => {
+        const answer = String(a?.answer || '').trim();
+        return answer.includes('@') && answer.includes('.');
+      });
+      
+      return emailField ? String(emailField.answer).trim() : 'No Email Provided';
+      
+    case 'position':
+      keywords = ['position', 'job title', 'role', 'position applied for', 'desired position', 'job role', 'applying for'];
+      const position = getAnswerByKeywords(answers, keywords);
+      if (position && position.trim() !== '') {
+        // Exclude motivation/description answers that are too long or contain certain phrases
+        const positionAnswer = position.trim();
+        
+        // Skip if it looks like a motivation/description (too long, contains personal pronouns, etc.)
+        if (positionAnswer.length > 50 || 
+            positionAnswer.toLowerCase().includes('desire') ||
+            positionAnswer.toLowerCase().includes('motivation') ||
+            positionAnswer.toLowerCase().includes('learn') ||
+            positionAnswer.toLowerCase().includes('my ') ||
+            positionAnswer.toLowerCase().includes('i am') ||
+            positionAnswer.toLowerCase().includes('because')) {
+          // This looks like a motivation answer, not a position
+          return '';
+        }
+        
+        return positionAnswer;
+      }
+      
+      // Look specifically for job title questions (avoid motivation questions)
+      const jobTitleAnswer = answers.find(a => {
+        if (!a?.questionText || !a?.answer) return false;
+        const question = a.questionText.toLowerCase();
+        const answer = String(a.answer).trim();
+        
+        // Look for specific position/job title questions but exclude motivation questions
+        return (question.includes('job title') || 
+                question.includes('position applied') ||
+                question.includes('desired position') ||
+                (question.includes('position') && !question.includes('motivation') && !question.includes('applying'))) && 
+               answer.length > 2 && answer.length < 100 &&
+               !answer.toLowerCase().includes('desire') &&
+               !answer.toLowerCase().includes('motivation');
+      });
+      
+      if (jobTitleAnswer) {
+        return String(jobTitleAnswer.answer).trim();
+      }
+      
+      return '';
+      
+    default:
+      keywords = [];
+      break;
+  }
+  
+  return getAnswerByKeywords(answers, keywords);
+};
+
+// Helper function to safely get values
+const getAnswerByKeywords = (answers: any[], keywords: string[]): string => {
+  if (!Array.isArray(answers)) return '';
+  
+  for (const answer of answers) {
+    if (answer?.questionText && typeof answer.questionText === 'string') {
+      const questionLower = answer.questionText.toLowerCase();
+      for (const keyword of keywords) {
+        if (questionLower.includes(keyword.toLowerCase())) {
+          return String(answer.answer || '').trim();
+        }
+      }
+    }
+  }
+  return '';
+};
+
 export function ShortlistedTable({ applications, jobTitles, onView, onEdit, onDelete }: ShortlistedTableProps) {
   const columns: Column<Application>[] = [
     { 
       header: "Applicant", 
       accessor: (row: Application) => {
-        if (row.name) return row.name;
+        // First try the processed name field (from database)
+        if (row.name && row.name.trim() !== '' && 
+            !['N/A', 'No Application Data', 'Incomplete Application'].includes(row.name)) {
+          return row.name;
+        }
         
-        const firstName = row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('first name')
-        )?.answer || '';
-        
-        const lastName = row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('last name')
-        )?.answer || '';
-
-        return `${firstName} ${lastName}`.trim() || 'N/A';
+        // Fallback: Extract from answers using enhanced logic
+        const extractedName = extractDataFromAnswers(row.answers || [], 'name', row.user);
+        return extractedName;
       }
     },
     { 
       header: "Email", 
-      accessor: (row: Application) => 
-        row.email ||
-        row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('email')
-        )?.answer ||
-        'N/A'
+      accessor: (row: Application) => {
+        // First try the processed email field (from database)
+        if (row.email && row.email.trim() !== '' && 
+            !['N/A', 'No Contact Info', 'No Email Provided'].includes(row.email)) {
+          return row.email;
+        }
+        
+        // Fallback: Extract from answers using enhanced logic
+        const extractedEmail = extractDataFromAnswers(row.answers || [], 'email', row.user);
+        return extractedEmail;
+      }
     },
     { 
       header: "Position", 
       accessor: (row: Application) => {
-        if (row.position && !isUUID(row.position)) return row.position;
-        if (row.position && isUUID(row.position)) return jobTitles[row.position] || row.position;
-        return row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('position')
-        )?.answer || 'N/A';
+        // First try the processed position field (from database) - clean it
+        if (row.position && row.position.trim() !== '' && row.position.trim() !== 'N/A' && !isUUID(row.position)) {
+          return row.position.trim(); // Remove trailing spaces
+        }
+        
+        // If position is a UUID, look up job title
+        if (row.position && isUUID(row.position)) {
+          const jobTitle = jobTitles[row.position];
+          if (jobTitle && jobTitle.trim() !== '') {
+            return jobTitle.trim();
+          }
+          // If UUID but no job title found, fall through to other methods
+        }
+        
+        // Fallback to job details
+        if (row.jobDetails?.title && row.jobDetails.title.trim() !== '') {
+          return row.jobDetails.title.trim();
+        }
+        
+        // Extract from answers using enhanced logic
+        const extractedPosition = extractDataFromAnswers(row.answers || [], 'position');
+        if (extractedPosition && extractedPosition.trim() !== '' && extractedPosition !== 'N/A') {
+          return extractedPosition.trim();
+        }
+        
+        // If we have a jobId but no position, show a descriptive message
+        if (row.jobId || (row as any).jobId) {
+          return 'Position Not Available';
+        }
+        
+        return 'N/A';
       },
       cell: (value: string) => value
     },

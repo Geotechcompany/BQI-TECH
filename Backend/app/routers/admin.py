@@ -16,6 +16,23 @@ import re
 
 router = APIRouter(tags=["admin"])
 
+# Job Reference System Integration
+try:
+    import sys
+    backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
+    if backend_dir not in sys.path:
+        sys.path.append(backend_dir)
+    
+    from job_reference_system import (
+        resolve_job_titles, 
+        get_applications_with_job_info,
+        extract_data_from_answers_with_job_resolution
+    )
+    JOB_REFERENCE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Job reference system not available: {e}")
+    JOB_REFERENCE_AVAILABLE = False
+
 def convert_objectids_to_strings(doc):
     """Convert ObjectIds to strings in a document"""
     if isinstance(doc, list):
@@ -39,6 +56,36 @@ def generate_slug(title: str) -> str:
     slug = re.sub(r'[^\w\s-]', '', slug)
     slug = re.sub(r'[-\s]+', '-', slug)
     return slug
+
+async def get_enhanced_applications_data(db, query: Dict[Any, Any] = None, limit: int = None) -> List[Dict[Any, Any]]:
+    """Get applications with enhanced job title resolution and data extraction"""
+    
+    if not JOB_REFERENCE_AVAILABLE:
+        # Fallback to original method without enhancement
+        cursor = db.applications.find(query or {})
+        if limit:
+            cursor = cursor.limit(limit)
+        return await cursor.to_list(length=None)
+    
+    # Get applications with job info
+    applications = await get_applications_with_job_info(db, query, limit)
+    
+    # Enhance each application with extracted data
+    enhanced_applications = []
+    for app in applications:
+        # Extract data from answers with job resolution
+        extracted_data = await extract_data_from_answers_with_job_resolution(db, app)
+        
+        # Merge extracted data with original application
+        enhanced_app = app.copy()
+        enhanced_app.update(extracted_data)
+        
+        # Ensure position uses resolved job title
+        enhanced_app['position'] = extracted_data.get('position', app.get('resolvedJobTitle', 'Position Not Available'))
+        
+        enhanced_applications.append(enhanced_app)
+    
+    return enhanced_applications
 
 @router.get("/test-auth")
 async def test_auth_endpoint(request: Request):
@@ -874,14 +921,23 @@ async def get_admin_applications(
                             if field in job and isinstance(job[field], datetime):
                                 job[field] = job[field].isoformat()
                         app["jobDetails"] = job
-                        app["position"] = job.get("title", "Unknown Position")
+                        # Set position from job title - ensure consistency and clean data
+                        app["position"] = job.get("title", "Position Not Available").strip()
                     else:
                         app["jobDetails"] = None
-                        app["position"] = "Unknown Position"
+                        app["position"] = "Position Not Available"
+                        logger.warning(f"Job posting not found for jobId: {app['jobId']}")
                 except Exception as e:
                     logger.error(f"Error getting job details for application {app['id']}: {str(e)}")
                     app["jobDetails"] = None
-                    app["position"] = "Unknown Position"
+                    app["position"] = "Position Not Available"
+            else:
+                # No jobId - handle existing position data
+                if not app.get("position") or app.get("position") in [None, "NOT SET", ""]:
+                    app["position"] = "Position Not Available"
+                else:
+                    # Clean existing position data (remove trailing spaces)
+                    app["position"] = str(app["position"]).strip()
             
             # Get user details
             if "userId" in app:
@@ -921,6 +977,100 @@ async def get_admin_applications(
         
     except Exception as e:
         logger.error(f"Error in get_admin_applications: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/applications/shortlisted")
+async def get_shortlisted_applications(
+    current_user: dict = Depends(get_current_admin_user),
+    limit: int = Query(100, ge=1, le=1000),
+    skip: int = Query(0, ge=0),
+    sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)")
+):
+    """Get shortlisted applications for admin"""
+    try:
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Query for shortlisted applications
+        query = {"status": "Shortlisted"}
+            
+        # Get applications with pagination
+        sort_direction = -1 if sort_order == "desc" else 1
+        sort_field = sort_by if sort_by in ["appliedDate", "status", "createdAt", "updatedAt"] else "appliedDate"
+        
+        applications_cursor = db.applications.find(query).skip(skip).limit(limit).sort(sort_field, sort_direction)
+        applications = await applications_cursor.to_list(length=limit)
+        total = await db.applications.count_documents(query)
+        
+        # Convert ObjectIds to strings and add job details
+        for app in applications:
+            app["id"] = str(app.pop("_id"))
+            
+            # Convert datetime fields
+            for field in ["createdAt", "updatedAt", "appliedDate", "shortlistedDate"]:
+                if field in app and isinstance(app[field], datetime):
+                    app[field] = app[field].isoformat()
+            
+            # Get job details - this is crucial for position consistency
+            if "jobId" in app and app["jobId"]:
+                try:
+                    job = await db.jobpostings.find_one({"_id": ObjectId(app["jobId"])})
+                    if job:
+                        job["id"] = str(job.pop("_id"))
+                        # Convert datetime fields in job
+                        for field in ["createdAt", "updatedAt", "postedDate"]:
+                            if field in job and isinstance(job[field], datetime):
+                                job[field] = job[field].isoformat()
+                        app["jobDetails"] = job
+                        # Set position from job title - this ensures consistency
+                        app["position"] = job.get("title", "Position Not Available").strip()
+                    else:
+                        app["jobDetails"] = None
+                        app["position"] = "Position Not Available"
+                        logger.warning(f"Job posting not found for jobId: {app['jobId']}")
+                except Exception as e:
+                    logger.error(f"Error getting job details for application {app['id']}: {str(e)}")
+                    app["jobDetails"] = None
+                    app["position"] = "Position Not Available"
+            else:
+                # No jobId - try to extract from application data
+                if not app.get("position") or app.get("position") in [None, "NOT SET", ""]:
+                    app["position"] = "Position Not Available"
+                else:
+                    # Clean existing position data
+                    app["position"] = str(app["position"]).strip()
+            
+            # Get user details
+            if "userId" in app and app["userId"]:
+                try:
+                    user = await db.users.find_one({"_id": ObjectId(app["userId"])}, {"password": 0})
+                    if user:
+                        user["id"] = str(user.pop("_id"))
+                        # Convert datetime fields in user
+                        for field in ["createdAt", "updatedAt", "lastLoginAt"]:
+                            if field in user and isinstance(user[field], datetime):
+                                user[field] = user[field].isoformat()
+                        app["userDetails"] = user
+                        
+                        # If no processed name/email, set from user data
+                        if not app.get("name") or app.get("name") in [None, "NOT SET", ""]:
+                            app["name"] = user.get("name", "")
+                        if not app.get("email") or app.get("email") in [None, "NOT SET", ""]:
+                            app["email"] = user.get("email", "")
+                    else:
+                        app["userDetails"] = None
+                except Exception as e:
+                    logger.error(f"Error getting user details for application {app['id']}: {str(e)}")
+                    app["userDetails"] = None
+        
+        # Return the applications directly (not wrapped in response object for SWR compatibility)
+        return applications
+        
+    except Exception as e:
+        logger.error(f"Error in get_shortlisted_applications: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
