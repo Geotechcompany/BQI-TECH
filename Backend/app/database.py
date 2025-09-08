@@ -173,6 +173,78 @@ async def initialize_database_indexes():
 			unique=True
 		)
 
+		# Applications collection indexes for performance
+		await ensure_index(
+			_database.applications,
+			["status"],
+			name="applications_status"
+		)
+		
+		await ensure_index(
+			_database.applications,
+			["status", "appliedDate"],
+			name="applications_status_appliedDate"
+		)
+		
+		await ensure_index(
+			_database.applications,
+			["status", "createdAt"],
+			name="applications_status_createdAt"
+		)
+		
+		await ensure_index(
+			_database.applications,
+			["userId"],
+			name="applications_userId"
+		)
+		
+		await ensure_index(
+			_database.applications,
+			["jobId"],
+			name="applications_jobId"
+		)
+		
+		await ensure_index(
+			_database.applications,
+			["appliedDate"],
+			name="applications_appliedDate"
+		)
+
+		# Text search index for applications
+		try:
+			# Create text index for search functionality
+			await _database.applications.create_index([
+				("name", "text"),
+				("email", "text"),
+				("position", "text")
+			], name="applications_text_search")
+		except Exception as e:
+			# Text indexes are special and might conflict, so handle separately
+			logger.warning(f"Could not create text search index for applications: {e}")
+
+		# Job postings indexes
+		await ensure_index(
+			_database.jobpostings,
+			["title"],
+			name="jobpostings_title"
+		)
+		
+		await ensure_index(
+			_database.jobpostings,
+			["status"],
+			name="jobpostings_status"
+		)
+
+		# Text search index for job postings
+		try:
+			await _database.jobpostings.create_index([
+				("title", "text"),
+				("description", "text"),
+				("requirements", "text")
+			], name="jobpostings_text_search")
+		except Exception as e:
+			logger.warning(f"Could not create text search index for job postings: {e}")
+
 		# Password reset tokens: TTL and unique token index
 		await ensure_index(
 			_database.password_resets,

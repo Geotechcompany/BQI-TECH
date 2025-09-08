@@ -79,9 +79,6 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             
         token = credentials.credentials
         try:
-            # Log token for debugging
-            logger.debug(f"Validating token: {token[:10]}...")
-            
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             user_id = payload.get("sub")
             if user_id is None:
@@ -131,24 +128,19 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
 async def get_current_admin_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current admin user"""
     user = await get_current_user(credentials)
-    
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated"
         )
-    
-    # Check both session header and database roles
     user_role = str(user.get("role", "")).upper()
     if user_role not in ["ADMIN", "SUPER_ADMIN"]:
-        # Double check in database for security
         db = get_database()
-        # Use _id since we ensure it's set in get_current_user
-        db_user = await db.users.find_one({"_id": ObjectId(user["_id"])})
-        if not db_user or str(db_user.get("role", "")).upper() not in ["ADMIN", "SUPER_ADMIN"]:
+        db_user = await db.users.find_one({"_id": ObjectId(user["_id"])});
+        db_user_role = str(db_user.get("role", "")).upper() if db_user else None
+        if not db_user or db_user_role not in ["ADMIN", "SUPER_ADMIN"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions"
             )
-    
-    return user 
+    return user

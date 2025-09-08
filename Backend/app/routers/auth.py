@@ -649,8 +649,8 @@ async def forgot_password(request: Request, data: ForgotPasswordRequest):
             )
 
             # Build reset link for frontend
-            frontend_url = os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000")
-            reset_link = f"{frontend_url}/reset-password?token={token}"
+            from app.config import settings
+            reset_link = f"{settings.frontend_url}/reset-password?token={token}"
             from app.lib.email import send_password_reset_email
 
             try:
