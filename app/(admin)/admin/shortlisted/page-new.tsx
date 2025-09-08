@@ -6,20 +6,16 @@ import { EditApplicationModal } from "@/components/admin/EditApplicationModal";
 import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
 import { DeleteApplicationModal } from "@/components/admin/DeleteApplicationModal";
 import { TableSkeleton } from "@/components/ui/skeleton";
-import { Pagination } from "@/components/Pagination";
 import { useAdminApplicationPage } from "@/hooks/useAdminApplicationPage";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
-export default function TechnicalAssessmentPage() {
+export default function ShortlistedPage() {
   const {
     applications,
     jobTitles,
     isLoading,
     error,
-    total,
-    currentPage,
-    totalPages,
     isAuthenticated,
     isAdmin,
     searchTerm,
@@ -27,7 +23,6 @@ export default function TechnicalAssessmentPage() {
     selectedPosition,
     setSelectedPosition,
     positionFilterOptions,
-    handlePageChange,
     viewApplication,
     setViewApplication,
     editApplication,
@@ -41,15 +36,15 @@ export default function TechnicalAssessmentPage() {
     handleConfirmDelete,
     handleBulkStatusUpdate,
   } = useAdminApplicationPage({
-    statusType: 'technical-assessment',
-    dateField: 'appliedDate',
+    statusType: 'shortlisted',
+    dateField: 'shortlistedDate',
     enableBulkUpdates: true,
     enablePositionFilter: true,
   });
 
   if (isLoading) {
     return (
-      <AdminPageLayout title="Technical Assessment" showSearch={false}>
+      <AdminPageLayout title="Shortlisted Applications" showSearch={false}>
         <TableSkeleton rows={10} columns={6} />
       </AdminPageLayout>
     );
@@ -61,16 +56,16 @@ export default function TechnicalAssessmentPage() {
 
   if (error) {
     return (
-      <AdminPageLayout title="Technical Assessment" showSearch={false}>
-        <div className="text-center text-red-600">Failed to load technical assessment candidates</div>
+      <AdminPageLayout title="Shortlisted Applications" showSearch={false}>
+        <div className="text-center text-red-600">Failed to load shortlisted applications</div>
       </AdminPageLayout>
     );
   }
 
   return (
     <AdminPageLayout
-      title="Technical Assessment"
-      searchPlaceholder="Search technical assessment candidates..."
+      title="Shortlisted Applications"
+      searchPlaceholder="Search shortlisted candidates..."
       searchValue={searchTerm}
       onSearch={setSearchTerm}
     >
@@ -96,32 +91,17 @@ export default function TechnicalAssessmentPage() {
         </div>
       )}
 
-      {/* Results Summary */}
-      <div className="mb-4 text-sm text-muted-foreground">
-        Showing {applications.length} of {total} technical assessment candidates
-      </div>
-
       {/* Applications Table */}
       <UnifiedApplicationTable
         applications={applications}
         jobTitles={jobTitles}
-        statusType="technical-assessment"
-        dateField="appliedDate"
+        statusType="shortlisted"
+        dateField="shortlistedDate"
         onView={handleView}
         onEdit={handleEdit}
         onDelete={handleDelete}
         onBulkStatusUpdate={handleBulkStatusUpdate}
       />
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          className="mt-6"
-        />
-      )}
 
       {/* Modals */}
       <ViewApplicationModal

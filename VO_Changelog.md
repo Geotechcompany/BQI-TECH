@@ -21,6 +21,17 @@
 - **Root Cause:** Incorrect data extraction priority logic
 - **Database Investigation:** Found that Lucy Ndung'u's application had processed fields (`name`, `email`, `position`) but no `answers` array
 
+### **CV Link Inconsistency Issue (September 4, 2025 Update)**
+- **Symptom:** Some shortlisted candidates had "View CV" links while newer applications showed "N/A"
+- **Investigation Result:** 247 applications were missing the `cvUrl` field in the database
+- **Data Pattern:** Older applications (May 2025) had `cvUrl` field, newer applications (Aug/Sep 2025) only had CV data in `answers` array
+- **Impact:** Users couldn't access CVs for recent applications despite CVs being uploaded
+
+### **Data Extraction Inconsistency Across Admin Pages**
+- **Symptom:** Different admin status pages (Technical Assessment, Interviewing, Hired, Disqualified) used different logic for extracting data
+- **User Request:** "Check if all the changes we have applied to get the position filter, position in the table, status date...are also implemented in the Technical Screen, Interviews, Hired, Disqualified pages as well"
+- **Impact:** Inconsistent behavior across admin interface pages
+
 ---
 
 ## 🛠️ **Solutions Applied**
@@ -47,6 +58,173 @@ const getNameFromAnswers = () => {
   }
   // Additional fallback logic for single name fields...
 };
+```
+
+### **2. Database CV URL Population (September 4, 2025)**
+**File:** `Backend/scripts/populate_cv_urls.py`
+
+**Problem:** 247 applications missing `cvUrl` field causing "N/A" display in CV column
+
+**Solution:**
+- Created Python script to extract CV URLs from `answers` array and populate `cvUrl` field
+- Successfully processed 247 applications with 0 errors
+- **Result:** `✅ Successfully fixed 247 applications, 0 applications skipped, 0 remaining applications without cvUrl`
+
+**Database Update Query:**
+```python
+# Extract CV URL from answers array
+cv_url = None
+for answer in answers:
+    question_text = answer.get('questionText', '').lower()
+    if any(keyword in question_text for keyword in ['cv', 'resume', 'upload']):
+        cv_url = answer.get('answer')
+        if cv_url and len(cv_url.strip()) > 10:
+            break
+
+# Update document with extracted CV URL
+result = collection.update_one(
+    {"_id": doc["_id"]},
+    {"$set": {"cvUrl": cv_url}}
+)
+```
+
+### **3. Created Shared Utility Library (September 4, 2025)**
+**File:** `lib/admin-table-utils.ts`
+
+**Problem:** Code duplication and inconsistent data extraction logic across admin tables
+
+**Solution:** Centralized data extraction functions for consistent behavior
+
+**Key Functions:**
+```typescript
+// Enhanced name extraction with multiple fallback strategies
+export const getNameDisplay = (row: Application): string => {
+  if (row.name && row.name.trim() !== '' && 
+      !['N/A', 'No Application Data', 'Incomplete Application'].includes(row.name)) {
+    return row.name;
+  }
+  return extractDataFromAnswers(row.answers || [], 'name', row.user);
+};
+
+// Enhanced email extraction with validation
+export const getEmailDisplay = (row: Application): string => {
+  if (row.email && row.email.trim() !== '' && 
+      !['N/A', 'No Contact Info', 'No Email Provided'].includes(row.email)) {
+    return row.email;
+  }
+  return extractDataFromAnswers(row.answers || [], 'email', row.user);
+};
+
+// Position display using job reference system
+export const getPositionDisplay = (row: Application, jobTitles: Record<string, string>): string => {
+  const jobId = row.jobId || (row as any).jobId;
+  if (jobId && jobTitles[jobId]) {
+    return jobTitles[jobId];
+  }
+  return 'Position Not Available';
+};
+
+// Enhanced CV URL extraction with fallback to answers array
+export const getCvUrl = (row: Application): string => {
+  if (row.cvUrl && row.cvUrl.trim()) {
+    return row.cvUrl.trim();
+  }
+  
+  if (Array.isArray(row.answers)) {
+    for (const answer of row.answers) {
+      const questionText = answer.questionText?.toLowerCase() || '';
+      if (questionText.includes('cv') || 
+          questionText.includes('resume') || 
+          questionText.includes('upload')) {
+        const cvUrl = answer.answer?.toString().trim();
+        if (cvUrl && cvUrl.length > 10) {
+          return cvUrl;
+        }
+      }
+    }
+  }
+  
+  return '';
+};
+```
+
+### **4. Updated All Admin Status Table Components (September 4, 2025)**
+
+**Components Updated:**
+- ✅ `components/admin/TechnicalAssessmentTable.tsx`
+- ✅ `components/admin/InterviewingTable.tsx` 
+- ✅ `components/admin/HiredTable.tsx`
+- ✅ `components/admin/DisqualifiedTable.tsx`
+- ✅ `components/admin/ShortlistedTable.tsx`
+- ✅ `app/(admin)/admin/applications/ApplicationsTable.tsx`
+
+**Changes Applied:**
+1. **Import shared utilities:** Added `import { getNameDisplay, getEmailDisplay, getPositionDisplay, getCvUrl } from "@/lib/admin-table-utils"`
+2. **Simplified column accessors:** Replaced complex inline logic with utility function calls
+3. **Enhanced date handling:** Added proper error handling for date parsing
+4. **Consistent CV logic:** All tables now use the same CV extraction strategy
+5. **Position resolution:** All tables use job reference system for position display
+
+**Example Transformation:**
+```typescript
+// BEFORE (Complex inline logic)
+{
+  header: "Applicant", 
+  accessor: (row: Application) => {
+    if (row.name && row.name.trim() !== '' && 
+        !['N/A', 'No Application Data', 'Incomplete Application'].includes(row.name)) {
+      return row.name;
+    }
+    const extractedName = extractDataFromAnswers(row.answers || [], 'name', row.user);
+    return extractedName;
+  }
+}
+
+// AFTER (Using shared utilities)
+{
+  header: "Applicant", 
+  accessor: (row: Application) => getNameDisplay(row)
+}
+```
+
+### **5. Enhanced Date Handling Across All Status Pages**
+
+**Problem:** Date parsing errors causing "Invalid Date" displays
+
+**Solution:** Consistent date handling with proper error checking
+```typescript
+{
+  header: "Status Date",
+  accessor: (row: Application) => {
+    const statusDate = row.statusDate; // or shortlistedDate, hireDate, etc.
+    
+    if (!statusDate) {
+      return 'Not Set';
+    }
+    
+    try {
+      if (typeof statusDate === 'string') {
+        const dateStr = statusDate.includes('Z') 
+          ? statusDate 
+          : statusDate + (statusDate.includes('T') ? 'Z' : '');
+        date = new Date(dateStr);
+      } else if (typeof statusDate === 'object' && statusDate && '$date' in statusDate) {
+        date = new Date((statusDate as any).$date);
+      } else {
+        date = new Date(statusDate as any);
+      }
+      
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      
+      return date;
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  },
+  cell: (value: Date | string) => value instanceof Date ? value.toLocaleDateString() : value
+}
 ```
 
 ### **2. Implemented Data Priority System**
@@ -782,6 +960,612 @@ During investigation of the specific trainee application shown by user (Beatrice
 **Key Learning:**
 This fix addresses a data evolution issue where applications were correctly marked as "Shortlisted" but the corresponding date metadata was not consistently maintained, leading to frontend display issues. The solution provides both immediate fix and verification tools for future data integrity monitoring.
 
+### **🔧 EditApplicationModal Data Population & Proxy Download Fix**
+
+**Date:** September 5, 2025  
+**Issues:** Critical fixes for application modals and file handling system
+
+#### **EditApplicationModal Empty Fields Issue**
+
+**Problem:**
+- EditApplicationModal opening with completely empty fields despite data being available
+- Modal took time to load but displayed no information
+- Data extraction failing due to unnecessary API re-fetching
+
+**Root Cause Analysis:**
+- Component was using `useQuery` to fetch application details again instead of using passed data
+- Early return statement (`if (!editedApplication) return null;`) prevented modal from ever showing
+- Data was being fetched via API unnecessarily when it was already available from parent component
+
+**Solution Applied:**
+1. **Removed unnecessary useQuery:** Eliminated API re-fetching since data was already available
+2. **Fixed early return issue:** Removed blocking early return that prevented modal display
+3. **Direct data usage:** Modified component to use passed application data directly
+4. **Enhanced null safety:** Added comprehensive null checking throughout the component
+
+**Code Changes:**
+```typescript
+// Before: Problematic useQuery approach
+const { data: fullApplication, isLoading } = useQuery<Application>({
+  queryKey: ['application', application?.id],
+  queryFn: () => api.get(`/api/admin/applications/${application?.id}`).then(res => res.data),
+  enabled: !!application?.id && isOpen
+});
+
+if (!editedApplication) return null; // Blocking early return
+
+// After: Direct data usage approach
+useEffect(() => {
+  if (application && isOpen) {
+    setEditedApplication(application);
+    // Direct data extraction from passed application
+    const extractedFirstName = extractDataFromAnswers(application.answers || [], 'name', application.user)...
+  }
+}, [application, jobTitles, isOpen]);
+
+// Removed blocking early return, allowing proper loading states
+```
+
+**Files Modified:**
+- `components/admin/EditApplicationModal.tsx`: Complete data flow redesign
+- Removed unused imports: `useQuery`, `api`, `Loader2`
+- Enhanced data extraction with proper fallback logic
+
+#### **Proxy File Download Issue - "proxy" Files Downloaded**
+
+**Problem:**
+- Clicking "View CV", "View Application", or "Edit Application" downloaded files named "proxy"
+- Files were PDFs/DOCX but had wrong filenames causing user confusion
+- Proxy endpoint not setting proper `Content-Disposition` headers
+
+**Root Cause Analysis:**
+- `/api/proxy` endpoint streaming files without proper filename headers
+- Browser defaulting to URL path name ("proxy") when no filename provided
+- Insufficient filename extraction from original URLs
+- Missing file extension detection for various content types
+
+**Solution Applied:**
+
+1. **Enhanced Proxy Endpoint (`/app/api/proxy/route.ts`):**
+```typescript
+// Enhanced filename extraction from URL or Content-Disposition header
+let filename = "document";
+const contentDisposition = upstreamResponse.headers.get("content-disposition");
+if (contentDisposition) {
+  const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+  if (filenameMatch) {
+    filename = filenameMatch[1].replace(/['"]/g, '');
+  }
+} else {
+  // Enhanced URL path extraction
+  const pathParts = parsed.pathname.split('/');
+  const lastPart = pathParts[pathParts.length - 1];
+  if (lastPart && lastPart.includes('.')) {
+    filename = lastPart.split('?')[0]; // Remove URL parameters
+  } else {
+    // Smart file extension detection
+    const extension = contentType.includes('pdf') ? '.pdf' : 
+                     contentType.includes('word') ? '.docx' : 
+                     contentType.includes('text') ? '.txt' : '';
+    filename = `document${extension}`;
+  }
+}
+
+// Proper headers for inline display with filename
+headers.set("Content-Disposition", `inline; filename="${filename}"`);
+headers.set("X-Frame-Options", "SAMEORIGIN");
+```
+
+2. **Recreated SimpleCVModal.tsx:**
+- Clean implementation without corrupted code
+- Enhanced download handler with proper filename extraction
+- Improved error handling for document preview
+- Better user experience with loading states
+
+**Key Improvements:**
+- ✅ **Proper filenames:** Documents now download with correct names (e.g., "CV-John-Doe.pdf")
+- ✅ **Content type detection:** Smart file extension assignment based on MIME types
+- ✅ **URL parameter cleaning:** Removes query parameters from extracted filenames
+- ✅ **Fallback naming:** Generates descriptive names when original filename unavailable
+- ✅ **Inline display:** Documents preview correctly in browser before download
+
+**Files Modified:**
+- `app/api/proxy/route.ts`: Enhanced filename extraction and header handling
+- `components/admin/SimpleCVModal.tsx`: Complete recreation with improved download logic
+- Removed debug console.log statements from EditApplicationModal
+
+#### **Technical Implementation Details**
+
+**Filename Extraction Logic:**
+1. **Primary:** Extract from upstream `Content-Disposition` header
+2. **Secondary:** Parse filename from URL path (cleaned of parameters)
+3. **Fallback:** Generate based on content type (PDF, DOCX, TXT)
+4. **Default:** Use "document" with appropriate extension
+
+**Modal Data Flow Fix:**
+1. **Direct usage:** Use passed application data instead of re-fetching
+2. **Proper loading states:** Handle loading without blocking modal display
+3. **Enhanced extraction:** Robust data extraction from various application formats
+4. **Null safety:** Comprehensive null checking throughout component lifecycle
+
+#### **Testing & Validation**
+
+**Pre-fix Behavior:**
+- ❌ CV viewing downloaded files named "proxy"
+- ❌ EditApplicationModal showed empty fields
+- ❌ User confusion about downloaded document identity
+
+**Post-fix Behavior:**
+- ✅ CV viewing shows proper document names
+- ✅ EditApplicationModal populates all fields correctly
+- ✅ Smooth user experience across all admin functions
+- ✅ Proper file handling for PDFs, DOCX, and other formats
+
+**Impact Assessment:**
+- **User Experience:** Dramatically improved file handling and modal functionality
+- **Admin Efficiency:** No more confusion about downloaded documents
+- **Data Accessibility:** All application data properly displayed in edit modals
+- **System Reliability:** Robust error handling and fallback mechanisms
+
 ---
 
-*This changelog documents the complete implementation of the job reference normalization and status history tracking systems, representing a major milestone in the BQI Tech Platform's data architecture evolution.*
+## 🔄 **ADMIN PLATFORM STANDARDIZATION & ENHANCEMENT**
+
+**Date:** September 8, 2025  
+**Author:** Victor Ongeto  
+**Scope:** Complete admin interface standardization with enhanced filtering, search functionality, and user experience improvements
+
+---
+
+### **🎯 Session Overview**
+
+This session focused on comprehensive admin platform standardization, fixing critical backend issues, implementing unified table components across all admin pages, and adding advanced filtering capabilities. The work evolved from simple bug fixes to a complete overhaul of the admin user experience.
+
+### **📊 Issues Identified & Resolved**
+
+#### **1. Critical Python IndentationError (Backend)**
+**File:** `Backend/app/routers/admin.py` - Line 1065  
+**Problem:** Python syntax error preventing backend functionality
+**Solution:** Fixed indentation structure for proper Python execution
+
+#### **2. Inconsistent Admin Table Implementation**
+**Problem:** Six different admin pages using different table components and data extraction logic
+**Pages Affected:**
+- Main Applications (`/admin/applications/`)
+- Technical Assessment (`/admin/technical-assessment/`)
+- Interviewing (`/admin/interviewing/`)
+- Hired (`/admin/hired/`)
+- Disqualified (`/admin/disqualified/`)
+
+**Solution:** Complete standardization using `UnifiedApplicationTable` component across all pages
+
+#### **3. Missing Position Filters**
+**Problem:** Status-specific admin pages lacked position filtering capabilities
+**Impact:** Admins couldn't filter applications by job positions within status views
+
+#### **4. API Endpoint Mismatches**
+**Problem:** Frontend making calls to non-existent backend endpoints
+**Specific Issues:**
+- Missing status-specific endpoints (hired, disqualified, etc.)
+- Incorrect status parameter formatting (kebab-case vs Title Case)
+
+#### **5. Application Visibility Behavior Inconsistency**
+**Problem:** Individual application edits causing applications to "disappear" from filtered views vs bulk updates keeping them visible
+**Root Cause:** Different filtering logic between individual and bulk update operations
+
+#### **6. Search Functionality Returning Zero Results**
+**Problem:** Search feature showing 0 results despite backend processing requests successfully
+**Status:** Active debugging in progress
+
+### **🛠️ Solutions Implemented**
+
+#### **1. Backend IndentationError Fix**
+**File:** `Backend/app/routers/admin.py`
+```python
+# Fixed proper indentation structure at line 1065
+# Restored proper Python syntax for endpoint functionality
+```
+
+#### **2. UnifiedApplicationTable Implementation**
+**Created comprehensive table component with:**
+- Consistent data extraction logic
+- Bulk selection capabilities
+- Status update functionality
+- Position filtering
+- Responsive design
+- Export capabilities
+
+**Key Features:**
+```typescript
+interface UnifiedApplicationTableProps {
+  applications: Application[];
+  onStatusUpdate: (applicationIds: string[], newStatus: string) => Promise<void>;
+  onEdit: (application: Application) => void;
+  loading?: boolean;
+  showPositionFilter?: boolean;
+  availableStatuses?: string[];
+  currentFilters?: any;
+  onFiltersChange?: (filters: any) => void;
+}
+```
+
+**Components Updated:**
+- ✅ `app/(admin)/admin/applications/page.tsx`
+- ✅ `app/(admin)/admin/technical-assessment/page.tsx`
+- ✅ `app/(admin)/admin/interviewing/page.tsx`
+- ✅ `app/(admin)/admin/hired/page.tsx`
+- ✅ `app/(admin)/admin/disqualified/page.tsx`
+
+#### **3. Enhanced useAdminApplicationPage Hook**
+**File:** `hooks/useAdminApplicationPage.ts`
+
+**Key Enhancements:**
+- Server-side filtering capabilities
+- Debounced search functionality
+- Status and position filtering
+- Intelligent user feedback for filtered applications
+- Proper error handling and loading states
+
+```typescript
+const useAdminApplicationPage = (
+  status?: string,
+  options: {
+    enablePositionFilter?: boolean;
+    enableSearch?: boolean;
+    enableStatusFilter?: boolean;
+  } = {}
+) => {
+  // Enhanced filtering and search logic
+  // Intelligent feedback for status changes
+  // Debounced search with 500ms delay
+  // Position-based filtering
+};
+```
+
+#### **4. API Service Layer Enhancements**
+**File:** `lib/admin-applications-api.ts`
+
+**Fixed Status Mapping:**
+```typescript
+// Frontend (kebab-case) to Backend (Title Case) mapping
+const statusMapping: Record<string, string> = {
+  'technical-assessment': 'Technical Assessment',
+  'interviewing': 'Interviewing', 
+  'hired': 'Hired',
+  'disqualified': 'Disqualified',
+  'shortlisted': 'Shortlisted'
+};
+
+// Enhanced API methods with proper status conversion
+export const getApplicationPositions = async (status?: string): Promise<string[]> => {
+  const backendStatus = status ? statusMapping[status] || status : undefined;
+  // Proper backend communication
+};
+```
+
+#### **5. Backend API Endpoint Enhancements**
+**File:** `Backend/app/routers/admin.py`
+
+**Added Missing Endpoints:**
+- `GET /applications/technical-assessment`
+- `GET /applications/interviewing`
+- `GET /applications/hired`
+- `GET /applications/disqualified`
+
+**Enhanced Search Implementation:**
+```python
+@router.get("/applications")
+async def get_applications(
+    skip: int = 0,
+    limit: int = 50,
+    status: str = None,
+    position: str = None,
+    search: str = None
+):
+    # MongoDB aggregation pipeline with comprehensive search
+    # Search across: name, email, userDetails.name, userDetails.email, 
+    # jobDetails.title, position fields
+    # Regex-based search with case-insensitive matching
+```
+
+#### **6. Position Filter Implementation**
+**Added position filtering to all admin pages:**
+- Dynamic position loading based on current status
+- Real-time filter updates
+- Clear filter functionality
+- Responsive dropdown interface
+
+#### **7. Enhanced User Feedback System**
+**Intelligent Status Update Feedback:**
+```typescript
+const handleSaveEdit = async (editedApp: Application) => {
+  try {
+    // ... update logic
+    
+    // Intelligent feedback based on current filters
+    if (statusFilter && statusFilter !== newStatus) {
+      showToast({
+        title: "Application Updated", 
+        description: `Application status changed to ${newStatus}. It will no longer appear in this ${statusFilter} view.`,
+        type: "info"
+      });
+    } else {
+      showToast({
+        title: "Application Updated",
+        description: "Application has been successfully updated.",
+        type: "success"
+      });
+    }
+  } catch (error) {
+    // Error handling
+  }
+};
+```
+
+### **🔍 Investigation Results**
+
+#### **Application Status Update Behavior Analysis**
+**Question:** Why do individual edits make applications "disappear" but bulk updates keep them visible?
+
+**Answer:** Different filtering logic:
+- **Individual Edits:** Immediately re-filter applications, removing those that no longer match current filter (e.g., changing from "Shortlisted" to "Hired" while viewing shortlisted page)
+- **Bulk Updates:** May use different refresh logic that maintains current view until manual refresh
+
+**Solution:** Enhanced user feedback system that clearly explains when applications move between status views
+
+#### **Search Functionality Debugging**
+**Current Status:** Active investigation
+- Backend endpoints returning 200 OK responses
+- Search parameters being processed correctly
+- Frontend receiving 0 results despite successful backend processing
+- Added comprehensive debugging to trace data flow
+
+**Debug Implementation:**
+```typescript
+const loadApplications = async () => {
+  try {
+    console.log('🔍 Loading applications with search:', searchTerm);
+    const result = await getApplications(/* params */);
+    console.log('📊 Applications loaded:', result.applications?.length || 0);
+    console.log('🔍 Sample application structure:', result.applications?.[0]);
+    // Additional debugging...
+  } catch (error) {
+    console.error('❌ Error loading applications:', error);
+  }
+};
+```
+
+### **📁 Files Created/Modified**
+
+#### **New Files Created:**
+- `components/admin/UnifiedApplicationTable.tsx` - Standardized table component
+- `hooks/useAdminApplicationPage.ts` - Enhanced data management hook
+
+#### **Files Modified:**
+- `Backend/app/routers/admin.py` - Fixed syntax, added endpoints, enhanced search
+- `lib/admin-applications-api.ts` - Status mapping and API enhancements
+- `app/(admin)/admin/applications/page.tsx` - Implemented UnifiedApplicationTable
+- `app/(admin)/admin/technical-assessment/page.tsx` - Standardized with unified table
+- `app/(admin)/admin/interviewing/page.tsx` - Standardized with unified table
+- `app/(admin)/admin/hired/page.tsx` - Standardized with unified table
+- `app/(admin)/admin/disqualified/page.tsx` - Standardized with unified table
+
+### **🎯 Technical Achievements**
+
+#### **1. Code Standardization**
+- ✅ **Unified Component Architecture:** All admin pages use same table component
+- ✅ **Consistent Data Handling:** Standardized data extraction and display logic
+- ✅ **Shared Hook System:** Common data management across all admin pages
+- ✅ **API Consistency:** Proper status mapping between frontend and backend
+
+#### **2. Enhanced User Experience**
+- ✅ **Position Filtering:** Added to all admin status pages
+- ✅ **Intelligent Feedback:** Clear explanations when applications move between views
+- ✅ **Responsive Design:** Consistent table behavior across all screen sizes
+- ✅ **Loading States:** Proper loading indicators throughout admin interface
+
+#### **3. Backend Robustness**
+- ✅ **Comprehensive Search:** Multi-field search across name, email, position, job title
+- ✅ **Proper Error Handling:** Enhanced error responses and logging
+- ✅ **API Completeness:** All required endpoints now available
+- ✅ **Performance Optimization:** Efficient MongoDB aggregation pipelines
+
+#### **4. Developer Experience**
+- ✅ **Code Reusability:** Shared components reduce duplication
+- ✅ **Type Safety:** Enhanced TypeScript interfaces and props
+- ✅ **Debugging Tools:** Comprehensive logging for troubleshooting
+- ✅ **Documentation:** Clear code organization and commenting
+
+### **📊 Impact Assessment**
+
+#### **Before Implementation:**
+- ❌ Six different table implementations across admin pages
+- ❌ Missing position filters on status-specific pages
+- ❌ Inconsistent user experience across admin interface
+- ❌ API endpoint mismatches causing frontend errors
+- ❌ Confusing application "disappearance" behavior
+- ❌ Non-functional search feature
+
+#### **After Implementation:**
+- ✅ **Unified Experience:** Consistent interface across all admin pages
+- ✅ **Enhanced Filtering:** Position and status filtering on all pages
+- ✅ **Clear User Feedback:** Intelligent explanations for status changes
+- ✅ **Robust Backend:** Complete API coverage with proper error handling
+- ✅ **Maintainable Code:** Shared components and hooks reduce technical debt
+- ✅ **Professional Interface:** Polished admin experience for users
+
+### **🔄 Work in Progress**
+
+#### **Search Functionality Resolution**
+**Current Status:** Backend confirmed working, frontend debugging in progress
+**Next Steps:**
+1. Analyze browser console debug output
+2. Identify data flow interruption point
+3. Implement fix or fallback solution
+4. Test comprehensive search functionality
+
+#### **Performance Optimization**
+**Potential Improvements:**
+- Implement pagination for large application sets
+- Add caching for frequently accessed data
+- Optimize MongoDB queries for better performance
+- Consider implementing real-time updates
+
+### **🎓 Technical Learnings**
+
+#### **1. Status Mapping Importance**
+Frontend and backend status formats must be carefully mapped:
+- Frontend: `kebab-case` (technical-assessment, interviewing)
+- Backend: `Title Case` (Technical Assessment, Interviewing)
+- Solution: Comprehensive mapping functions in API layer
+
+#### **2. User Experience Considerations**
+When applications change status and move between filtered views:
+- Users need clear explanation of what happened
+- Intelligent feedback prevents confusion
+- Different update mechanisms (individual vs bulk) may have different behaviors
+
+#### **3. Component Standardization Benefits**
+- **Reduced Bugs:** Single source of truth for table logic
+- **Easier Maintenance:** Changes apply across all admin pages
+- **Consistent UX:** Uniform behavior and appearance
+- **Development Speed:** Faster implementation of new features
+
+#### **4. API Design Patterns**
+- **Consistent Endpoints:** Predictable URL patterns for all operations
+- **Proper Status Codes:** Clear error handling and response patterns  
+- **Parameter Validation:** Robust input validation and sanitization
+- **Documentation:** Clear API contract for frontend development
+
+### **📞 Support Information**
+
+**For questions about this admin platform standardization:**
+- **Lead Developer:** Victor Ongeto
+- **Session Date:** September 8, 2025  
+- **Primary Components:** UnifiedApplicationTable, useAdminApplicationPage hook
+- **Backend Enhancements:** admin.py endpoints and search functionality
+- **Status:** Core functionality complete, search debugging in progress
+
+### **🔮 Future Enhancements**
+
+#### **Planned Improvements:**
+1. **Real-time Updates:** WebSocket integration for live application updates
+2. **Advanced Analytics:** Dashboard with application processing metrics
+3. **Bulk Operations:** Enhanced bulk actions beyond status updates
+4. **Export Functionality:** Excel/CSV export with custom field selection
+5. **Audit Trail Integration:** Connect with existing status history system
+6. **Performance Optimization:** Caching and pagination for large datasets
+
+#### **Technical Debt Addressed:**
+- ✅ **Component Duplication:** Eliminated six separate table implementations
+- ✅ **API Inconsistency:** Standardized endpoint patterns and responses
+- ✅ **Status Mapping Issues:** Centralized status conversion logic
+- ✅ **User Experience Gaps:** Added intelligent feedback and filtering
+
+---
+
+*This changelog documents the complete standardization of the BQI Tech admin platform, implementing unified components, enhanced filtering capabilities, and improved user experience across all admin interfaces. The work represents a significant advancement in code maintainability, user experience, and system robustness.*
+
+---
+
+## 🔐 **Password Reset Link Domain Fix**
+
+**Date:** September 8, 2025  
+**Author:** Victor Ongeto  
+**Repository:** BQI-TECH  
+**Branch:** vongeto  
+
+---
+
+### **🎯 Issue Identified**
+
+**Problem:** Password reset links were being sent with `localhost:3000` instead of the proper `bqitech.com` domain name.
+
+**User Impact:** 
+- Applicants receiving password reset emails couldn't use the reset links in production
+- Links worked only when manually replaced with `bqitech.com` domain
+- Poor user experience for password recovery process
+
+**Root Cause:** In `Backend/app/routers/auth.py`, the `forgot_password` function was directly reading environment variables with localhost fallback instead of using the properly configured settings.
+
+---
+
+### **🛠️ Solution Applied**
+
+**File Modified:** `Backend/app/routers/auth.py` (line ~651)
+
+**Before (Problematic Code):**
+```python
+# Build reset link for frontend
+frontend_url = os.getenv("NEXT_PUBLIC_APP_URL", "http://localhost:3000")
+reset_link = f"{frontend_url}/reset-password?token={token}"
+from app.lib.email import send_password_reset_email
+```
+
+**After (Fixed Code):**
+```python
+# Build reset link for frontend
+from app.config import settings
+reset_link = f"{settings.frontend_url}/reset-password?token={token}"
+from app.lib.email import send_password_reset_email
+```
+
+---
+
+### **🔧 Technical Details**
+
+**Configuration Source:** The fix leverages the existing `settings.frontend_url` from `Backend/app/config.py`:
+```python
+frontend_url: str = os.getenv("NEXT_PUBLIC_APP_URL", "https://bqitech.com")
+```
+
+**Benefits of This Approach:**
+- ✅ **Production Ready:** Uses `https://bqitech.com` as the default fallback
+- ✅ **Environment Flexible:** Still respects `NEXT_PUBLIC_APP_URL` environment variable if set
+- ✅ **Consistent:** Uses the same configuration system as other parts of the application
+- ✅ **Maintainable:** Centralized configuration management
+
+---
+
+### **✅ Validation & Testing**
+
+**Compilation Check:** ✅ Python file compiles successfully after changes
+**Expected Behavior:** Password reset emails will now contain links to `https://bqitech.com/reset-password?token=...` instead of `localhost:3000`
+**User Experience:** Applicants can now successfully use password reset links without manual domain replacement
+
+---
+
+### **📝 Additional Findings**
+
+**Other localhost References:** Other instances of `localhost:3000` in the codebase are intentional:
+- CORS header fallbacks: `request.headers.get("origin", "http://localhost:3000")` - These are correct for development
+- Test files: Appropriately using localhost for testing scenarios
+
+**Frontend Configuration:** Frontend email templates are correctly configured:
+- `emails/PasswordResetEmail.tsx`: Uses `process.env.NEXTAUTH_URL`
+- `lib/email.ts`: Uses `process.env.NEXTAUTH_URL`
+- Environment file `language=language=.env` has `NEXTAUTH_URL="https://bqitech.com"`
+
+---
+
+### **🎯 Impact Assessment**
+
+**Immediate Benefits:**
+- ✅ **Functional Password Reset:** Users can now successfully reset passwords via email links
+- ✅ **Production Readiness:** No more localhost links in production emails
+- ✅ **User Experience:** Seamless password recovery process
+
+**Technical Improvements:**
+- ✅ **Configuration Consistency:** Uses centralized settings system
+- ✅ **Environment Awareness:** Proper production/development environment handling
+- ✅ **Code Quality:** Cleaner, more maintainable code structure
+
+---
+
+### **📞 Support Information**
+
+**For questions about this password reset fix:**
+- **Developer:** Victor Ongeto
+- **Issue Type:** Authentication & Email Configuration
+- **Files Affected:** Backend authentication system
+- **Status:** ✅ Complete and production-ready

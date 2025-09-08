@@ -5,7 +5,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Application } from "@/types/application";
+import { Application, StatusHistoryEntry } from "@/types/application";
+import { getCvUrl, getPositionDisplay } from "@/lib/admin-table-utils";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
@@ -24,12 +25,14 @@ interface ViewApplicationModalProps {
   application: Application | null;
   isOpen: boolean;
   onClose: () => void;
+  jobTitles?: Record<string, string>;
 }
 
 export function ViewApplicationModal({
   application,
   isOpen,
   onClose,
+  jobTitles = {},
 }: ViewApplicationModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [previewError, setPreviewError] = useState(false);
@@ -77,6 +80,13 @@ export function ViewApplicationModal({
 
       // Route through our proxy to bypass X-Frame-Options and CORS for allowed hosts
       const proxied = `/api/proxy?url=${encodeURIComponent(parsed.toString())}`;
+      
+      // Add zoom parameter for PDF files to set a better default view
+      // #zoom=75 sets the PDF to 75% zoom which is more readable
+      if (isPdfPath || isDropbox) {
+        return proxied + '#zoom=75&toolbar=1&navpanes=0';
+      }
+      
       // If it's a direct PDF, the proxy will stream as application/pdf inline
       // For non-PDFs, many providers still send a PDF or preview-able content; proxy handles headers
       return proxied;
@@ -173,7 +183,7 @@ export function ViewApplicationModal({
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Applied Position</p>
                     <p className="text-sm sm:text-base text-gray-700 font-medium break-words">
-                      {application.position || 'N/A'}
+                      {getPositionDisplay(application, jobTitles)}
                     </p>
                   </div>
                   <div>
@@ -214,22 +224,13 @@ export function ViewApplicationModal({
                           {answer.answer || 'No answer provided'}
                         </div>
                       ) : (
-                        <div className="space-y-3">
-                          <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 break-all">
-                            <Link href={String(answer.answer)} target="_blank" className="text-blue-600 underline">
-                              {String(answer.answer)}
-                            </Link>
-                          </div>
-                          <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
-                            <iframe
-                              title="Resume Preview"
-                              src={getPreviewUrl(String(answer.answer))}
-                              className="w-full h-full"
-                              referrerPolicy="no-referrer"
-                              allow="fullscreen"
-                              onError={() => setPreviewError(true)}
-                            />
-                          </div>
+                        <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 break-all">
+                          <Link href={String(answer.answer)} target="_blank" className="text-blue-600 underline">
+                            {String(answer.answer)}
+                          </Link>
+                          <p className="text-xs text-gray-500 mt-2">
+                            CV preview is available in the "Attached Documents" section below
+                          </p>
                         </div>
                       )}
                     </div>
@@ -243,56 +244,59 @@ export function ViewApplicationModal({
               </div>
             </div>
 
-            {/* CV Section */}
-            {application.cvUrl && (
-              <div className="p-4 sm:p-5 bg-white border border-gray-100 rounded-lg sm:rounded-xl shadow-sm">
-                <h4 className="text-sm sm:text-base font-semibold text-gray-500 flex items-center gap-2 mb-4 sm:mb-5">
-                  <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 flex-shrink-0" />
-                  <span>Attached Documents</span>
-                </h4>
-                <div className="p-3 sm:p-4 bg-gray-50 rounded-lg space-y-3 sm:space-y-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2 sm:p-3 bg-white rounded-lg shadow-sm flex-shrink-0">
-                      <FileTextIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm sm:text-base font-medium text-gray-700 truncate">Candidate CV</p>
-                      <p className="text-xs sm:text-sm text-gray-400">Uploaded {formatDate(application.appliedDate)}</p>
-                    </div>
-                    <Link
-                      href={application.cvUrl}
-                      target="_blank"
-                      className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
-                    >
-                      <span>Open in new tab</span>
-                      <ArrowUpRightIcon className="w-4 h-4" />
-                    </Link>
-                  </div>
-
-                  {!previewError ? (
-                    <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
-                      <iframe
-                        title="CV Preview"
-                        src={getPreviewUrl(application.cvUrl)}
-                        className="w-full h-full"
-                        referrerPolicy="no-referrer"
-                        allow="fullscreen"
-                        onError={() => setPreviewError(true)}
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-600">
-                      Unable to preview this document inline. You can
-                      {" "}
-                      <Link href={application.cvUrl} target="_blank" className="text-blue-600 underline">
-                        open it in a new tab
+            {/* CV Section - Enhanced to detect CV from answers or cvUrl field */}
+            {(() => {
+              const cvUrl = getCvUrl(application);
+              return cvUrl ? (
+                <div className="p-4 sm:p-5 bg-white border border-gray-100 rounded-lg sm:rounded-xl shadow-sm">
+                  <h4 className="text-sm sm:text-base font-semibold text-gray-500 flex items-center gap-2 mb-4 sm:mb-5">
+                    <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 flex-shrink-0" />
+                    <span>Attached Documents</span>
+                  </h4>
+                  <div className="p-3 sm:p-4 bg-gray-50 rounded-lg space-y-3 sm:space-y-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 sm:p-3 bg-white rounded-lg shadow-sm flex-shrink-0">
+                        <FileTextIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm sm:text-base font-medium text-gray-700 truncate">Candidate CV</p>
+                        <p className="text-xs sm:text-sm text-gray-400">Uploaded {formatDate(application.appliedDate)}</p>
+                      </div>
+                      <Link
+                        href={cvUrl}
+                        target="_blank"
+                        className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
+                      >
+                        <span>Open in new tab</span>
+                        <ArrowUpRightIcon className="w-4 h-4" />
                       </Link>
-                      .
                     </div>
-                  )}
+
+                    {!previewError ? (
+                      <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <iframe
+                          title="CV Preview"
+                          src={getPreviewUrl(cvUrl)}
+                          className="w-full h-full"
+                          referrerPolicy="no-referrer"
+                          allow="fullscreen"
+                          onError={() => setPreviewError(true)}
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-600">
+                        Unable to preview this document inline. You can
+                        {" "}
+                        <Link href={cvUrl} target="_blank" className="text-blue-600 underline">
+                          open it in a new tab
+                        </Link>
+                        .
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null;
+            })()}
 
             {/* Bottom padding for mobile scroll */}
             <div className="h-4 sm:h-0" />

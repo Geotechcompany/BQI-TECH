@@ -3,12 +3,13 @@
 import { Application } from "@/types/application";
 import { Button } from "@/components/ui/button";
 import { Eye, Pencil, Trash2, Briefcase } from "lucide-react";
-import Link from "next/link";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, getCvUrl } from "@/lib/admin-table-utils";
+import { CVCell } from "@/components/admin/CVCell";
 
 interface Column<T> {
   header: string;
   accessor: (row: T) => string | number | Date;
-  cell?: (value: ReturnType<Column<T>['accessor']>) => React.ReactNode;
+  cell?: (value: ReturnType<Column<T>['accessor']>, row: T) => React.ReactNode;
 }
 
 interface HiredTableProps {
@@ -19,63 +20,62 @@ interface HiredTableProps {
   onDelete: (id: string) => void;
 }
 
-const isUUID = (str: string) => 
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
-
 export function HiredTable({ applications, jobTitles, onView, onEdit, onDelete }: HiredTableProps) {
   const columns: Column<Application>[] = [
     { 
       header: "Applicant", 
-      accessor: (row: Application) => {
-        if (row.name) return row.name;
-        const firstName = row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('first name')
-        )?.answer || '';
-        const lastName = row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('last name')
-        )?.answer || '';
-        return `${firstName} ${lastName}`.trim() || 'N/A';
-      }
+      accessor: (row: Application) => getNameDisplay(row)
     },
     { 
       header: "Email", 
-      accessor: (row: Application) => 
-        row.email || row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('email')
-        )?.answer || 'N/A'
+      accessor: (row: Application) => getEmailDisplay(row)
     },
     { 
       header: "Position", 
-      accessor: (row: Application) => {
-        if (row.position && !isUUID(row.position)) return row.position;
-        if (row.position && isUUID(row.position)) return jobTitles[row.position] || row.position;
-        return row.answers?.find(a => 
-          a.questionText.toLowerCase().includes('position')
-        )?.answer || 'N/A';
-      }
+      accessor: (row: Application) => getPositionDisplay(row, jobTitles)
     },
     { 
-      header: "Hire Date", 
-      accessor: (row: Application) => new Date(row.hireDate),
-      cell: (date: Date) => date.toLocaleDateString()
+      header: "Hired Date", 
+      accessor: (row: Application) => {
+        if (row.hireDate) {
+          try {
+            const date = new Date(row.hireDate);
+            if (isNaN(date.getTime())) {
+              return 'Invalid Date';
+            }
+            return date;
+          } catch (error) {
+            return 'Invalid Date';
+          }
+        }
+        return 'Not Set';
+      },
+      cell: (value: Date | string) => value instanceof Date ? value.toLocaleDateString() : value
     },
     { 
       header: "Start Date", 
-      accessor: (row: Application) => new Date(row.startDate),
-      cell: (date: Date) => date.toLocaleDateString()
-    },
-    { 
-      header: "Salary", 
-      accessor: (row: Application) => row.salary || 'N/A'
+      accessor: (row: Application) => {
+        if (row.startDate) {
+          try {
+            const date = new Date(row.startDate);
+            if (isNaN(date.getTime())) {
+              return 'Invalid Date';
+            }
+            return date;
+          } catch (error) {
+            return 'Invalid Date';
+          }
+        }
+        return 'TBD';
+      },
+      cell: (value: Date | string) => value instanceof Date ? value.toLocaleDateString() : value
     },
     { 
       header: "CV", 
-      accessor: (row: Application) => row.cvUrl || '',
-      cell: (value: string) => value ? (
-        <Link href={value} target="_blank" className="text-blue-600 hover:underline">
-          View CV
-        </Link>
-      ) : 'N/A'
+      accessor: (row: Application) => getCvUrl(row),
+      cell: (value: string, row: Application) => (
+        <CVCell cvUrl={value} candidateName={getNameDisplay(row)} />
+      )
     }
   ];
 

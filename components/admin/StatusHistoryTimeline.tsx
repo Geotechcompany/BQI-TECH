@@ -12,7 +12,7 @@ import {
   CheckCircle, 
   Code, 
   Users, 
-  CheckBadgeIcon, 
+  CheckCircle2, 
   XCircle, 
   MinusCircle,
   ChevronDown,
@@ -40,7 +40,7 @@ const StatusIcons = {
   'check-circle': CheckCircle,
   'code': Code,
   'users': Users,
-  'check-badge': CheckBadgeIcon,
+  'check-badge': CheckCircle2,
   'x-circle': XCircle,
   'minus-circle': MinusCircle
 };
