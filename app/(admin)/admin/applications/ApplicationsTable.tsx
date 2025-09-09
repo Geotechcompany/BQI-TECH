@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { getNameDisplay, getEmailDisplay, getPositionDisplay, getCvUrl } from "@/lib/admin-table-utils";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, getCvUrl } from "../../../../lib/admin-table-utils";
 import { CVCell } from "@/components/admin/CVCell";
 
 interface Column<T> {

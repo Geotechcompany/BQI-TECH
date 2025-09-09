@@ -3,7 +3,7 @@
 import { Application } from "@/types/application";
 import { Button } from "@/components/ui/button";
 import { Eye, Pencil, Trash2, Users, CalendarCheck } from "lucide-react";
-import { getNameDisplay, getEmailDisplay, getPositionDisplay, getCvUrl } from "@/lib/admin-table-utils";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, getCvUrl } from "../../lib/admin-table-utils";
 import { CVCell } from "@/components/admin/CVCell";
 
 interface Column<T> {
