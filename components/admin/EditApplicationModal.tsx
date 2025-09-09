@@ -21,7 +21,7 @@ import { SelectItemIndicator, SelectItemText } from "@radix-ui/react-select";
 import { Card } from "@/components/ui/card";
 import { Mail, User, Briefcase, FileText } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers } from "../../lib/admin-table-utils";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers } from "@/lib/admin-table-utils";
 
 interface EditApplicationModalProps {
   application: Application | null;

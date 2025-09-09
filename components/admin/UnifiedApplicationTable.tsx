@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Application } from "@/types/application";
 import { Button } from "@/components/ui/button";
 import { Eye, Pencil, Trash2, ClipboardList, CheckSquare, Settings } from "lucide-react";
-import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "../../lib/admin-table-utils";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "@/lib/admin-table-utils";
 import { CVCell } from "@/components/admin/CVCell";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
