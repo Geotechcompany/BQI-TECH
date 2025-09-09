@@ -116,10 +116,12 @@ const nextConfig = {
     },
     transpilePackages: ['@uiw/react-md-editor', 'react-beautiful-dnd'],
     async rewrites() {
-        return [{
-            source: '/sitemap.xml',
-            destination: '/api/sitemap',
-        }, ]
+        return [
+            {
+                source: '/sitemap.xml',
+                destination: '/api/sitemap',
+            },
+        ]
     },
     output: 'standalone',
 };
