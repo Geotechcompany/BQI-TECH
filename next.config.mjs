@@ -82,6 +82,15 @@ const nextConfig = {
             };
         }
 
+        // Add explicit module resolution for @ alias
+        config.resolve.alias = {
+            ...config.resolve.alias,
+            '@': process.cwd(),
+        };
+
+        // Force case-sensitive module resolution (like Linux)
+        config.resolve.plugins = config.resolve.plugins || [];
+        
         config.module.rules.push({
             test: /\.(mpwebm)$/,
             use: {

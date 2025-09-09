@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminApplicationsApi, type ApplicationFilters } from '@/lib/admin-applications-api';
+import { adminApplicationsApi, type ApplicationFilters } from '@/lib';
 import { Application } from '@/types/application';
 import { toast } from 'react-hot-toast';
 import { useDebounce } from './useDebounce';

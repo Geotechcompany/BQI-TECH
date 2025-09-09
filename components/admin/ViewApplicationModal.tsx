@@ -6,7 +6,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Application, StatusHistoryEntry } from "@/types/application";
-import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "@/lib/admin-table-utils";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "@/lib";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
