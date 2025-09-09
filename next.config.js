@@ -87,12 +87,6 @@ const nextConfig = {
             };
         }
 
-        // Ensure proper alias resolution
-        config.resolve.alias = {
-            ...config.resolve.alias,
-            '@': '.',
-        };
-
         config.module.rules.push({
             test: /\.(mpwebm)$/,
             use: {

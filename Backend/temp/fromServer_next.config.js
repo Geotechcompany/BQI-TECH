@@ -9,12 +9,8 @@ const nextConfig = {
     swcMinify: true,
     images: {
         domains: [
-            'res.cloudinary.com',
-            'images.unsplash.com',
-            'localhost',
-            'via.placeholder.com',
-            'app.thinkstack.ai',
             'upload.wikimedia.org',
+            'images.unsplash.com',
             'd1.awsstatic.com',
             'dl.dropboxusercontent.com',
             'bqitech.com',
@@ -30,8 +26,7 @@ const nextConfig = {
         minimumCacheTTL: 60,
         dangerouslyAllowSVG: true,
         contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-        remotePatterns: [
-            {
+        remotePatterns: [{
                 protocol: 'https',
                 hostname: '**.dropboxusercontent.com',
                 port: '',
@@ -52,23 +47,33 @@ const nextConfig = {
         ]
     },
     async headers() {
-        return [{
-            source: '/(.*)',
-            headers: [{
+        const isProduction = process.env.NODE_ENV === 'production';
+
+        const cspDirectives = [
+            `default-src 'self' https://app.thinkstack.ai`,
+            `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.thinkstack.ai https://app.thinkstack.ai/bot/thinkstackai-loader.min.js`,
+            `script-src-elem 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://static.elfsight.com https://app.thinkstack.ai https://app.thinkstack.ai/bot/thinkstackai-loader.min.js`,
+            `style-src 'self' 'unsafe-inline' https://app.thinkstack.ai`,
+            `img-src 'self' data: blob: https://dl.dropboxusercontent.com https://images.unsplash.com https://app.thinkstack.ai`,
+            `connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk-telemetry.com https://*.googletagmanager.com https://www.googletagmanager.com https://www.google-analytics.com https://accounts.google.com https://hcaptcha.com https://sentry.hcaptcha.com ${process.env.NODE_ENV === 'development' ? 'ws://localhost:3000/_next/webpack-hmr http://localhost:9000' : ''} https://organic-hound-41949.upstash.io https://bqitech-nonprod-1.onrender.com https://bqitech.com https://core.service.elfsight.com https://app.thinkstack.ai https://app.thinkstack.ai/bot/thinkstackai-loader.min.js`,
+            `frame-src 'self' https://www.google.com https://maps.google.com https://www.google.com/recaptcha/ https://app.thinkstack.ai`,
+            `font-src 'self' data: https://app.thinkstack.ai`
+        ];
+
+        const securityHeaders = [{
                 key: 'Content-Security-Policy',
-                value: [
-                    "default-src 'self'",
-                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://ssl.google-analytics.com https://app.thinkstack.ai https://api.thinkstack.ai",
-                    "script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://ssl.google-analytics.com https://app.thinkstack.ai https://api.thinkstack.ai",
-                    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://app.thinkstack.ai",
-                    "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://app.thinkstack.ai",
-                    "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk-telemetry.com https://*.googletagmanager.com https://www.googletagmanager.com https://www.google-analytics.com https://accounts.google.com https://hcaptcha.com https://sentry.hcaptcha.com https://organic-hound-41949.upstash.io https://bqitech-nonprod-1.onrender.com https://bqitech.com https://core.service.elfsight.com https://app.thinkstack.ai https://api.thinkstack.ai wss://api.thinkstack.ai",
-                    "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
-                    "img-src 'self' data: https://*",
-                    "frame-src 'self' https://www.google.com https://maps.google.com https://app.thinkstack.ai https://api.thinkstack.ai",
-                ].join('; ')
-            }]
-        }]
+                value: cspDirectives.join('; ')
+            },
+            {
+                key: 'X-Content-Type-Options',
+                value: 'nosniff'
+            }
+        ];
+
+        return [{
+            source: '/:path*',
+            headers: securityHeaders
+        }];
     },
     webpack: (config, { isServer }) => {
         if (!isServer) {
@@ -97,8 +102,7 @@ const nextConfig = {
         return config;
     },
     async redirects() {
-        return [
-            {
+        return [{
                 source: '/admin',
                 destination: '/admin/overview',
                 permanent: true,
@@ -112,14 +116,12 @@ const nextConfig = {
     },
     transpilePackages: ['@uiw/react-md-editor', 'react-beautiful-dnd'],
     async rewrites() {
-        return [
-            {
-                source: '/sitemap.xml',
-                destination: '/api/sitemap',
-            },
-        ]
+        return [{
+            source: '/sitemap.xml',
+            destination: '/api/sitemap',
+        }, ]
     },
     output: 'standalone',
 };
 
-export default nextConfig;
+module.exports = nextConfig;
