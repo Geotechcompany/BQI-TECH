@@ -104,13 +104,15 @@
         "swr": "^2.3.3",
         "tailwind-merge": "^2.5.4",
         "tailwindcss-animate": "^1.0.7",
+        "@tailwindcss/typography": "^0.5.15",
+        "tailwindcss": "^3.4.1",
+        "postcss": "^8",
         "three": "^0.170.0",
         "xlsx": "^0.18.5",
         "zod": "^3.22.4",
         "zxcvbn": "^4.4.2"
     },
     "devDependencies": {
-        "@tailwindcss/typography": "^0.5.15",
         "@types/node": "^20",
         "@types/nodemailer": "^6.4.16",
         "@types/react": "^18",
@@ -121,8 +123,6 @@
         "eslint": "^8",
         "eslint-config-next": "14.2.15",
         "ora": "^8.2.0",
-        "postcss": "^8",
-        "tailwindcss": "^3.4.1",
         "ts-node": "^10.9.2",
         "typescript": "^5"
     },
