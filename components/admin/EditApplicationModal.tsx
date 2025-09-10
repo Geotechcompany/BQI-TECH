@@ -18,17 +18,17 @@ import {
 import { Application } from "@/types/application";
 import { motion } from "framer-motion";
 import { SelectItemIndicator, SelectItemText } from "@radix-ui/react-select";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
-import { Loader2, Mail, User, Briefcase, FileText } from "lucide-react";
+import { Mail, User, Briefcase, FileText } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers } from "./utils/table-utils";
 
 interface EditApplicationModalProps {
   application: Application | null;
   isOpen: boolean;
   onClose: () => void;
   onSave: (updatedApplication: Application) => void;
+  jobTitles?: Record<string, string>;
 }
 
 export function EditApplicationModal({
@@ -36,60 +36,85 @@ export function EditApplicationModal({
   isOpen,
   onClose,
   onSave,
+  jobTitles = {},
 }: EditApplicationModalProps) {
   const [editedApplication, setEditedApplication] =
     useState<Application | null>(null);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [position, setPosition] = useState("");
 
-  const { data: fullApplication, isLoading } = useQuery<Application>({
-    queryKey: ['application', application?.id],
-    queryFn: () => api.get(`/api/admin/applications/${application?.id}`).then(res => res.data),
-    enabled: !!application?.id && isOpen
-  });
+  // We'll use the application data directly instead of fetching
+  // const { data: fullApplication, isLoading } = useQuery<Application>({
+  //   queryKey: ['application', application?.id],
+  //   queryFn: () => api.get(`/api/admin/applications/${application?.id}`).then(res => res.data),
+  //   enabled: !!application?.id && isOpen
+  // });
 
   const statusOptions = [
-    { value: "Applied", color: "bg-gray-100 text-gray-700" },
-    { value: "In Review", color: "bg-yellow-100 text-yellow-700" },
-    { value: "Technical Assessment", color: "bg-blue-100 text-blue-700" },
+    { value: "New", color: "bg-blue-100 text-blue-700" },
+    { value: "Shortlisted", color: "bg-orange-100 text-orange-700" },
+    { value: "Technical Assessment", color: "bg-indigo-100 text-indigo-700" },
     { value: "Interviewing", color: "bg-purple-100 text-purple-700" },
     { value: "Hired", color: "bg-green-100 text-green-700" },
     { value: "Rejected", color: "bg-red-100 text-red-700" },
-    { value: "Shortlisted", color: "bg-orange-100 text-orange-700" },
     { value: "Disqualified", color: "bg-pink-100 text-pink-700" }
   ];
 
   useEffect(() => {
-    if (fullApplication) {
-      setEditedApplication(fullApplication);
+    if (application && isOpen) {
+      // Use the application data directly instead of fetching
+      setEditedApplication(application);
+      
+      // Extract data from different sources (direct fields or answers array)
+      const extractedFirstName = extractDataFromAnswers(application.answers || [], 'name', application.user)
+        .split(' ')[0] || application.name?.split(' ')[0] || '';
+      const extractedLastName = extractDataFromAnswers(application.answers || [], 'name', application.user)
+        .split(' ').slice(1).join(' ') || application.name?.split(' ').slice(1).join(' ') || '';
+      const extractedEmail = getEmailDisplay(application);
+      const extractedPosition = getPositionDisplay(application, jobTitles);
+      
+      setFirstName(extractedFirstName);
+      setLastName(extractedLastName);
+      setEmail(extractedEmail);
+      setPosition(extractedPosition);
     }
-  }, [fullApplication]);
-
-  if (!editedApplication) return null;
+  }, [application, jobTitles, isOpen]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setEditedApplication((prev) => ({ ...prev!, [name]: value }));
+    
+    if (name === 'firstName') {
+      setFirstName(value);
+      // Update the combined name in the application
+      const combinedName = `${value} ${lastName}`.trim();
+      setEditedApplication((prev) => prev ? { ...prev, name: combinedName } : null);
+    } else if (name === 'lastName') {
+      setLastName(value);
+      // Update the combined name in the application
+      const combinedName = `${firstName} ${value}`.trim();
+      setEditedApplication((prev) => prev ? { ...prev, name: combinedName } : null);
+    } else if (name === 'email') {
+      setEmail(value);
+      setEditedApplication((prev) => prev ? { ...prev, email: value } : null);
+    } else if (name === 'position') {
+      setPosition(value);
+      setEditedApplication((prev) => prev ? { ...prev, position: value } : null);
+    } else {
+      setEditedApplication((prev) => prev ? { ...prev, [name]: value } : null);
+    }
   };
 
   const handleStatusChange = (value: string) => {
-    setEditedApplication((prev) => ({ ...prev!, status: value }));
+    setEditedApplication((prev) => prev ? { ...prev, status: value } : null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editedApplication) return;
     onSave(editedApplication);
   };
-
-  if (isLoading) {
-    return (
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl rounded-2xl">
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-          </div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -108,11 +133,24 @@ export function EditApplicationModal({
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                     <User className="w-4 h-4 text-blue-500" />
-                    Candidate Name
+                    First Name
                   </label>
                   <Input
-                    name="name"
-                    value={editedApplication.name}
+                    name="firstName"
+                    value={firstName}
+                    onChange={handleInputChange}
+                    className="bg-white border-gray-200 hover:border-gray-300"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                    <User className="w-4 h-4 text-blue-500" />
+                    Last Name
+                  </label>
+                  <Input
+                    name="lastName"
+                    value={lastName}
                     onChange={handleInputChange}
                     className="bg-white border-gray-200 hover:border-gray-300"
                   />
@@ -126,7 +164,7 @@ export function EditApplicationModal({
                   <Input
                     name="email"
                     type="email"
-                    value={editedApplication.email}
+                    value={email}
                     onChange={handleInputChange}
                     className="bg-white border-gray-200 hover:border-gray-300"
                   />
@@ -139,7 +177,7 @@ export function EditApplicationModal({
                   </label>
                   <Input
                     name="position"
-                    value={editedApplication.position}
+                    value={position}
                     onChange={handleInputChange}
                     className="bg-white border-gray-200 hover:border-gray-300"
                   />
@@ -150,7 +188,7 @@ export function EditApplicationModal({
                     Application Status
                   </label>
                   <Select
-                    value={editedApplication.status}
+                    value={editedApplication?.status || ""}
                     onValueChange={handleStatusChange}
                   >
                     <SelectTrigger className="bg-white border-gray-200 hover:border-gray-300">
@@ -180,7 +218,7 @@ export function EditApplicationModal({
                 Application Answers
               </h3>
               <div className="space-y-4">
-                {editedApplication.answers?.map((answer, index) => (
+                {editedApplication?.answers?.map((answer, index) => (
                   <div key={index} className="space-y-1">
                     <p className="text-sm font-medium text-gray-600">{answer.questionText}</p>
                     <Input

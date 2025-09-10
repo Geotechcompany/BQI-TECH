@@ -73,6 +73,26 @@ app.add_middleware(SlowAPIMiddleware)
 
 # Add security headers middleware
 @app.middleware("http")
+async def debug_requests(request: Request, call_next):
+    # Log all requests to our bulk-status endpoint
+    if "bulk-status" in str(request.url):
+        logger.info(f"=== MIDDLEWARE DEBUG: bulk-status request ===")
+        logger.info(f"Method: {request.method}")
+        logger.info(f"URL: {request.url}")
+        logger.info(f"Headers: {dict(request.headers)}")
+        logger.info(f"Content-Type: {request.headers.get('content-type')}")
+        # Don't read the body here - it consumes the stream
+    
+    response = await call_next(request)
+    
+    # Log the response for bulk-status requests
+    if "bulk-status" in str(request.url):
+        logger.info(f"Response status: {response.status_code}")
+        logger.info(f"Response headers: {dict(response.headers)}")
+    
+    return response
+
+@app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     

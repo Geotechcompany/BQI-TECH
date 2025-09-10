@@ -688,6 +688,11 @@ async def update_application(
             logger.error(f"Error converting application ID {application_id} to ObjectId: {str(e)}")
             raise HTTPException(status_code=400, detail="Invalid application ID format")
         
+        # Remove immutable and server-managed fields if present in payload
+        for key in ["_id", "id", "createdAt"]:
+            if key in application:
+                application.pop(key, None)
+        
         # Add update timestamp
         application["updatedAt"] = datetime.utcnow()
         

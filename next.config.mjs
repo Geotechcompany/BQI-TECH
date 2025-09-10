@@ -1,13 +1,55 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    eslint: {
+        ignoreDuringBuilds: true,
+    },
+    poweredByHeader: false,
+    compress: true,
+    reactStrictMode: true,
+    swcMinify: true,
     images: {
         domains: [
             'res.cloudinary.com',
             'images.unsplash.com',
             'localhost',
             'via.placeholder.com',
-            'app.thinkstack.ai'
+            'app.thinkstack.ai',
+            'upload.wikimedia.org',
+            'd1.awsstatic.com',
+            'dl.dropboxusercontent.com',
+            'bqitech.com',
+            'cdn.pixabay.com',
+            'img.freepik.com',
+            'source.unsplash.com',
+            'picsum.photos',
+            'images.pexels.com'
         ],
+        formats: ['image/webp', 'image/avif'],
+        deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+        imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+        minimumCacheTTL: 60,
+        dangerouslyAllowSVG: true,
+        contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+        remotePatterns: [
+            {
+                protocol: 'https',
+                hostname: '**.dropboxusercontent.com',
+                port: '',
+                pathname: '/**',
+            },
+            {
+                protocol: 'https',
+                hostname: '**.unsplash.com',
+                port: '',
+                pathname: '/**',
+            },
+            {
+                protocol: 'https',
+                hostname: '**.bqitech.com',
+                port: '',
+                pathname: '/**',
+            }
+        ]
     },
     async headers() {
         return [{
@@ -27,7 +69,66 @@ const nextConfig = {
                 ].join('; ')
             }]
         }]
-    }
+    },
+    webpack: (config, { isServer }) => {
+        if (!isServer) {
+            config.resolve.fallback = {
+                ...config.resolve.fallback,
+                fs: false,
+                net: false,
+                tls: false,
+                dns: false,
+                child_process: false,
+            };
+        }
+
+        // Add explicit module resolution for @ alias
+        config.resolve.alias = {
+            ...config.resolve.alias,
+            '@': process.cwd(),
+        };
+
+        // Force case-sensitive module resolution (like Linux)
+        config.resolve.plugins = config.resolve.plugins || [];
+        
+        config.module.rules.push({
+            test: /\.(mpwebm)$/,
+            use: {
+                loader: "file-loader",
+                options: {
+                    publicPath: "/_next/static/videos/",
+                    outputPath: "static/videos/",
+                    name: "[name].[hash].[ext]",
+                },
+            },
+        });
+
+        return config;
+    },
+    async redirects() {
+        return [
+            {
+                source: '/admin',
+                destination: '/admin/overview',
+                permanent: true,
+            },
+            {
+                source: '/dashboard',
+                destination: '/dashboard/overview',
+                permanent: true,
+            }
+        ];
+    },
+    transpilePackages: ['@uiw/react-md-editor', 'react-beautiful-dnd'],
+    async rewrites() {
+        return [
+            {
+                source: '/sitemap.xml',
+                destination: '/api/sitemap',
+            },
+        ]
+    },
+    output: 'standalone',
 };
 
 export default nextConfig;

@@ -74,15 +74,15 @@ export default function DataTable({
 
   const statusOptions = [
     { 
-      label: "Applications", 
-      value: "Applications", 
+      label: "New", 
+      value: "New", 
       color: "bg-blue-500",
       icon: ClipboardList 
     },
     { 
       label: "Shortlisted", 
       value: "Shortlisted", 
-      color: "bg-yellow-500",
+      color: "bg-orange-500",
       icon: UserCheck 
     },
     { 
@@ -104,9 +104,15 @@ export default function DataTable({
       icon: UserCheck 
     },
     { 
+      label: "Rejected", 
+      value: "Rejected", 
+      color: "bg-red-500",
+      icon: XCircle 
+    },
+    { 
       label: "Disqualified", 
       value: "Disqualified", 
-      color: "bg-red-500",
+      color: "bg-pink-500",
       icon: XCircle 
     }
   ];

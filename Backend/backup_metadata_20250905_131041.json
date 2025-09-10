@@ -1,0 +1,11 @@
+{
+  "backup_timestamp": "2025-09-05T13:10:42.229024",
+  "applications_count": 396,
+  "jobpostings_count": 3,
+  "backup_type": "pre_migration",
+  "migration_purpose": "job_reference_system_and_status_history",
+  "files": {
+    "applications": "applications_backup_20250905_131041.json",
+    "jobpostings": "jobpostings_backup_20250905_131041.json"
+  }
+}

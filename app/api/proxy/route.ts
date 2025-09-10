@@ -53,11 +53,39 @@ export async function GET(request: Request) {
     // Stream the body through
     const contentType = upstreamResponse.headers.get("content-type") || "application/octet-stream";
     const isPdf = contentType.includes("pdf") || /\.pdf($|\?)/i.test(parsed.pathname + parsed.search);
+    
+    // Extract filename from URL or Content-Disposition header
+    let filename = "document";
+    const contentDisposition = upstreamResponse.headers.get("content-disposition");
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+    } else {
+      // Extract filename from URL path
+      const pathParts = parsed.pathname.split('/');
+      const lastPart = pathParts[pathParts.length - 1];
+      if (lastPart && lastPart.includes('.')) {
+        // Clean up the filename by removing URL parameters and keeping only the base name
+        filename = lastPart.split('?')[0];
+      } else if (isPdf) {
+        filename = "document.pdf";
+      } else {
+        // Try to detect file extension from content type
+        const extension = contentType.includes('pdf') ? '.pdf' : 
+                         contentType.includes('word') ? '.docx' : 
+                         contentType.includes('text') ? '.txt' : '';
+        filename = `document${extension}`;
+      }
+    }
+    
     const headers = new Headers();
     headers.set("Content-Type", isPdf ? "application/pdf" : contentType);
-    headers.set("Content-Disposition", "inline");
+    headers.set("Content-Disposition", `inline; filename="${filename}"`);
     // Allow embedding in iframe from our own origin
     headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Frame-Options", "SAMEORIGIN");
 
     return new NextResponse(upstreamResponse.body, {
       status: 200,

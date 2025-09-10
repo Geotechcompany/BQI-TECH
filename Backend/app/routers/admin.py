@@ -16,6 +16,23 @@ import re
 
 router = APIRouter(tags=["admin"])
 
+# Job Reference System Integration
+try:
+    import sys
+    backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
+    if backend_dir not in sys.path:
+        sys.path.append(backend_dir)
+    
+    from job_reference_system import (
+        resolve_job_titles, 
+        get_applications_with_job_info,
+        extract_data_from_answers_with_job_resolution
+    )
+    JOB_REFERENCE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Job reference system not available: {e}")
+    JOB_REFERENCE_AVAILABLE = False
+
 def convert_objectids_to_strings(doc):
     """Convert ObjectIds to strings in a document"""
     if isinstance(doc, list):
@@ -39,6 +56,36 @@ def generate_slug(title: str) -> str:
     slug = re.sub(r'[^\w\s-]', '', slug)
     slug = re.sub(r'[-\s]+', '-', slug)
     return slug
+
+async def get_enhanced_applications_data(db, query: Dict[Any, Any] = None, limit: int = None) -> List[Dict[Any, Any]]:
+    """Get applications with enhanced job title resolution and data extraction"""
+    
+    if not JOB_REFERENCE_AVAILABLE:
+        # Fallback to original method without enhancement
+        cursor = db.applications.find(query or {})
+        if limit:
+            cursor = cursor.limit(limit)
+        return await cursor.to_list(length=None)
+    
+    # Get applications with job info
+    applications = await get_applications_with_job_info(db, query, limit)
+    
+    # Enhance each application with extracted data
+    enhanced_applications = []
+    for app in applications:
+        # Extract data from answers with job resolution
+        extracted_data = await extract_data_from_answers_with_job_resolution(db, app)
+        
+        # Merge extracted data with original application
+        enhanced_app = app.copy()
+        enhanced_app.update(extracted_data)
+        
+        # Ensure position uses resolved job title
+        enhanced_app['position'] = extracted_data.get('position', app.get('resolvedJobTitle', 'Position Not Available'))
+        
+        enhanced_applications.append(enhanced_app)
+    
+    return enhanced_applications
 
 @router.get("/test-auth")
 async def test_auth_endpoint(request: Request):
@@ -159,11 +206,25 @@ async def get_job_postings(
                 # Get creator details
                 if "createdBy" in posting:
                     try:
-                        creator = await db.users.find_one({"_id": ObjectId(posting["createdBy"])}, {"password": 0})
-                        if creator:
-                            convert_objectids_to_strings(creator)
-                            posting["creatorDetails"] = creator
+                        # Check if createdBy is a valid ObjectId or a system identifier
+                        created_by = posting["createdBy"]
+                        if created_by == "system_migration" or created_by == "system":
+                            # Handle system-created jobs
+                            posting["creatorDetails"] = {
+                                "name": "System Migration",
+                                "email": "system@bqitech.com",
+                                "role": "system"
+                            }
+                        elif isinstance(created_by, str) and len(created_by) == 24:
+                            # Try to convert to ObjectId for valid hex strings
+                            creator = await db.users.find_one({"_id": ObjectId(created_by)}, {"password": 0})
+                            if creator:
+                                convert_objectids_to_strings(creator)
+                                posting["creatorDetails"] = creator
+                            else:
+                                posting["creatorDetails"] = None
                         else:
+                            # Invalid createdBy format
                             posting["creatorDetails"] = None
                     except Exception as e:
                         logger.error(f"Error getting creator details for job {posting['_id']}: {str(e)}")
@@ -751,10 +812,10 @@ async def get_admin_overview(
         # Get application counts by status
         new_applications = await db.applications.count_documents({"status": "New"})
         shortlisted = await db.applications.count_documents({"status": "Shortlisted"})
+        technical_assessment = await db.applications.count_documents({"status": "Technical Assessment"})
         interviewing = await db.applications.count_documents({"status": "Interviewing"})
         hired = await db.applications.count_documents({"status": "Hired"})
         rejected = await db.applications.count_documents({"status": "Rejected"})
-        technical_assessment = await db.applications.count_documents({"status": "Technical Assessment"})
         disqualified = await db.applications.count_documents({"status": "Disqualified"})
         
         # Get recent applications (last 7 days)
@@ -765,7 +826,7 @@ async def get_admin_overview(
         
         # Get status breakdown for chart
         status_breakdown = []
-        statuses = ["New", "Shortlisted", "Interviewing", "Technical Assessment", "Hired", "Rejected", "Disqualified"]
+        statuses = ["New", "Shortlisted", "Technical Assessment", "Interviewing", "Hired", "Rejected", "Disqualified"]
         for status in statuses:
             count = await db.applications.count_documents({"status": status})
             status_breakdown.append({"status": status, "count": count})
@@ -829,87 +890,166 @@ class CustomJSONEncoder(json.JSONEncoder):
 @router.get("/applications")
 async def get_admin_applications(
     current_user: dict = Depends(get_current_admin_user),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=100),  # Reduced default limit
     skip: int = Query(0, ge=0),
-    status: Optional[str] = None,
-    sort_by: Optional[str] = Query("createdAt", description="Field to sort by (createdAt, status, updatedAt)"),
-    sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)")
+    status: Optional[str] = Query(None, description="Filter by application status"),
+    sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
+    search: Optional[str] = Query(None, description="Search term for name, email, or position"),
+    position: Optional[str] = Query(None, description="Filter by position/job title")
 ):
-    """Get applications for admin"""
+    """Get all applications for admin with optimized aggregation and filtering"""
     try:
         db = get_database()
         if db is None:
             raise HTTPException(status_code=503, detail="Database not available")
         
-        # Build query
-        query = {}
-        if status:
-            query["status"] = status
-            
-        # Get applications with pagination
+        # Base query - include all applications or filter by status
+        match_query = {}
+        if status and status != "all":
+            match_query["status"] = status
+        
+        # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
-        sort_field = sort_by if sort_by in ["createdAt", "status", "updatedAt"] else "createdAt"
+        sort_field = sort_by if sort_by in ["appliedDate", "status", "createdAt", "updatedAt"] else "appliedDate"
         
-        applications_cursor = db.applications.find(query).skip(skip).limit(limit).sort(sort_field, sort_direction)
+        pipeline = [
+            {"$match": match_query},
+            {
+                "$lookup": {
+                    "from": "jobpostings",
+                    "localField": "jobId",
+                    "foreignField": "_id",
+                    "as": "jobDetails",
+                    "pipeline": [
+                        {"$project": {"password": 0}}  # Exclude sensitive fields
+                    ]
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "userId",
+                    "foreignField": "_id",
+                    "as": "userDetails",
+                    "pipeline": [
+                        {"$project": {"password": 0}}  # Exclude password
+                    ]
+                }
+            },
+            {
+                "$addFields": {
+                    "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
+                    "userDetails": {"$arrayElemAt": ["$userDetails", 0]},
+                    "jobTitle": {"$arrayElemAt": ["$jobDetails.title", 0]}
+                }
+            }
+        ]
+        
+        # Add search filter to pipeline if provided
+        if search:
+            search_regex = {"$regex": search, "$options": "i"}
+            pipeline.append({
+                "$match": {
+                    "$or": [
+                        {"name": search_regex},
+                        {"email": search_regex},
+                        {"userDetails.name": search_regex},
+                        {"userDetails.email": search_regex},
+                        {"jobDetails.title": search_regex},
+                        {"position": search_regex}
+                    ]
+                }
+            })
+        
+        # Add position filter to pipeline if provided (ALL APPLICATIONS)
+        if position and position != "all":
+            pipeline.append({
+                "$match": {
+                    "$expr": {
+                        "$eq": [
+                            {
+                                "$cond": {
+                                    "if": {"$and": [{"$ne": ["$jobDetails", None]}, {"$ne": ["$jobDetails.title", None]}]},
+                                    "then": "$jobDetails.title",
+                                    "else": "$position"
+                                }
+                            },
+                            position
+                        ]
+                    }
+                }
+            })
+        
+        # Add sorting and pagination
+        pipeline.extend([
+            {"$sort": {sort_field: sort_direction}},
+            {"$skip": skip},
+            {"$limit": limit}
+        ])
+        
+        # Get total count with same filters (without skip/limit)
+        count_pipeline = [stage for stage in pipeline if "$skip" not in stage and "$limit" not in stage]
+        count_pipeline.append({"$count": "total"})
+        
+        # Execute both queries
+        applications_cursor = db.applications.aggregate(pipeline)
         applications = await applications_cursor.to_list(length=limit)
-        total = await db.applications.count_documents(query)
         
-        # Convert ObjectIds to strings and add job details
+        count_cursor = db.applications.aggregate(count_pipeline)
+        count_result = await count_cursor.to_list(length=1)
+        total = count_result[0]["total"] if count_result else 0
+        
+        # Process results efficiently
         for app in applications:
             app["id"] = str(app.pop("_id"))
             
             # Convert datetime fields
-            for field in ["createdAt", "updatedAt", "appliedDate"]:
+            for field in ["createdAt", "updatedAt", "appliedDate", "shortlistedDate", "disqualifiedDate"]:
                 if field in app and isinstance(app[field], datetime):
                     app[field] = app[field].isoformat()
             
-            # Get job details
-            if "jobId" in app:
-                try:
-                    job = await db.jobpostings.find_one({"_id": ObjectId(app["jobId"])})
-                    if job:
-                        job["id"] = str(job.pop("_id"))
-                        # Convert datetime fields in job
-                        for field in ["createdAt", "updatedAt", "postedDate"]:
-                            if field in job and isinstance(job[field], datetime):
-                                job[field] = job[field].isoformat()
-                        app["jobDetails"] = job
-                        app["position"] = job.get("title", "Unknown Position")
-                    else:
-                        app["jobDetails"] = None
-                        app["position"] = "Unknown Position"
-                except Exception as e:
-                    logger.error(f"Error getting job details for application {app['id']}: {str(e)}")
-                    app["jobDetails"] = None
-                    app["position"] = "Unknown Position"
+            # Process job details
+            if app.get("jobDetails"):
+                job = app["jobDetails"]
+                job["id"] = str(job.pop("_id", ""))
+                # Convert datetime fields in job
+                for field in ["createdAt", "updatedAt", "postedDate"]:
+                    if field in job and isinstance(job[field], datetime):
+                        job[field] = job[field].isoformat()
+                app["position"] = job.get("title", "Position Not Available").strip()
+            else:
+                app["jobDetails"] = None
+                app["position"] = app.get("position", "Position Not Available")
             
-            # Get user details
-            if "userId" in app:
-                try:
-                    user = await db.users.find_one({"_id": ObjectId(app["userId"])}, {"password": 0})
-                    if user:
-                        user["id"] = str(user.pop("_id"))
-                        # Convert datetime fields in user
-                        for field in ["createdAt", "updatedAt", "lastLoginAt"]:
-                            if field in user and isinstance(user[field], datetime):
-                                user[field] = user[field].isoformat()
-                        app["userDetails"] = user
-                    else:
-                        app["userDetails"] = None
-                except Exception as e:
-                    logger.error(f"Error getting user details for application {app['id']}: {str(e)}")
-                    app["userDetails"] = None
+            # Process user details
+            if app.get("userDetails"):
+                user = app["userDetails"]
+                user["id"] = str(user.pop("_id", ""))
+                # Convert datetime fields in user
+                for field in ["createdAt", "updatedAt", "lastLoginAt"]:
+                    if field in user and isinstance(user[field], datetime):
+                        user[field] = user[field].isoformat()
+                
+                # Set name/email from user if not set
+                if not app.get("name") or app.get("name") in [None, "NOT SET", ""]:
+                    app["name"] = user.get("name", "")
+                if not app.get("email") or app.get("email") in [None, "NOT SET", ""]:
+                    app["email"] = user.get("email", "")
+            else:
+                app["userDetails"] = None
         
+        # Return with proper JSON encoding for ObjectId compatibility
         response_data = {
             "applications": applications,
             "total": total,
             "sort": {
-                "field": sort_by,
+                "field": sort_field,
                 "order": sort_order
             }
         }
         
-        # Use custom JSON encoder to handle any remaining datetime objects
+        # Use custom JSON encoder to handle any remaining ObjectId objects
         return JSONResponse(
             content=json.loads(json.dumps(response_data, cls=CustomJSONEncoder)),
             headers={
@@ -921,6 +1061,436 @@ async def get_admin_applications(
         
     except Exception as e:
         logger.error(f"Error in get_admin_applications: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/applications/positions")
+async def get_application_positions(
+    current_user: dict = Depends(get_current_admin_user),
+    status: Optional[str] = Query(None, description="Filter positions by application status")
+):
+    """Get unique position titles for filtering applications"""
+    try:
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Build match query
+        match_query = {}
+        if status and status != "all":
+            match_query["status"] = status
+        
+        # Aggregation pipeline to get unique positions
+        pipeline = [
+            {"$match": match_query},
+            {
+                "$lookup": {
+                    "from": "jobpostings",
+                    "localField": "jobId",
+                    "foreignField": "_id",
+                    "as": "jobDetails"
+                }
+            },
+            {
+                "$addFields": {
+                    "jobTitle": {"$arrayElemAt": ["$jobDetails.title", 0]},
+                    "effectivePosition": {
+                        "$cond": {
+                            "if": {"$and": [{"$ne": ["$jobDetails", []]}, {"$ne": [{"$arrayElemAt": ["$jobDetails.title", 0]}, None]}]},
+                            "then": {"$arrayElemAt": ["$jobDetails.title", 0]},
+                            "else": "$position"
+                        }
+                    }
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$effectivePosition",
+                    "count": {"$sum": 1}
+                }
+            },
+            {
+                "$match": {
+                    "_id": {"$ne": None, "$ne": "", "$ne": "Position Not Available"}
+                }
+            },
+            {
+                "$sort": {"_id": 1}
+            }
+        ]
+        
+        cursor = db.applications.aggregate(pipeline)
+        positions = await cursor.to_list(length=None)
+        
+        # Format response
+        position_options = [
+            {
+                "value": pos["_id"],
+                "label": pos["_id"],
+                "count": pos["count"]
+            }
+            for pos in positions if pos["_id"]
+        ]
+        
+        return JSONResponse(
+            content={"positions": position_options},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in get_application_positions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/applications/shortlisted")
+async def get_shortlisted_applications(
+    current_user: dict = Depends(get_current_admin_user),
+    limit: int = Query(50, ge=1, le=100),  # Reduced default limit
+    skip: int = Query(0, ge=0),
+    sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
+    search: Optional[str] = Query(None, description="Search term for name, email, or position"),
+    position: Optional[str] = Query(None, description="Filter by position/job title")
+):
+    """Get shortlisted applications for admin with optimized aggregation and filtering"""
+    try:
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Base query for shortlisted applications
+        match_query = {"status": "Shortlisted"}
+        
+        # Build aggregation pipeline for efficient data loading
+        sort_direction = -1 if sort_order == "desc" else 1
+        sort_field = sort_by if sort_by in ["appliedDate", "status", "createdAt", "updatedAt"] else "appliedDate"
+        
+        pipeline = [
+            {"$match": match_query},
+            {
+                "$lookup": {
+                    "from": "jobpostings",
+                    "localField": "jobId",
+                    "foreignField": "_id",
+                    "as": "jobDetails",
+                    "pipeline": [
+                        {"$project": {"password": 0}}  # Exclude sensitive fields
+                    ]
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "userId",
+                    "foreignField": "_id",
+                    "as": "userDetails",
+                    "pipeline": [
+                        {"$project": {"password": 0}}  # Exclude password
+                    ]
+                }
+            },
+            {
+                "$addFields": {
+                    "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
+                    "userDetails": {"$arrayElemAt": ["$userDetails", 0]},
+                    "jobTitle": {"$arrayElemAt": ["$jobDetails.title", 0]}
+                }
+            }
+        ]
+        
+        # Add search filter to pipeline if provided
+        if search:
+            search_regex = {"$regex": search, "$options": "i"}
+            pipeline.append({
+                "$match": {
+                    "$or": [
+                        {"name": search_regex},
+                        {"email": search_regex},
+                        {"userDetails.name": search_regex},
+                        {"userDetails.email": search_regex},
+                        {"jobDetails.title": search_regex},
+                        {"position": search_regex}
+                    ]
+                }
+            })
+        
+        # Add position filter to pipeline if provided (SHORTLISTED)
+        if position and position != "all":
+            pipeline.append({
+                "$match": {
+                    "$expr": {
+                        "$eq": [
+                            {
+                                "$cond": {
+                                    "if": {"$and": [{"$ne": ["$jobDetails", None]}, {"$ne": ["$jobDetails.title", None]}]},
+                                    "then": "$jobDetails.title",
+                                    "else": "$position"
+                                }
+                            },
+                            position
+                        ]
+                    }
+                }
+            })
+        
+        # Add sorting and pagination
+        pipeline.extend([
+            {"$sort": {sort_field: sort_direction}},
+            {"$skip": skip},
+            {"$limit": limit}
+        ])
+        
+        # Get total count with same filters (without skip/limit)
+        count_pipeline = [stage for stage in pipeline if "$skip" not in stage and "$limit" not in stage]
+        count_pipeline.append({"$count": "total"})
+        
+        # Execute both queries
+        applications_cursor = db.applications.aggregate(pipeline)
+        applications = await applications_cursor.to_list(length=limit)
+        
+        count_cursor = db.applications.aggregate(count_pipeline)
+        count_result = await count_cursor.to_list(length=1)
+        total = count_result[0]["total"] if count_result else 0
+        
+        # Process results efficiently
+        for app in applications:
+            app["id"] = str(app.pop("_id"))
+            
+            # Convert datetime fields
+            for field in ["createdAt", "updatedAt", "appliedDate", "shortlistedDate"]:
+                if field in app and isinstance(app[field], datetime):
+                    app[field] = app[field].isoformat()
+            
+            # Process job details
+            if app.get("jobDetails"):
+                job = app["jobDetails"]
+                job["id"] = str(job.pop("_id", ""))
+                # Convert datetime fields in job
+                for field in ["createdAt", "updatedAt", "postedDate"]:
+                    if field in job and isinstance(job[field], datetime):
+                        job[field] = job[field].isoformat()
+                app["position"] = job.get("title", "Position Not Available").strip()
+            else:
+                app["jobDetails"] = None
+                app["position"] = app.get("position", "Position Not Available")
+            
+            # Process user details
+            if app.get("userDetails"):
+                user = app["userDetails"]
+                user["id"] = str(user.pop("_id", ""))
+                # Convert datetime fields in user
+                for field in ["createdAt", "updatedAt", "lastLoginAt"]:
+                    if field in user and isinstance(user[field], datetime):
+                        user[field] = user[field].isoformat()
+                
+                # Set name/email from user if not set
+                if not app.get("name") or app.get("name") in [None, "NOT SET", ""]:
+                    app["name"] = user.get("name", "")
+                if not app.get("email") or app.get("email") in [None, "NOT SET", ""]:
+                    app["email"] = user.get("email", "")
+            else:
+                app["userDetails"] = None
+        
+        # Return with proper JSON encoding for ObjectId compatibility
+        response_data = {
+            "applications": applications,
+            "total": total,
+            "sort": {
+                "field": sort_field,
+                "order": sort_order
+            }
+        }
+        
+        # Use custom JSON encoder to handle any remaining ObjectId objects
+        return JSONResponse(
+            content=json.loads(json.dumps(response_data, cls=CustomJSONEncoder)),
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in get_shortlisted_applications: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/applications/disqualified")
+async def get_disqualified_applications(
+    current_user: dict = Depends(get_current_admin_user),
+    limit: int = Query(50, ge=1, le=100),  # Reduced default limit
+    skip: int = Query(0, ge=0),
+    sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
+    search: Optional[str] = Query(None, description="Search term for name, email, or position"),
+    position: Optional[str] = Query(None, description="Filter by position/job title")
+):
+    """Get disqualified applications for admin with optimized aggregation and filtering"""
+    try:
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Base query for disqualified applications
+        match_query = {"status": "Disqualified"}
+        
+        # Build aggregation pipeline for efficient data loading
+        sort_direction = -1 if sort_order == "desc" else 1
+        sort_field = sort_by if sort_by in ["appliedDate", "status", "createdAt", "updatedAt"] else "appliedDate"
+        
+        pipeline = [
+            {"$match": match_query},
+            {
+                "$lookup": {
+                    "from": "jobpostings",
+                    "localField": "jobId",
+                    "foreignField": "_id",
+                    "as": "jobDetails",
+                    "pipeline": [
+                        {"$project": {"password": 0}}  # Exclude sensitive fields
+                    ]
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "users",
+                    "localField": "userId",
+                    "foreignField": "_id",
+                    "as": "userDetails",
+                    "pipeline": [
+                        {"$project": {"password": 0}}  # Exclude password
+                    ]
+                }
+            },
+            {
+                "$addFields": {
+                    "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
+                    "userDetails": {"$arrayElemAt": ["$userDetails", 0]},
+                    "jobTitle": {"$arrayElemAt": ["$jobDetails.title", 0]}
+                }
+            }
+        ]
+        
+        # Add search filter to pipeline if provided
+        if search:
+            search_regex = {"$regex": search, "$options": "i"}
+            pipeline.append({
+                "$match": {
+                    "$or": [
+                        {"name": search_regex},
+                        {"email": search_regex},
+                        {"userDetails.name": search_regex},
+                        {"userDetails.email": search_regex},
+                        {"jobDetails.title": search_regex},
+                        {"position": search_regex}
+                    ]
+                }
+            })
+        
+        # Add position filter to pipeline if provided (DISQUALIFIED)
+        if position and position != "all":
+            pipeline.append({
+                "$match": {
+                    "$expr": {
+                        "$eq": [
+                            {
+                                "$cond": {
+                                    "if": {"$and": [{"$ne": ["$jobDetails", None]}, {"$ne": ["$jobDetails.title", None]}]},
+                                    "then": "$jobDetails.title",
+                                    "else": "$position"
+                                }
+                            },
+                            position
+                        ]
+                    }
+                }
+            })
+        
+        # Add sorting and pagination
+        pipeline.extend([
+            {"$sort": {sort_field: sort_direction}},
+            {"$skip": skip},
+            {"$limit": limit}
+        ])
+        
+        # Get total count with same filters (without skip/limit)
+        count_pipeline = [stage for stage in pipeline if "$skip" not in stage and "$limit" not in stage]
+        count_pipeline.append({"$count": "total"})
+        
+        # Execute both queries
+        applications_cursor = db.applications.aggregate(pipeline)
+        applications = await applications_cursor.to_list(length=limit)
+        
+        count_cursor = db.applications.aggregate(count_pipeline)
+        count_result = await count_cursor.to_list(length=1)
+        total = count_result[0]["total"] if count_result else 0
+        
+        # Process results efficiently
+        for app in applications:
+            app["id"] = str(app.pop("_id"))
+            
+            # Convert datetime fields
+            for field in ["createdAt", "updatedAt", "appliedDate", "disqualifiedDate"]:
+                if field in app and isinstance(app[field], datetime):
+                    app[field] = app[field].isoformat()
+            
+            # Process job details
+            if app.get("jobDetails"):
+                job = app["jobDetails"]
+                job["id"] = str(job.pop("_id", ""))
+                # Convert datetime fields in job
+                for field in ["createdAt", "updatedAt", "postedDate"]:
+                    if field in job and isinstance(job[field], datetime):
+                        job[field] = job[field].isoformat()
+                app["position"] = job.get("title", "Position Not Available").strip()
+            else:
+                app["jobDetails"] = None
+                app["position"] = app.get("position", "Position Not Available")
+            
+            # Process user details
+            if app.get("userDetails"):
+                user = app["userDetails"]
+                user["id"] = str(user.pop("_id", ""))
+                # Convert datetime fields in user
+                for field in ["createdAt", "updatedAt", "lastLoginAt"]:
+                    if field in user and isinstance(user[field], datetime):
+                        user[field] = user[field].isoformat()
+                
+                # Set name/email from user if not set
+                if not app.get("name") or app.get("name") in [None, "NOT SET", ""]:
+                    app["name"] = user.get("name", "")
+                if not app.get("email") or app.get("email") in [None, "NOT SET", ""]:
+                    app["email"] = user.get("email", "")
+            else:
+                app["userDetails"] = None
+        
+        # Return with proper JSON encoding for ObjectId compatibility
+        response_data = {
+            "applications": applications,
+            "total": total,
+            "sort": {
+                "field": sort_field,
+                "order": sort_order
+            }
+        }
+        
+        # Use custom JSON encoder to handle any remaining ObjectId objects
+        return JSONResponse(
+            content=json.loads(json.dumps(response_data, cls=CustomJSONEncoder)),
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in get_disqualified_applications: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -956,6 +1526,116 @@ async def get_admin_application(
     except Exception as e:
         logger.error(f"Error in get_admin_application: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Move bulk-status endpoint before parameterized route to fix route conflict
+@router.put("/applications/bulk-status")
+async def bulk_update_application_status(
+    data: dict,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Bulk update application status"""
+    logger.info(f"=== BULK STATUS UPDATE REQUEST ===")
+    logger.info(f"Received data: {data}")
+    logger.info(f"Current user: {current_user.get('email', 'Unknown')}")
+    
+    try:
+        # Validate request data
+        if not isinstance(data, dict):
+            logger.error(f"Request body is not a dict: {data}")
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+        
+        if "ids" not in data:
+            logger.error("Missing 'ids' field in request body")
+            raise HTTPException(status_code=400, detail="Missing 'ids' field")
+        
+        if "status" not in data:
+            logger.error("Missing 'status' field in request body")
+            raise HTTPException(status_code=400, detail="Missing 'status' field")
+        
+        ids = data["ids"]
+        status = data["status"]
+        logger.info(f"IDs: {ids}, Status: {status}")
+        
+        # Validate IDs array
+        if not isinstance(ids, list):
+            logger.error(f"IDs is not a list: {type(ids)}")
+            raise HTTPException(status_code=400, detail="'ids' must be an array")
+        if len(ids) == 0:
+            logger.error("Empty IDs array provided")
+            raise HTTPException(status_code=400, detail="At least one application ID must be provided")
+            
+        # Validate status
+        if not isinstance(status, str) or not status.strip():
+            raise HTTPException(status_code=400, detail="Status must be a non-empty string")
+            
+        # Validate status against allowed values
+        valid_statuses = ["New", "Shortlisted", "Technical Assessment", "Interviewing", "Hired", "Rejected", "Disqualified"]
+        if status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}")
+            
+        # Get database connection
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+            
+        # Validate and convert string IDs to ObjectIds
+        object_ids = []
+        for i, id_str in enumerate(ids):
+            try:
+                logger.info(f"Converting ID {i}: '{id_str}' (type: {type(id_str)}, length: {len(str(id_str))})")
+                if not id_str or not isinstance(id_str, str):
+                    raise ValueError(f"ID at index {i} is not a valid string: {id_str}")
+                if len(id_str) != 24:
+                    raise ValueError(f"ID at index {i} is not 24 characters long: {len(id_str)}")
+                object_id = ObjectId(id_str)
+                object_ids.append(object_id)
+                logger.info(f"✅ Successfully converted ID {i}: {object_id}")
+            except Exception as e:
+                logger.error(f"❌ Failed to convert ID at index {i}: '{id_str}' - {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Invalid ObjectId at index {i}: '{id_str}' - {str(e)}")
+        
+        # Update application status in database
+        update_data = {
+            "status": status,
+            "updatedAt": datetime.utcnow()
+        }
+        
+        # Set specific date fields based on status
+        current_time = datetime.utcnow()
+        if status == "Shortlisted":
+            update_data["shortlistedDate"] = current_time
+        elif status == "Interviewing":
+            update_data["interviewDate"] = current_time
+        elif status == "Hired":
+            update_data["hiredDate"] = current_time
+        elif status == "Rejected":
+            update_data["rejectedDate"] = current_time
+        elif status == "Disqualified":
+            update_data["disqualifiedDate"] = current_time
+        
+        logger.info(f"Updating {len(object_ids)} applications with status '{status}'")
+        result = await db.applications.update_many(
+            {"_id": {"$in": object_ids}}, 
+            {"$set": update_data}
+        )
+        
+        logger.info(f"Database update result: matched={result.matched_count}, modified={result.modified_count}")
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="No applications found to update")
+            
+        return {
+            "message": f"Successfully updated {result.modified_count} applications to status '{status}'",
+            "updated_count": result.modified_count,
+            "matched_count": result.matched_count,
+            "status": status
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk update application status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.put("/applications/{application_id}")
@@ -1918,4 +2598,19 @@ async def bulk_delete_applications(
         raise HTTPException(status_code=400, detail="Invalid application ID format")
     except Exception as e:
         logger.error(f"Error in bulk delete applications: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.options("/applications/bulk-status", include_in_schema=False)
+async def options_bulk_status(request: Request):
+    """Handle CORS preflight requests for bulk status update"""
+    origin = request.headers.get("origin", "http://localhost:3000")
+    return JSONResponse(
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Methods": "PUT, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-User-Session",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "3600",
+        }
+    ) 

@@ -111,7 +111,7 @@ Contains all job listings and their details.
 
 ### 3. Applications Collection (`applications`)
 
-Stores job applications submitted by users.
+Stores job applications submitted by users with comprehensive status tracking.
 
 ```javascript
 {
@@ -125,27 +125,111 @@ Stores job applications submitted by users.
     }
   ],
   appliedDate: Date,                // Application submission date
-  status: String,                   // Application status: "New", "Reviewed", "Accepted", "Rejected"
-  position: String                  // Job position title
+  status: String,                   // Current application status: "New", "Shortlisted", "Technical Assessment", "Interviewing", "Hired", "Rejected", "Disqualified"
+  position: String,                 // Job position title
+  
+  // Enhanced Status History Tracking (NEW)
+  statusHistory: [                  // Complete audit trail of status changes
+    {
+      status: String,               // Status at this point in time
+      date: Date,                   // When this status was set
+      changedBy: String,            // User ID who made the change (optional for system changes)
+      reason: String,               // Reason for the status change (optional)
+      metadata: {                   // Additional context and data
+        previousStatus: String,     // Previous status (for validation)
+        automatedChange: Boolean,   // Whether this was an automated change
+        reviewerNotes: String,      // Notes from reviewer
+        reviewScore: Number,        // Review score (for assessments)
+        interviewer: String,        // Interviewer name (for interviews)
+        assessmentScore: Number,    // Technical assessment score
+        startDate: Date,            // Start date (for hired candidates)
+        disqualificationReason: String, // Reason for disqualification
+        source: String,             // Source of the change (e.g., "migration", "manual", "api")
+        // ... any other contextual data
+      }
+    }
+  ],
+  
+  // Legacy Date Fields (maintained for backward compatibility)
+  shortlistedDate: Date,            // Date when candidate was shortlisted (optional)
+  assessmentDate: Date,             // Date of technical assessment (optional)
+  interviewDate: Date,              // Date of interview (optional)
+  hireDate: Date,                   // Date when candidate was hired (optional)
+  disqualifiedDate: Date,           // Date when candidate was disqualified (optional)
+  
+  // Additional tracking fields
+  name: String,                     // Processed applicant name (optional)
+  email: String,                    // Processed applicant email (optional)
+  createdAt: Date,                  // Document creation timestamp
+  updatedAt: Date,                  // Last update timestamp
+  
+  // Migration tracking
+  migratedAt: Date,                 // When legacy data was migrated (optional)
+  statusHistoryVersion: String      // Version of status history schema (optional)
 }
 ```
 
-**Example:**
+**Enhanced Features:**
+
+1. **Complete Audit Trail**: Every status change is recorded with timestamp, user, and reason
+2. **Flexible Metadata**: Extensible metadata field for status-specific information
+3. **Backward Compatibility**: Legacy date fields are maintained and automatically synced
+4. **Migration Support**: Tools to migrate existing applications to new format
+5. **Validation**: Status transition validation ensures data integrity
+
+**Example with Status History:**
 ```json
 {
   "_id": "683558b1dd79cc67e0a4926a",
   "jobId": "682b293a27eefc80eae4f51a",
-  "cvUrl": "https://dl.dropboxusercontent.com/scl/fi/f17p451wySnmgcdm4cGbc/Resume.pdf",
+  "cvUrl": "https://example.com/resume.pdf",
   "answers": [
-    {"value": "5 years"},
-    {"value": "JavaScript, Python, Salesforce"}
+    {"value": "John Doe"},
+    {"value": "john@example.com"},
+    {"value": "5 years experience"}
   ],
   "appliedDate": "2025-05-27T06:16:17.269Z",
-  "status": "New",
-  "position": "Junior Salesforce Developer",
-  "userId": "6833934f545a3e59dbff6c2c"
+  "status": "Shortlisted",
+  "position": "Senior Software Developer",
+  "userId": "6833934f545a3e59dbff6c2c",
+  "statusHistory": [
+    {
+      "status": "New",
+      "date": "2025-05-27T06:16:17.269Z",
+      "changedBy": "6833934f545a3e59dbff6c2c",
+      "reason": "Application submitted",
+      "metadata": {
+        "source": "application_submission",
+        "automatedChange": true
+      }
+    },
+    {
+      "status": "Shortlisted",
+      "date": "2025-05-28T10:30:00.000Z",
+      "changedBy": "admin_user_id",
+      "reason": "Strong technical background and relevant experience",
+      "metadata": {
+        "previousStatus": "New",
+        "automatedChange": false,
+        "reviewerNotes": "Excellent match for our requirements",
+        "reviewScore": 8.5
+      }
+    }
+  ],
+  "shortlistedDate": "2025-05-28T10:30:00.000Z",
+  "createdAt": "2025-05-27T06:16:17.269Z",
+  "updatedAt": "2025-05-28T10:30:00.000Z"
 }
 ```
+
+**Status Transition Rules:**
+- **New** → Shortlisted, Rejected, Disqualified
+- **Shortlisted** → Technical Assessment, Interviewing, Rejected, Disqualified  
+- **Technical Assessment** → Interviewing, Shortlisted, Rejected, Disqualified
+- **Interviewing** → Hired, Rejected, Technical Assessment, Disqualified
+- **Hired** → Disqualified (only in exceptional cases)
+- **Rejected** → (terminal status)
+- **Disqualified** → (terminal status)
 
 ---
 
@@ -379,9 +463,20 @@ users → password_resets → verification_codes
 For production optimization, consider adding:
 
 ```javascript
-// Applications collection
+// Applications collection - Enhanced with Status History
 db.applications.createIndex({"jobId": 1, "status": 1})
 db.applications.createIndex({"userId": 1, "appliedDate": -1})
+db.applications.createIndex({"status": 1, "updatedAt": -1})
+
+// Status History indexes for efficient querying
+db.applications.createIndex({"statusHistory.status": 1})
+db.applications.createIndex({"statusHistory.date": -1})
+db.applications.createIndex({"statusHistory.status": 1, "statusHistory.date": -1})
+db.applications.createIndex({"statusHistory.changedBy": 1})
+
+// Compound indexes for complex queries
+db.applications.createIndex({"status": 1, "statusHistory.date": -1})
+db.applications.createIndex({"jobId": 1, "status": 1, "statusHistory.date": -1})
 
 // Job postings collection
 db.jobpostings.createIndex({"status": 1, "created_at": -1})

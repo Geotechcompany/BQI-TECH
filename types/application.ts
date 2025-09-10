@@ -5,6 +5,24 @@ interface User {
   phoneNumber?: string
 }
 
+export interface StatusHistoryEntry {
+  status: string
+  date: Date | string
+  changedBy?: string  // User ID who made the change
+  reason?: string     // Reason for the status change
+  metadata?: {        // Additional context
+    [key: string]: any
+    previousStatus?: string
+    automatedChange?: boolean
+    reviewerNotes?: string
+    reviewScore?: number
+    interviewer?: string
+    assessmentScore?: number
+    startDate?: string
+    disqualificationReason?: string
+  }
+}
+
 export interface Application {
     id: string
     _id?: string
@@ -23,6 +41,8 @@ export interface Application {
     salary: string
     status: string
     appliedDate: Date
+    
+    // Legacy date fields - kept for backward compatibility
     shortlistedDate?: string
     assessmentDate?: Date
     assessmentScore?: number
@@ -32,6 +52,10 @@ export interface Application {
     startDate?: string
     disqualifiedDate?: string
     disqualifiedReason?: string
+    
+    // New status history tracking
+    statusHistory?: StatusHistoryEntry[]
+    
     answers?: Array<{
       questionId: string;
       questionText: string;
@@ -52,6 +76,8 @@ export interface Application {
       department?: string;
       location?: string;
     };
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
 }
 
 export interface ShortlistedCandidate extends Application {
