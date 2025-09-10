@@ -70,7 +70,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/  # Commented out - we need lib/ for TypeScript modules
 lib64/
 parts/
 sdist/

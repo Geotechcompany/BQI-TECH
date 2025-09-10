@@ -11,6 +11,8 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
+        "pre-commit": "npm run lint && npm run build",
+        "validate-imports": "grep -r \"@/\" --include=\"*.ts\" --include=\"*.tsx\" . || echo 'No @/ imports found'",
         "migrate-to-mongodb": "node scripts/migrate-to-mongodb.js",
         "test-mongodb": "node scripts/test-mongo.js",
         "post-questions": "node scripts/post-questions-mongodb.js",
