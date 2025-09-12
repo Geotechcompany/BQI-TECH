@@ -44,14 +44,8 @@ class Settings(BaseModel):
     encryption_master_key: str = os.getenv("ENCRYPTION_MASTER_KEY", "")
     
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-          "http://localhost:3002",
-        "http://localhost:9000",
-        "https://bqitech.com",
-        "https://bqitech-nonprod.netlify.app",
-        "https://www.bqitech-nonprod.netlify.app"
-    ]
+    ALLOWED_ORIGINS_RAW: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+    BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in ALLOWED_ORIGINS_RAW.split(",") if origin.strip()]
     
     # Email Configuration
     smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")

@@ -62,7 +62,7 @@ export default function Header() {
         }`}>
           <div className="container flex h-[80px] items-center justify-between px-6 max-w-[1400px] mx-auto">
             <Link href="/" className="flex items-center gap-2 py-4">
-              <Image
+              <img
                 src="/bqilogo.png"
                 alt="BQI Logo"
                 width={300}

@@ -171,7 +171,7 @@ function Footer() {
             {/* Logo with glow effect */}
             <div className="mb-8">
               <div className="relative inline-block">
-                <Image
+                <img
                   src="/bqilogo-light.png"
                   alt="BQI Tech Logo"
                   width={160}

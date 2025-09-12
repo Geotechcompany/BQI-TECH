@@ -4,7 +4,7 @@ from pymongo.errors import ConnectionFailure
 
 router = APIRouter(tags=["health"])
 
-@router.get("/")
+@router.get("/health")
 async def health_check():
     """Check API and database health"""
     try:

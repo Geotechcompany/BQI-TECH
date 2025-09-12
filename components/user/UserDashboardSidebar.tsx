@@ -129,14 +129,14 @@ export default function UserDashboardSidebar({
                     isCollapsed ? "rotate-180" : ""
                   }`}
                 >
-                  <Image
+                  <img
                     src="/collapse-svg-black.svg"
                     alt="Collapse"
                     width={20}
                     height={20}
                     className="block dark:hidden"
                   />
-                  <Image
+                  <img
                     src="/collapse-svg-white.svg"
                     alt="Collapse"
                     width={20}
