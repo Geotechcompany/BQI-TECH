@@ -48,6 +48,11 @@ export const menuSections: MenuSection[] = [
     icon: Users,
     alwaysExpanded: true,
     items: [
+            {
+        name: "Applications",
+        href: "/admin/applications",
+        icon: Folder,
+      },
       {
         name: "Shortlisted",
         href: "/admin/shortlisted",
@@ -84,11 +89,6 @@ export const menuSections: MenuSection[] = [
         name: "Job Postings",
         href: "/admin/job-postings",
         icon: ClipboardList,
-      },
-      {
-        name: "Applications",
-        href: "/admin/applications",
-        icon: Folder,
       },
       {
         name: "Questions Bank",
