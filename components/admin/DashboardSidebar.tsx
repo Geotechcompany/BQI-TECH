@@ -229,7 +229,7 @@ export default function DashboardSidebar({
           whileHover={{ scale: 1.05 }}
           className="flex items-center gap-2"
         >
-          <Image
+          <img
             src="/bqilogo.png"
             alt="Logo"
             width={sidebarCollapsed ? 32 : 68}
@@ -253,7 +253,7 @@ export default function DashboardSidebar({
               className="hidden md:block p-2 hover:bg-muted rounded-lg"
             >
               {sidebarCollapsed ? (
-                <Image
+                <img
                   src="/collapse-svg-black.svg"
                   alt="Expand"
                   width={20}
@@ -261,7 +261,7 @@ export default function DashboardSidebar({
                   className="block dark:hidden"
                 />
               ) : (
-                <Image
+                <img
                   src="/collapse-svg-black.svg"
                   alt="Collapse"
                   width={20}
@@ -270,7 +270,7 @@ export default function DashboardSidebar({
                 />
               )}
               {sidebarCollapsed ? (
-                <Image
+                <img
                   src="/collapse-svg-white.svg"
                   alt="Expand"
                   width={20}
@@ -278,7 +278,7 @@ export default function DashboardSidebar({
                   className="hidden dark:block"
                 />
               ) : (
-                <Image
+                <img
                   src="/collapse-svg-white.svg"
                   alt="Collapse"
                   width={20}
