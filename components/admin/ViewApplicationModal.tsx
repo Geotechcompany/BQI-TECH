@@ -52,13 +52,21 @@ export function ViewApplicationModal({
     }
   };
 
+  // Utility to normalize links so relative links do not get prefixed with /api/
+  const normalizeLink = (url: string) => {
+    if (!url) return '';
+    // Absolute URLs
+    if (/^(https?:\/\/|www\.)/i.test(url)) return url;
+    // Already root-relative
+    if (url.startsWith('/')) return url;
+    // Otherwise, make root-relative
+    return '/' + url.replace(/^\/*/, '');
+  };
+
   const isLikelyUrl = (value: unknown) => {
     if (typeof value !== 'string') return false;
     try {
-      // Basic validation via URL constructor
-      // Also accept strings starting with www.
       if (value.startsWith('www.')) return true;
-      // eslint-disable-next-line no-new
       new URL(value);
       return true;
     } catch {
@@ -225,7 +233,7 @@ export function ViewApplicationModal({
                         </div>
                       ) : (
                         <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 break-all">
-                          <Link href={String(answer.answer)} target="_blank" className="text-blue-600 underline">
+                          <Link href={normalizeLink(String(answer.answer))} target="_blank" className="text-blue-600 underline">
                             {String(answer.answer)}
                           </Link>
                           <p className="text-xs text-gray-500 mt-2">
@@ -263,7 +271,7 @@ export function ViewApplicationModal({
                         <p className="text-xs sm:text-sm text-gray-400">Uploaded {formatDate(application.appliedDate)}</p>
                       </div>
                       <Link
-                        href={cvUrl}
+                        href={normalizeLink(cvUrl)}
                         target="_blank"
                         className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
                       >
@@ -287,7 +295,7 @@ export function ViewApplicationModal({
                       <div className="text-sm text-gray-600">
                         Unable to preview this document inline. You can
                         {" "}
-                        <Link href={cvUrl} target="_blank" className="text-blue-600 underline">
+                        <Link href={normalizeLink(cvUrl)} target="_blank" className="text-blue-600 underline">
                           open it in a new tab
                         </Link>
                         .
