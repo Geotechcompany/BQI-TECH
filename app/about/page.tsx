@@ -48,7 +48,7 @@ const team = [
     role: "Chief Executive Officer",
     image: "/Teams/ezra-yego.jpg",
     social: {
-      linkedin: "#",
+      linkedin: "https://www.linkedin.com/in/ezra-k-a12046b4/",
     }
   },
   {
@@ -114,7 +114,7 @@ const team = [
     role: "Software Engineer",
     image: "/Teams/Felix.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/felixrono/",
+      linkedin: "https://www.linkedin.com/in/felix-rono-ba54b6bb/",
     }
   },
   {
