@@ -44,7 +44,11 @@ class Settings(BaseModel):
     encryption_master_key: str = os.getenv("ENCRYPTION_MASTER_KEY", "")
     
     # CORS
-    ALLOWED_ORIGINS_RAW: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+    # Include production origins by default; can be overridden via ALLOWED_ORIGINS env
+    ALLOWED_ORIGINS_RAW: str = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,https://bqitech.com,https://www.bqitech.com"
+    )
     BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in ALLOWED_ORIGINS_RAW.split(",") if origin.strip()]
     
     # Email Configuration
