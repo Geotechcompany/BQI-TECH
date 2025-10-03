@@ -3,51 +3,51 @@ import type { NextRequest } from "next/server";
 
 // Paths that don't require authentication
 const publicPaths = [
-  '/',
-  '/login',
-  '/sign-up',
-  '/forgot-password',
-  '/reset-password',
-  '/auth/verify-email',
-  '/about',
-  '/contact-us',
-  '/services',
-  '/blog',
-  '/careers'
-]
+  "/",
+  "/login",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/auth/verify-email",
+  "/about",
+  "/contact-us",
+  "/services",
+  "/blog",
+  "/careers",
+];
 
 // Paths that don't require email verification
 const noVerificationPaths = [
-  '/auth/verify-email',
-  '/login',
-  '/sign-up',
-  '/forgot-password',
-  '/reset-password',
-  '/logout',
-  '/api'
-]
+  "/auth/verify-email",
+  "/login",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/logout",
+  "/api",
+];
 
 // Helper function to get auth token from custom auth system
 function getAuthToken(request: NextRequest): string | null {
   // Check for token in Authorization header
-  const authHeader = request.headers.get('authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
+  const authHeader = request.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
     return authHeader.substring(7);
   }
-  
+
   // Check for token in cookies (if stored there)
-  const tokenCookie = request.cookies.get('auth_token');
+  const tokenCookie = request.cookies.get("auth_token");
   if (tokenCookie) {
     return tokenCookie.value;
   }
-  
+
   return null;
 }
 
 // Helper function to decode JWT token (basic decode without verification)
 function decodeToken(token: string): any {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const payload = JSON.parse(atob(token.split(".")[1]));
     return payload;
   } catch (error) {
     return null;
@@ -56,16 +56,29 @@ function decodeToken(token: string): any {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const authSession = request.cookies.get('auth_session')?.value;
-  
+  const authSession = request.cookies.get("auth_session")?.value;
+
+  // Allow static assets (served from /public) to bypass auth and other checks
+  // This is critical because Next.js image optimizer fetches images without cookies.
+  const isStaticAsset =
+    /\.(?:png|jpg|jpeg|gif|webp|svg|ico|mp4|webm|txt|woff|woff2|ttf|otf|eot|json|xml)$/i.test(
+      pathname
+    ) ||
+    pathname.startsWith("/Teams/") ||
+    pathname.startsWith("/images/") ||
+    pathname.startsWith("/Sliders/");
+  if (isStaticAsset) {
+    return NextResponse.next();
+  }
+
   // Allow public paths without authentication
-  if (publicPaths.some(path => pathname.startsWith(path))) {
+  if (publicPaths.some((path) => pathname.startsWith(path))) {
     return NextResponse.next();
   }
 
   // If no session, redirect to login
   if (!authSession) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   try {
@@ -76,25 +89,28 @@ export function middleware(request: NextRequest) {
 
     // If email is not verified and not on a verification-exempt path,
     // redirect to verification page with email
-    if (!isEmailVerified && !noVerificationPaths.some(path => pathname.startsWith(path))) {
-      const verifyUrl = new URL('/auth/verify-email', request.url);
+    if (
+      !isEmailVerified &&
+      !noVerificationPaths.some((path) => pathname.startsWith(path))
+    ) {
+      const verifyUrl = new URL("/auth/verify-email", request.url);
       if (user?.email) {
-        verifyUrl.searchParams.set('email', user.email);
+        verifyUrl.searchParams.set("email", user.email);
       }
       return NextResponse.redirect(verifyUrl);
     }
 
     // Check admin access for admin routes
-    if (pathname.startsWith('/admin') && user?.role !== 'admin') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+    if (pathname.startsWith("/admin") && user?.role !== "admin") {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 
     return NextResponse.next();
   } catch (error) {
-    console.error('Error parsing session:', error);
+    console.error("Error parsing session:", error);
     // If session is invalid, clear it and redirect to login
-    const response = NextResponse.redirect(new URL('/login', request.url));
-    response.cookies.delete('auth_session');
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete("auth_session");
     return response;
   }
 }
@@ -108,7 +124,7 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    // Exclude common static asset extensions from middleware matching
+    "/((?!_next/static|_next/image|favicon.ico|public/|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|mp4|webm|txt|woff|woff2|ttf|otf|eot|json|xml)$).*)",
   ],
 };
-
