@@ -81,11 +81,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={inter.className} suppressHydrationWarning>
       <head>
-        <link
-          rel="preload"
-          href="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"
-          as="script"
-        />
         <meta name="color-scheme" content="light dark" />
       </head>
       <body suppressHydrationWarning>
