@@ -8,13 +8,13 @@ const nextConfig = {
     reactStrictMode: true,
     swcMinify: true,
     images: {
+        unoptimized: true,
         domains: [
             'upload.wikimedia.org',
             'images.unsplash.com',
             'd1.awsstatic.com',
             'dl.dropboxusercontent.com',
             'bqitech.com',
-            'https://bqitech.com',
             'cdn.pixabay.com',
             'img.freepik.com',
             'source.unsplash.com',
@@ -54,11 +54,12 @@ const nextConfig = {
             `default-src 'self' https://app.thinkstack.ai`,
             `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.thinkstack.ai https://app.thinkstack.ai/bot/thinkstackai-loader.min.js`,
             `script-src-elem 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://static.elfsight.com https://app.thinkstack.ai https://app.thinkstack.ai/bot/thinkstackai-loader.min.js`,
-            `style-src 'self' 'unsafe-inline' https://app.thinkstack.ai`,
+            `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://app.thinkstack.ai`,
+            `style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://app.thinkstack.ai`,
             `img-src 'self' data: blob: https://dl.dropboxusercontent.com https://images.unsplash.com https://app.thinkstack.ai`,
             `connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk-telemetry.com https://*.googletagmanager.com https://www.googletagmanager.com https://www.google-analytics.com https://accounts.google.com https://hcaptcha.com https://sentry.hcaptcha.com https://organic-hound-41949.upstash.io https://bqitech-nonprod-1.onrender.com https://bqitech.com https://core.service.elfsight.com https://app.thinkstack.ai https://app.thinkstack.ai/bot/thinkstackai-loader.min.js ${process.env.NODE_ENV === 'development' ? 'ws://localhost:3000/_next/webpack-hmr http://localhost:9000' : ''};`,
             `frame-src 'self' https://www.google.com https://maps.google.com https://www.google.com/recaptcha/ https://app.thinkstack.ai`,
-            `font-src 'self' data: https://app.thinkstack.ai`
+            `font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com https://app.thinkstack.ai`
         ];
 
         const securityHeaders = [{
@@ -117,12 +118,10 @@ const nextConfig = {
     },
     transpilePackages: ['@uiw/react-md-editor', 'react-beautiful-dnd'],
     async rewrites() {
-        return [
-            {
-                source: '/sitemap.xml',
-                destination: '/api/sitemap',
-            },
-        ]
+        return [{
+            source: '/sitemap.xml',
+            destination: '/api/sitemap',
+        }, ]
     },
     output: 'standalone',
 };
