@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { adminApi } from "@/lib/api-backend";
+import { userApi } from "@/lib/api-backend";
 import { toast } from "sonner";
 
 interface SessionTimeoutModalProps {
@@ -45,7 +45,7 @@ export function SessionTimeoutModal({
     setIsRefreshing(true);
     try {
       // Refresh the session by making an authenticated request
-      await adminApi.getProfile();
+      await userApi.getProfile();
       toast.success("Session refreshed successfully!");
       onStayLoggedIn();
     } catch (error) {
