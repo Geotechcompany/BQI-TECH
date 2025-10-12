@@ -1,8 +1,8 @@
 "use client";
 
-import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
-import { useEffect, ReactNode } from 'react';
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
+import { useEffect, ReactNode } from "react";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -17,19 +17,19 @@ export function ProtectedRoute({
   fallback,
   redirectTo,
 }: ProtectedRouteProps) {
-  const { isAuthenticated, isAdmin, authLoading, user } = useAuth();
+  const { isAuthenticated, isAdmin, authLoading, user, userRole } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!authLoading) {
       if (!isAuthenticated) {
-        const redirect = redirectTo || '/login';
+        const redirect = redirectTo || "/login";
         router.push(redirect);
         return;
       }
 
       if (requireAdmin && !isAdmin) {
-        router.push('/unauthorized');
+        router.push("/unauthorized");
         return;
       }
     }
@@ -44,29 +44,38 @@ export function ProtectedRoute({
   }
 
   if (!isAuthenticated) {
-    return fallback || (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-          <p className="text-gray-600">Please log in to access this page.</p>
+    return (
+      fallback || (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
+            <p className="text-gray-600">Please log in to access this page.</p>
+          </div>
         </div>
-      </div>
+      )
     );
   }
 
   if (requireAdmin && !isAdmin) {
-    return fallback || (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Admin Access Required</h2>
-          <p className="text-gray-600">You don't have permission to access this page.</p>
+    return (
+      fallback || (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Admin Access Required</h2>
+            <p className="text-gray-600">
+              You don't have permission to access this page.
+            </p>
+            <p className="text-gray-500 mt-2 text-sm">
+              Current role: {(userRole || user?.role || "").toString()}
+            </p>
+          </div>
         </div>
-      </div>
+      )
     );
   }
 
   return <>{children}</>;
-} 
+}
 
 export default ProtectedRoute;
 
@@ -82,4 +91,4 @@ export function withAuth<P extends object>(
       </ProtectedRoute>
     );
   };
-} 
+}

@@ -26,10 +26,17 @@ import {
   HelpCircle,
   Bell,
   ScrollText,
+  Mail as MailIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useState } from "react";
+import {
+  Tooltip as UiTooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 
 interface MenuSection {
   title: string;
@@ -48,7 +55,7 @@ export const menuSections: MenuSection[] = [
     icon: Users,
     alwaysExpanded: true,
     items: [
-            {
+      {
         name: "Applications",
         href: "/admin/applications",
         icon: Folder,
@@ -108,6 +115,11 @@ export const menuSections: MenuSection[] = [
         icon: FileText,
       },
       {
+        name: "Surveys",
+        href: "/admin/surveys",
+        icon: BarChart,
+      },
+      {
         name: "Release Notes",
         href: "/admin/whats-new",
         icon: Rocket,
@@ -131,6 +143,11 @@ export const menuSections: MenuSection[] = [
         icon: Bell,
       },
       {
+        name: "Email Broadcast",
+        href: "/admin/email-broadcast",
+        icon: MailIcon,
+      },
+      {
         name: "Audit Logs",
         href: "/admin/audit-logs",
         icon: ScrollText,
@@ -149,41 +166,6 @@ interface DashboardSidebarProps {
   onClose: () => void;
   className?: string;
 }
-
-// Tooltip component for collapsed sidebar
-const Tooltip = ({
-  children,
-  content,
-  position = "right",
-}: {
-  children: React.ReactNode;
-  content: string;
-  position?: "right" | "left";
-}) => (
-  <div className="relative group">
-    {children}
-    <div
-      className={`
-        absolute z-50 px-2 py-1 text-xs font-medium
-        bg-black text-white rounded-md shadow-lg
-        opacity-0 group-hover:opacity-100
-        transition-opacity duration-200 ease-in-out
-        pointer-events-none
-        ${position === "right" ? "left-full ml-2" : "right-full mr-2"}
-        top-1/2 -translate-y-1/2 
-      `}
-    >
-      {content}
-      <div
-        className={`
-          absolute top-1/2 -translate-y-1/2 w-2 h-2 
-          bg-black rotate-45
-          ${position === "right" ? "-left-1" : "-right-1"}
-        `}
-      />
-    </div>
-  </div>
-);
 
 export default function DashboardSidebar({
   isOpen,
@@ -224,171 +206,186 @@ export default function DashboardSidebar({
         ${className || ""}
       `}
     >
-      <div className="flex items-center justify-between mb-8 p-4">
-        <motion.div
-          whileHover={{ scale: 1.05 }}
-          className="flex items-center gap-2"
-        >
-          <img
-            src="/bqilogo.png"
-            alt="Logo"
-            width={sidebarCollapsed ? 32 : 68}
-            height={sidebarCollapsed ? 32 : 48}
-            className="rounded-lg"
-          />
-          {!sidebarCollapsed && (
-            <span className="font-bold text-lg">HR PORTAL</span>
-          )}
-        </motion.div>
-
-        <div className="flex gap-2">
-          <Tooltip
-            content={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+      <TooltipProvider>
+        <div className="flex items-center justify-between mb-8 p-4">
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            className="flex items-center gap-2"
           >
+            <img
+              src="/bqilogo.png"
+              alt="Logo"
+              width={sidebarCollapsed ? 32 : 68}
+              height={sidebarCollapsed ? 32 : 48}
+              className="rounded-lg"
+            />
+            {!sidebarCollapsed && (
+              <span className="font-bold text-lg">HR PORTAL</span>
+            )}
+          </motion.div>
+
+          <div className="flex gap-2">
+            <UiTooltip>
+              <TooltipTrigger asChild>
+                <motion.button
+                  whileHover={{ scale: 1.1 }}
+                  onClick={() =>
+                    updateSettings({ sidebarCollapsed: !sidebarCollapsed })
+                  }
+                  className="hidden md:block p-2 hover:bg-muted rounded-lg"
+                >
+                  {sidebarCollapsed ? (
+                    <img
+                      src="/collapse-svg-black.svg"
+                      alt="Expand"
+                      width={20}
+                      height={20}
+                      className="block dark:hidden"
+                    />
+                  ) : (
+                    <img
+                      src="/collapse-svg-black.svg"
+                      alt="Collapse"
+                      width={20}
+                      height={20}
+                      className="block dark:hidden"
+                    />
+                  )}
+                  {sidebarCollapsed ? (
+                    <img
+                      src="/collapse-svg-white.svg"
+                      alt="Expand"
+                      width={20}
+                      height={20}
+                      className="hidden dark:block"
+                    />
+                  ) : (
+                    <img
+                      src="/collapse-svg-white.svg"
+                      alt="Collapse"
+                      width={20}
+                      height={20}
+                      className="hidden dark:block"
+                    />
+                  )}
+                </motion.button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              </TooltipContent>
+            </UiTooltip>
             <motion.button
-              whileHover={{ scale: 1.1 }}
-              onClick={() =>
-                updateSettings({ sidebarCollapsed: !sidebarCollapsed })
-              }
-              className="hidden md:block p-2 hover:bg-muted rounded-lg"
+              whileTap={{ scale: 0.9 }}
+              onClick={onClose}
+              className="md:hidden p-2 hover:bg-muted rounded-lg"
             >
-              {sidebarCollapsed ? (
-                <img
-                  src="/collapse-svg-black.svg"
-                  alt="Expand"
-                  width={20}
-                  height={20}
-                  className="block dark:hidden"
-                />
-              ) : (
-                <img
-                  src="/collapse-svg-black.svg"
-                  alt="Collapse"
-                  width={20}
-                  height={20}
-                  className="block dark:hidden"
-                />
-              )}
-              {sidebarCollapsed ? (
-                <img
-                  src="/collapse-svg-white.svg"
-                  alt="Expand"
-                  width={20}
-                  height={20}
-                  className="hidden dark:block"
-                />
-              ) : (
-                <img
-                  src="/collapse-svg-white.svg"
-                  alt="Collapse"
-                  width={20}
-                  height={20}
-                  className="hidden dark:block"
-                />
-              )}
+              <X className="w-6 h-6 text-muted-foreground" />
             </motion.button>
-          </Tooltip>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={onClose}
-            className="md:hidden p-2 hover:bg-muted rounded-lg"
-          >
-            <X className="w-6 h-6 text-muted-foreground" />
-          </motion.button>
+          </div>
         </div>
-      </div>
 
-      <nav className="space-y-2 px-4 pb-20 overflow-y-auto max-h-[calc(100vh-200px)]">
-        {/* Standalone Overview Link */}
-        <motion.div whileHover={{ scale: 1.02 }} className="space-y-2">
-          {sidebarCollapsed ? (
-            <Tooltip content="Overview">
+        <nav className="space-y-2 px-4 pb-20 overflow-y-auto max-h-[calc(100vh-200px)]">
+          {/* Standalone Overview Link */}
+          <motion.div whileHover={{ scale: 1.02 }} className="space-y-2">
+            {sidebarCollapsed ? (
+              <UiTooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href="/admin/overview"
+                    className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
+                    ${
+                      pathname === "/admin/overview"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted"
+                    }
+                  `}
+                  >
+                    <LayoutDashboard className="w-5 h-5" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">Overview</TooltipContent>
+              </UiTooltip>
+            ) : (
               <Link
                 href="/admin/overview"
-                className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
-                  ${
-                    pathname === "/admin/overview"
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted"
-                  }
-                `}
-              >
-                <LayoutDashboard className="w-5 h-5" />
-              </Link>
-            </Tooltip>
-          ) : (
-            <Link
-              href="/admin/overview"
-              className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
+                className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
                 ${
                   pathname === "/admin/overview"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted"
                 }
               `}
-            >
-              <LayoutDashboard className="w-5 h-5 text-primary" />
-              <span className="ml-3">Overview</span>
-            </Link>
-          )}
-        </motion.div>
+              >
+                <LayoutDashboard className="w-5 h-5 text-primary" />
+                <span className="ml-3">Overview</span>
+              </Link>
+            )}
+          </motion.div>
 
-        {/* Help Link */}
-        <motion.div whileHover={{ scale: 1.02 }}>
-          {sidebarCollapsed ? (
-            <Tooltip content="Help">
+          {/* Help Link */}
+          <motion.div whileHover={{ scale: 1.02 }}>
+            {sidebarCollapsed ? (
+              <UiTooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href="/admin/help"
+                    className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
+                    ${
+                      pathname === "/admin/help"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <HelpCircle className="w-5 h-5" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">Help</TooltipContent>
+              </UiTooltip>
+            ) : (
               <Link
                 href="/admin/help"
-                className={`flex items-center justify-center w-full p-3 rounded-lg text-sm transition-colors
-                  ${
-                    pathname === "/admin/help"
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted"
-                  }`}
-              >
-                <HelpCircle className="w-5 h-5" />
-              </Link>
-            </Tooltip>
-          ) : (
-            <Link
-              href="/admin/help"
-              className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
+                className={`flex items-center w-full p-3 rounded-lg text-sm transition-colors
                 ${
                   pathname === "/admin/help"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted"
                 }`}
-            >
-              <HelpCircle className="w-5 h-5 text-primary" />
-              <span className="ml-3">Help</span>
-            </Link>
-          )}
-        </motion.div>
+              >
+                <HelpCircle className="w-5 h-5 text-primary" />
+                <span className="ml-3">Help</span>
+              </Link>
+            )}
+          </motion.div>
 
-        {menuSections.map((section: MenuSection) => (
-          <div key={section.title} className="space-y-1">
-            {sidebarCollapsed ? (
-              // Collapsed sidebar - show section icon with dropdown on hover
-              <div className="relative group">
-                <Tooltip content={section.title}>
-                  <motion.button
+          {menuSections.map((section: MenuSection) => (
+            <div key={section.title} className="space-y-1">
+              {sidebarCollapsed ? (
+                // Collapsed sidebar - show section icon with dropdown on hover
+                <div className="relative group">
+                  <UiTooltip>
+                    <TooltipTrigger asChild>
+                      <motion.button
+                        className={`
+                        flex items-center justify-center w-full p-3 rounded-lg transition-colors
+                        ${
+                          pathname.includes(section.items[0].href.split("/")[2])
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted"
+                        }
+                      `}
+                        whileHover={{ scale: 1.02 }}
+                      >
+                        <section.icon className="w-5 h-5" />
+                      </motion.button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {section.title}
+                    </TooltipContent>
+                  </UiTooltip>
+
+                  {/* Hover dropdown for collapsed sidebar */}
+                  <div
                     className={`
-                      flex items-center justify-center w-full p-3 rounded-lg transition-colors
-                      ${
-                        pathname.includes(section.items[0].href.split("/")[2])
-                          ? "bg-primary/10 text-primary"
-                          : "text-muted-foreground hover:bg-muted"
-                      }
-                    `}
-                    whileHover={{ scale: 1.02 }}
-                  >
-                    <section.icon className="w-5 h-5" />
-                  </motion.button>
-                </Tooltip>
-
-                {/* Hover dropdown for collapsed sidebar */}
-                <div
-                  className={`
                     absolute left-full top-1/2 -translate-y-1/2 ml-2 
                     bg-popover text-popover-foreground shadow-xl rounded-lg border border-border 
                     opacity-0 group-hover:opacity-100 
@@ -396,16 +393,16 @@ export default function DashboardSidebar({
                     pointer-events-none group-hover:pointer-events-auto 
                     z-50 min-w-[200px] py-2
                   `}
-                >
-                  <div className="p-2">
-                    <div className="text-xs font-semibold text-muted-foreground mb-2 px-2">
-                      {section.title}
-                    </div>
-                    {section.items.map((item) => (
-                      <Link
-                        key={item.name}
-                        href={item.href}
-                        className={`
+                  >
+                    <div className="p-2">
+                      <div className="text-xs font-semibold text-muted-foreground mb-2 px-2">
+                        {section.title}
+                      </div>
+                      {section.items.map((item) => (
+                        <Link
+                          key={item.name}
+                          href={item.href}
+                          className={`
                           flex items-center p-2 rounded-md text-sm transition-colors w-full
                           ${
                             pathname === item.href
@@ -413,95 +410,114 @@ export default function DashboardSidebar({
                               : "text-muted-foreground hover:bg-muted"
                           }
                         `}
-                      >
-                        <item.icon className="w-4 h-4 mr-3 shrink-0" />
-                        <span className="font-medium truncate">
-                          {item.name}
-                        </span>
-                      </Link>
-                    ))}
+                        >
+                          <item.icon className="w-4 h-4 mr-3 shrink-0" />
+                          <span className="font-medium truncate">
+                            {item.name}
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              // Expanded sidebar
-              <>
-                <motion.button
-                  onClick={() => toggleSection(section.title)}
-                  className={`flex items-center w-full p-3 rounded-lg transition-colors
+              ) : (
+                // Expanded sidebar
+                <>
+                  <motion.button
+                    onClick={() => toggleSection(section.title)}
+                    className={`flex items-center w-full p-3 rounded-lg transition-colors
                     ${
                       section.alwaysExpanded
                         ? "cursor-default"
                         : "hover:bg-muted cursor-pointer"
                     }
                   `}
-                  whileHover={{ scale: section.alwaysExpanded ? 1 : 1.02 }}
-                >
-                  <section.icon className="w-5 h-5 text-primary" />
-                  <span className="ml-3 text-sm font-medium">
-                    {section.title}
-                  </span>
-                  {!section.alwaysExpanded && (
-                    <ChevronRight
-                      className={`w-4 h-4 ml-auto transition-transform ${
-                        isExpanded(section) ? "rotate-90" : ""
-                      }`}
-                    />
-                  )}
-                </motion.button>
+                    whileHover={{ scale: section.alwaysExpanded ? 1 : 1.02 }}
+                  >
+                    <section.icon className="w-5 h-5 text-primary" />
+                    <span className="ml-3 text-sm font-medium">
+                      {section.title}
+                    </span>
+                    {!section.alwaysExpanded && (
+                      <ChevronRight
+                        className={`w-4 h-4 ml-auto transition-transform ${
+                          isExpanded(section) ? "rotate-90" : ""
+                        }`}
+                      />
+                    )}
+                  </motion.button>
 
-                <AnimatePresence>
-                  {isExpanded(section) && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="ml-8 space-y-1"
-                    >
-                      {section.items.map((item, index) => (
-                        <motion.div
-                          key={item.name}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                        >
-                          <Link
-                            href={item.href}
-                            className={`flex items-center p-2 rounded-lg text-sm transition-colors
+                  <AnimatePresence>
+                    {isExpanded(section) && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="ml-8 space-y-1"
+                      >
+                        {section.items.map((item, index) => (
+                          <motion.div
+                            key={item.name}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.05 }}
+                          >
+                            <Link
+                              href={item.href}
+                              className={`flex items-center p-2 rounded-lg text-sm transition-colors
                               ${
                                 pathname === item.href
                                   ? "bg-primary/10 text-primary"
                                   : "text-muted-foreground hover:bg-muted"
                               }
                             `}
-                          >
-                            <item.icon className="w-4 h-4" />
-                            <span className="ml-3">{item.name}</span>
-                          </Link>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </>
-            )}
-          </div>
-        ))}
-      </nav>
+                            >
+                              <item.icon className="w-4 h-4" />
+                              <span className="ml-3">{item.name}</span>
+                            </Link>
+                          </motion.div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              )}
+            </div>
+          ))}
+        </nav>
 
-      <motion.div
-        className="absolute bottom-4 left-4 right-4"
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        {sidebarCollapsed ? (
-          <Tooltip content="Log Out">
+        <motion.div
+          className="absolute bottom-4 left-4 right-4"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          {sidebarCollapsed ? (
+            <UiTooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => logout()}
+                  className="w-full flex items-center justify-center p-3 rounded-lg
+                         bg-primary text-primary-foreground
+                         hover:opacity-90 transition-all
+                         shadow-sm hover:shadow-md relative overflow-hidden"
+                >
+                  <motion.div
+                    whileHover={{ rotate: 180 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </motion.div>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Log Out</TooltipContent>
+            </UiTooltip>
+          ) : (
             <button
               onClick={() => logout()}
-              className="w-full flex items-center justify-center p-3 rounded-lg
-                       bg-primary text-primary-foreground
-                       hover:opacity-90 transition-all
-                       shadow-sm hover:shadow-md relative overflow-hidden"
+              className="w-full flex items-center justify-center p-3 space-x-2 rounded-lg
+                     bg-primary text-primary-foreground
+                     hover:opacity-90 transition-all
+                     shadow-sm hover:shadow-md relative overflow-hidden"
             >
               <motion.div
                 whileHover={{ rotate: 180 }}
@@ -509,26 +525,11 @@ export default function DashboardSidebar({
               >
                 <LogOut className="w-4 h-4" />
               </motion.div>
+              <span className="text-sm">Log Out</span>
             </button>
-          </Tooltip>
-        ) : (
-          <button
-            onClick={() => logout()}
-            className="w-full flex items-center justify-center p-3 space-x-2 rounded-lg
-                     bg-primary text-primary-foreground
-                     hover:opacity-90 transition-all
-                     shadow-sm hover:shadow-md relative overflow-hidden"
-          >
-            <motion.div
-              whileHover={{ rotate: 180 }}
-              transition={{ duration: 0.3 }}
-            >
-              <LogOut className="w-4 h-4" />
-            </motion.div>
-            <span className="text-sm">Log Out</span>
-          </button>
-        )}
-      </motion.div>
+          )}
+        </motion.div>
+      </TooltipProvider>
     </motion.aside>
   );
 }
