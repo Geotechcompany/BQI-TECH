@@ -49,6 +49,7 @@ export default function SurveysPage() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [editingSurvey, setEditingSurvey] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -115,6 +116,7 @@ export default function SurveysPage() {
     setDescription("");
     setQuestions([]);
     setLimitPerUser(false);
+    setAiPrompt("");
   };
 
   const handleDelete = async (surveyId: string) => {
@@ -165,6 +167,7 @@ export default function SurveysPage() {
         setDescription("");
         setQuestions([]);
         setLimitPerUser(false);
+        setAiPrompt("");
       }
 
       // refresh list
@@ -270,8 +273,8 @@ export default function SurveysPage() {
           <div className="flex gap-3">
             <Textarea
               placeholder="Write a short prompt, e.g. 'Employee satisfaction for Q4 2025'"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
               className="flex-1 min-h-[80px] border-2 border-gray-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-400/20 rounded-xl transition-all duration-200 resize-none"
             />
             <Button
@@ -282,7 +285,7 @@ export default function SurveysPage() {
                 try {
                   setAiGenerating(true);
                   const res = await adminApi.aiGenerateSurvey({
-                    prompt: description,
+                    prompt: aiPrompt,
                     num_questions: 5,
                   });
                   if (res?.title) {
