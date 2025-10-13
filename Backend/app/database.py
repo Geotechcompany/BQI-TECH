@@ -210,6 +210,50 @@ async def initialize_database_indexes():
 			name="applications_appliedDate"
 		)
 
+		# Email campaigns collection indexes
+		await ensure_index(
+			_database.email_campaigns,
+			["sent_by"],
+			name="email_campaigns_sent_by"
+		)
+		
+		await ensure_index(
+			_database.email_campaigns,
+			["created_at"],
+			name="email_campaigns_created_at"
+		)
+		
+		await ensure_index(
+			_database.email_campaigns,
+			["status"],
+			name="email_campaigns_status"
+		)
+		
+		# Email logs collection indexes
+		await ensure_index(
+			_database.email_logs,
+			["campaign_id"],
+			name="email_logs_campaign_id"
+		)
+		
+		await ensure_index(
+			_database.email_logs,
+			["recipient_email"],
+			name="email_logs_recipient_email"
+		)
+		
+		await ensure_index(
+			_database.email_logs,
+			["sent_at"],
+			name="email_logs_sent_at"
+		)
+		
+		await ensure_index(
+			_database.email_logs,
+			["status"],
+			name="email_logs_status"
+		)
+
 		# Text search index for applications
 		try:
 			# Create text index for search functionality

@@ -106,6 +106,8 @@ async def admin_email_broadcast(
             html=html,
             concurrency=concurrency,
             dry_run=dry_run,
+            sent_by=str(current_user.get("_id")),
+            campaign_name=payload.get("campaign_name"),
         )
 
         return JSONResponse(content=result)
@@ -114,6 +116,121 @@ async def admin_email_broadcast(
     except Exception as e:
         logger.error(f"Email broadcast failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to send emails")
+
+# ---------------------- Email History & Analytics ----------------------
+@router.get("/emails/campaigns")
+async def get_email_campaigns(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get list of email campaigns with pagination"""
+    try:
+        db = get_database()
+        
+        # Get campaigns with pagination
+        cursor = db.email_campaigns.find().sort("created_at", -1).skip(skip).limit(limit)
+        campaigns = []
+        
+        async for campaign in cursor:
+            campaign["_id"] = str(campaign["_id"])
+            campaigns.append(campaign)
+        
+        # Get total count
+        total = await db.email_campaigns.count_documents({})
+        
+        return {
+            "campaigns": campaigns,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Failed to get email campaigns: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get email campaigns")
+
+@router.get("/emails/campaigns/{campaign_id}")
+async def get_email_campaign_details(
+    campaign_id: str,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get detailed information about a specific email campaign"""
+    try:
+        db = get_database()
+        
+        # Get campaign details
+        campaign = await db.email_campaigns.find_one({"_id": ObjectId(campaign_id)})
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        campaign["_id"] = str(campaign["_id"])
+        
+        # Get email logs for this campaign
+        cursor = db.email_logs.find({"campaign_id": campaign_id}).sort("sent_at", -1)
+        logs = []
+        
+        async for log in cursor:
+            log["_id"] = str(log["_id"])
+            logs.append(log)
+        
+        # Get statistics
+        total_sent = await db.email_logs.count_documents({"campaign_id": campaign_id, "status": "sent"})
+        total_failed = await db.email_logs.count_documents({"campaign_id": campaign_id, "status": "failed"})
+        
+        return {
+            "campaign": campaign,
+            "logs": logs,
+            "statistics": {
+                "total_sent": total_sent,
+                "total_failed": total_failed,
+                "total_attempted": total_sent + total_failed
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get campaign details: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get campaign details")
+
+@router.get("/emails/logs")
+async def get_email_logs(
+    skip: int = 0,
+    limit: int = 100,
+    campaign_id: str = None,
+    status: str = None,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get email logs with optional filtering"""
+    try:
+        db = get_database()
+        
+        # Build query
+        query = {}
+        if campaign_id:
+            query["campaign_id"] = campaign_id
+        if status:
+            query["status"] = status
+        
+        # Get logs with pagination
+        cursor = db.email_logs.find(query).sort("sent_at", -1).skip(skip).limit(limit)
+        logs = []
+        
+        async for log in cursor:
+            log["_id"] = str(log["_id"])
+            logs.append(log)
+        
+        # Get total count
+        total = await db.email_logs.count_documents(query)
+        
+        return {
+            "logs": logs,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Failed to get email logs: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get email logs")
 
 async def get_enhanced_applications_data(db, query: Dict[Any, Any] = None, limit: int = None) -> List[Dict[Any, Any]]:
     """Get applications with enhanced job title resolution and data extraction"""

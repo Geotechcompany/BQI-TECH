@@ -542,6 +542,12 @@ export default function EmailBroadcastPage() {
           </div>
         )}
       </div>
+
+      {/* Email History Modal */}
+      <EmailHistory
+        isOpen={showEmailHistory}
+        onClose={() => setShowEmailHistory(false)}
+      />
     </AdminPageLayout>
   );
 }
