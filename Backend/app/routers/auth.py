@@ -14,14 +14,20 @@ from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.utils.ip_utils import get_real_client_ip
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address)
+# Rate limiter with accurate IP detection
+def get_client_ip_for_auth_rate_limit(request: Request) -> str:
+    """Custom IP extraction function for auth rate limiting"""
+    real_ip = get_real_client_ip(request)
+    return real_ip or (request.client.host if request.client else "unknown")
+
+limiter = Limiter(key_func=get_client_ip_for_auth_rate_limit)
 
 class LoginCredentials(BaseModel):
     email: str
