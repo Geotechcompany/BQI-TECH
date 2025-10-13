@@ -41,15 +41,9 @@ async def create_survey(
     }
     result = await db.surveys.insert_one(doc)
     survey_id = str(result.inserted_id)
-    
-    # Construct the full public link
-    import os
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    public_link = f"{frontend_url}/survey/{survey_id}"
-    
     return {
         "id": survey_id,
-        "link": public_link,
+        "link": f"/survey/{survey_id}",
     }
 
 
@@ -130,13 +124,7 @@ async def update_survey(
     result = await db.surveys.update_one({"_id": to_object_id(survey_id)}, {"$set": update})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Survey not found")
-    
-    # Construct the public link
-    import os
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    public_link = f"{frontend_url}/survey/{survey_id}"
-    
-    return {"id": survey_id, "link": public_link}
+    return {"id": survey_id}
 
 
 @router.delete("/admin/surveys/{survey_id}")

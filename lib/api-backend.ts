@@ -392,20 +392,6 @@ export const adminApi = {
   updateSurvey: (id: string, data: any) =>
     backendApi.put(`/api/admin/surveys/${id}`, data),
   deleteSurvey: (id: string) => backendApi.delete(`/api/admin/surveys/${id}`),
-
-  // Broadcast Lists
-  listBroadcastLists: (params?: { skip?: number; limit?: number }) =>
-    backendApi.get("/api/admin/broadcast-lists", params),
-  createBroadcastList: (data: any) =>
-    backendApi.post("/api/admin/broadcast-lists", data),
-  getBroadcastList: (id: string) =>
-    backendApi.get(`/api/admin/broadcast-lists/${id}`),
-  updateBroadcastList: (id: string, data: any) =>
-    backendApi.put(`/api/admin/broadcast-lists/${id}`, data),
-  deleteBroadcastList: (id: string) =>
-    backendApi.delete(`/api/admin/broadcast-lists/${id}`),
-  getBroadcastListUsers: (id: string) =>
-    backendApi.get(`/api/admin/broadcast-lists/${id}/users`),
   getSurveyAnalytics: (id: string) =>
     backendApi.get(`/api/admin/surveys/${id}/analytics`),
   uploadAdminFile: (file: File) => backendApi.upload(`/api/upload`, file),
@@ -430,19 +416,6 @@ export const adminApi = {
   ) => backendApi.get(`/api/admin/surveys/${id}/responses`, params),
   aiGenerateSurvey: (data: { prompt: string; num_questions?: number }) =>
     backendApi.post(`/api/admin/surveys/ai/generate`, data),
-
-  // Email Broadcast
-  getUsersCount: () => backendApi.get("/api/admin/users/count"),
-  generateAIEmail: (data: { prompt: string }) =>
-    backendApi.post("/api/admin/email/ai/generate", data),
-  sendEmailBroadcast: (data: {
-    subject: string;
-    body: string;
-    recipients: string[];
-    mode: string;
-  }) => backendApi.post("/api/admin/emails/broadcast", data),
-  searchUsers: (params: { q: string }) =>
-    backendApi.get("/api/admin/users/search", params),
 };
 
 export const userApi = {
