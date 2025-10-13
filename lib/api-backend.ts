@@ -406,6 +406,7 @@ export const adminApi = {
     backendApi.delete(`/api/admin/broadcast-lists/${id}`),
   getBroadcastListUsers: (id: string) =>
     backendApi.get(`/api/admin/broadcast-lists/${id}/users`),
+
   getSurveyAnalytics: (id: string) =>
     backendApi.get(`/api/admin/surveys/${id}/analytics`),
   uploadAdminFile: (file: File) => backendApi.upload(`/api/upload`, file),
