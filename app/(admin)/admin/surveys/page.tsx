@@ -155,7 +155,7 @@ export default function SurveysPage() {
       let res;
       if (isEditing && editingSurvey) {
         // Update existing survey
-        res = await adminApi.updateSurvey(editingSurvey._id, payload);
+        res = await adminApi.updateSurvey(editingSurvey.id, payload);
         toast.success("Survey updated", { description: `Link: ${res.link}` });
         cancelEditing();
       } else {
