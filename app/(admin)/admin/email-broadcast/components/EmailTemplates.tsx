@@ -21,6 +21,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
+import React from "react";
 
 interface EmailTemplatesProps {
   onTemplateSelect: (template: any) => void;

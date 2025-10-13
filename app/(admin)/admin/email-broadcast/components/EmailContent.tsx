@@ -23,6 +23,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import React from "react";
 
 interface EmailContentProps {
   subject: string;

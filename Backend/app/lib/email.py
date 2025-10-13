@@ -442,7 +442,7 @@ async def send_bulk_emails_backend(
     - Returns summary with failures
     """
     import asyncio
-    from .database import get_database
+    from app.database import get_database
     from datetime import datetime
 
     # Normalize and deduplicate
@@ -456,7 +456,7 @@ async def send_bulk_emails_backend(
     # Create email campaign record
     db = get_database()
     campaign_id = None
-    if db:
+    if db is not None:
         try:
             campaign_doc = {
                 "subject": subject,
@@ -485,7 +485,7 @@ async def send_bulk_emails_backend(
                 ok = await loop.run_in_executor(None, send_generic_email, to, subject, html)
                 
                 # Store individual email log
-                if db:
+                if db is not None:
                     try:
                         email_log = {
                             "campaign_id": campaign_id,
@@ -505,7 +505,7 @@ async def send_bulk_emails_backend(
                     failures.append({"to": to, "error": "send failed"})
             except Exception as e:
                 # Store failed email log
-                if db:
+                if db is not None:
                     try:
                         email_log = {
                             "campaign_id": campaign_id,
@@ -524,10 +524,11 @@ async def send_bulk_emails_backend(
     await asyncio.gather(*[_send(to) for to in normalized])
 
     # Update campaign status
-    if db and campaign_id:
+    if db is not None and campaign_id:
         try:
-            await db.email_campaigns.update_one(
-                {"_id": campaign_id},
+            from bson import ObjectId
+            result = await db.email_campaigns.update_one(
+                {"_id": ObjectId(campaign_id)},
                 {
                     "$set": {
                         "status": "completed",
@@ -537,6 +538,7 @@ async def send_bulk_emails_backend(
                     }
                 }
             )
+            logger.info(f"Updated campaign {campaign_id}: {result.modified_count} documents modified")
         except Exception as e:
             logger.error(f"Failed to update campaign status: {e}")
 

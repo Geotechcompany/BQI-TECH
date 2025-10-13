@@ -42,6 +42,7 @@ import {
 import { adminApi } from "@/lib/api-backend";
 import { authService } from "@/lib/auth-backend";
 import { toast } from "sonner";
+import React from "react";
 
 interface RecipientSelectionProps {
   mode: "all" | "list" | "search" | "broadcast";

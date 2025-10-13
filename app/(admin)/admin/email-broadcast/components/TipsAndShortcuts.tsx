@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Gift, Bell, Search, Eye, FileText } from "lucide-react";
+import React from "react";
 
 interface TipsAndShortcutsProps {
   isOpen: boolean;
