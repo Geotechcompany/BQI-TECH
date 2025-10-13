@@ -13,15 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Mail,
-  AlertCircle,
-  CheckCircle,
-  Loader2,
-  X,
-  Eye,
-  History,
-} from "lucide-react";
+import { Mail, AlertCircle, CheckCircle, Loader2, X, Eye } from "lucide-react";
 import { adminApi } from "@/lib/api-backend";
 import { toast } from "sonner";
 
@@ -31,7 +23,6 @@ import { EmailContent } from "./components/EmailContent";
 import { EmailTemplates } from "./components/EmailTemplates";
 import { QuickStats } from "./components/QuickStats";
 import { TipsAndShortcuts } from "./components/TipsAndShortcuts";
-import { EmailHistory } from "./components/EmailHistory";
 
 export default function EmailBroadcastPage() {
   // Main state
@@ -60,7 +51,6 @@ export default function EmailBroadcastPage() {
   const [selectedBroadcastList, setSelectedBroadcastList] = useState<
     string | null
   >(null);
-  const [showEmailHistory, setShowEmailHistory] = useState(false);
 
   // Load user count on component mount
   useEffect(() => {
@@ -223,28 +213,18 @@ export default function EmailBroadcastPage() {
         {/* Header */}
         <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 mb-6">
           <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Mail className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-2xl text-blue-900">
-                    Email Broadcast
-                  </CardTitle>
-                  <CardDescription className="text-blue-700">
-                    Send emails to all users or specific recipients
-                  </CardDescription>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <Mail className="h-6 w-6 text-blue-600" />
               </div>
-              <Button
-                variant="outline"
-                onClick={() => setShowEmailHistory(true)}
-                className="flex items-center gap-2"
-              >
-                <History className="h-4 w-4" />
-                View History
-              </Button>
+              <div>
+                <CardTitle className="text-2xl text-blue-900">
+                  Email Broadcast
+                </CardTitle>
+                <CardDescription className="text-blue-700">
+                  Send emails to all users or specific recipients
+                </CardDescription>
+              </div>
             </div>
           </CardHeader>
         </Card>

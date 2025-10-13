@@ -398,25 +398,13 @@ export const adminApi = {
   // Email Broadcast
   getUsersCount: () => backendApi.get("/api/admin/users/count"),
   generateAIEmail: (data: { prompt: string }) =>
-    backendApi.post("/api/admin/emails/ai/generate", data),
+    backendApi.post("/api/admin/email/ai/generate", data),
   sendEmailBroadcast: (data: {
     subject: string;
     body: string;
     recipients: string[];
     mode: string;
-  }) => backendApi.post("/api/admin/emails/broadcast", data),
-
-  // Email History & Analytics
-  getEmailCampaigns: (params?: { skip?: number; limit?: number }) =>
-    backendApi.get("/api/admin/emails/campaigns", params),
-  getEmailCampaignDetails: (campaignId: string) =>
-    backendApi.get(`/api/admin/emails/campaigns/${campaignId}`),
-  getEmailLogs: (params?: {
-    skip?: number;
-    limit?: number;
-    campaign_id?: string;
-    status?: string;
-  }) => backendApi.get("/api/admin/emails/logs", params),
+  }) => backendApi.post("/api/admin/email/broadcast", data),
   searchUsers: (params: { q: string }) =>
     backendApi.get("/api/admin/users/search", params),
 
