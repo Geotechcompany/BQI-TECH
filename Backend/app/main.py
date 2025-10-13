@@ -9,6 +9,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from app.utils.ip_utils import get_real_client_ip
 
 from .database import connect_to_database, close_database_connection, get_database, is_connected
 from .config import settings
@@ -24,6 +25,7 @@ from .routers.contact import router as contact_router
 from .routers.health import router as health_router
 from .routers.notifications import router as notifications_router
 from .routers.user_notifications import router as user_notifications_router
+from .routers.surveys import router as surveys_router
 from .routers.upload import router as upload_router
 
 # Try to import misc router if it exists
@@ -55,8 +57,13 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down...")
     await close_database_connection()
 
-# Create rate limiter
-limiter = Limiter(key_func=get_remote_address)
+# Create rate limiter with accurate IP detection
+def get_client_ip_for_rate_limit(request: Request) -> str:
+    """Custom IP extraction function for rate limiting"""
+    real_ip = get_real_client_ip(request)
+    return real_ip or (request.client.host if request.client else "unknown")
+
+limiter = Limiter(key_func=get_client_ip_for_rate_limit)
 
 # Create FastAPI app with lifespan
 app = FastAPI(
@@ -90,6 +97,20 @@ async def debug_requests(request: Request, call_next):
         logger.info(f"Response status: {response.status_code}")
         logger.info(f"Response headers: {dict(response.headers)}")
     
+    return response
+
+@app.middleware("http")
+async def log_client_ips(request: Request, call_next):
+    """Log client IP addresses for debugging"""
+    real_ip = get_real_client_ip(request)
+    direct_ip = request.client.host if request.client else None
+    
+    # Log IP information for debugging
+    logger.info(f"IP Debug - Real IP: {real_ip}, Direct IP: {direct_ip}, "
+                f"X-Forwarded-For: {request.headers.get('x-forwarded-for')}, "
+                f"X-Real-IP: {request.headers.get('x-real-ip')}")
+    
+    response = await call_next(request)
     return response
 
 @app.middleware("http")
@@ -175,6 +196,8 @@ logger.info("Registering user notifications router at /api/user-notifications")
 app.include_router(user_notifications_router, prefix="/api/user-notifications")
 logger.info("Registering upload router at /api/upload")
 app.include_router(upload_router, prefix="/api/upload")
+logger.info("Registering surveys router at /api")
+app.include_router(surveys_router, prefix="/api")
 
 # Include misc router if available
 if HAS_MISC_ROUTER:
