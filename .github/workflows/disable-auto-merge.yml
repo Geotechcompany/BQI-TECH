@@ -1,0 +1,102 @@
+name: Disable Auto-Merge
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for disabling auto-merge"
+        required: true
+        type: string
+      duration:
+        description: "Duration to disable (in hours)"
+        required: false
+        default: "24"
+        type: string
+
+jobs:
+  disable-auto-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Disable auto-merge
+        run: |
+          echo "Disabling auto-merge workflows..."
+
+          # Create a maintenance file to signal auto-merge should be disabled
+          cat > .github/auto-merge-disabled << EOF
+          # Auto-merge disabled
+          # Reason: ${{ github.event.inputs.reason }}
+          # Disabled at: $(date)
+          # Duration: ${{ github.event.inputs.duration }} hours
+          # Disabled by: ${{ github.actor }}
+          EOF
+
+          echo "✅ Auto-merge disabled"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Duration: ${{ github.event.inputs.duration }} hours"
+
+      - name: Create issue
+        run: |
+          gh issue create \
+            --title "Auto-merge disabled" \
+            --body "Auto-merge has been temporarily disabled.
+
+          **Reason:** ${{ github.event.inputs.reason }}
+          **Duration:** ${{ github.event.inputs.duration }} hours
+          **Disabled by:** @${{ github.actor }}
+          **Disabled at:** $(date)
+
+          This issue will be automatically closed when auto-merge is re-enabled." \
+            --label "maintenance,auto-merge"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on recent PRs
+        run: |
+          # Get recent open PRs and comment on them
+          gh pr list --state open --limit 5 --json number --jq '.[].number' | while read pr_number; do
+            if [ ! -z "$pr_number" ]; then
+              gh pr comment $pr_number --body "⚠️ **Auto-merge temporarily disabled**
+
+              Auto-merge has been temporarily disabled due to: ${{ github.event.inputs.reason }}
+              
+              Duration: ${{ github.event.inputs.duration }} hours
+              
+              Please merge manually or wait for auto-merge to be re-enabled."
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  re-enable-auto-merge:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.duration != '0'
+    steps:
+      - name: Wait for duration
+        run: |
+          DURATION_HOURS=${{ github.event.inputs.duration }}
+          DURATION_SECONDS=$((DURATION_HOURS * 3600))
+          echo "Waiting $DURATION_HOURS hours before re-enabling auto-merge..."
+          sleep $DURATION_SECONDS
+
+      - name: Re-enable auto-merge
+        run: |
+          echo "Re-enabling auto-merge..."
+
+          # Remove the maintenance file
+          rm -f .github/auto-merge-disabled
+
+          echo "✅ Auto-merge re-enabled"
+
+      - name: Close maintenance issue
+        run: |
+          # Find and close the maintenance issue
+          ISSUE_NUMBER=$(gh issue list --label "auto-merge" --state open --json number --jq '.[0].number')
+          if [ ! -z "$ISSUE_NUMBER" ] && [ "$ISSUE_NUMBER" != "null" ]; then
+            gh issue comment $ISSUE_NUMBER --body "✅ Auto-merge has been re-enabled automatically after ${{ github.event.inputs.duration }} hours."
+            gh issue close $ISSUE_NUMBER
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
