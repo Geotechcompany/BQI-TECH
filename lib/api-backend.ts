@@ -405,6 +405,18 @@ export const adminApi = {
     recipients: string[];
     mode: string;
   }) => backendApi.post("/api/admin/emails/broadcast", data),
+
+  // Email History & Analytics
+  getEmailCampaigns: (params?: { skip?: number; limit?: number }) =>
+    backendApi.get("/api/admin/emails/campaigns", params),
+  getEmailCampaignDetails: (campaignId: string) =>
+    backendApi.get(`/api/admin/emails/campaigns/${campaignId}`),
+  getEmailLogs: (params?: {
+    skip?: number;
+    limit?: number;
+    campaign_id?: string;
+    status?: string;
+  }) => backendApi.get("/api/admin/emails/logs", params),
   searchUsers: (params: { q: string }) =>
     backendApi.get("/api/admin/users/search", params),
 

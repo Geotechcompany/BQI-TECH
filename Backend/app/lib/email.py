@@ -431,14 +431,19 @@ async def send_bulk_emails_backend(
     html: str,
     concurrency: int = 10,
     dry_run: bool = False,
+    sent_by: str = None,
+    campaign_name: str = None,
 ) -> Dict[str, Any]:
     """Send emails to many recipients with simple concurrency and aggregation.
 
     - De-duplicates recipient list
     - Respects a small concurrency window to avoid SMTP throttling
+    - Stores email logs in database for tracking
     - Returns summary with failures
     """
     import asyncio
+    from .database import get_database
+    from datetime import datetime
 
     # Normalize and deduplicate
     normalized = list({(e or "").strip().lower() for e in recipients if (e or "").strip()})
@@ -447,6 +452,25 @@ async def send_bulk_emails_backend(
 
     if dry_run:
         return {"requested": len(normalized), "attempted": 0, "succeeded": 0, "failed": 0, "failures": []}
+
+    # Create email campaign record
+    db = get_database()
+    campaign_id = None
+    if db:
+        try:
+            campaign_doc = {
+                "subject": subject,
+                "html_content": html,
+                "recipient_count": len(normalized),
+                "sent_by": sent_by,
+                "campaign_name": campaign_name or f"Email Campaign - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                "created_at": datetime.utcnow(),
+                "status": "sending"
+            }
+            result = await db.email_campaigns.insert_one(campaign_doc)
+            campaign_id = str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to create email campaign record: {e}")
 
     # Simple semaphore to cap concurrent SMTP connections
     sem = asyncio.Semaphore(max(1, int(concurrency)))
@@ -459,14 +483,62 @@ async def send_bulk_emails_backend(
             try:
                 loop = asyncio.get_running_loop()
                 ok = await loop.run_in_executor(None, send_generic_email, to, subject, html)
+                
+                # Store individual email log
+                if db:
+                    try:
+                        email_log = {
+                            "campaign_id": campaign_id,
+                            "recipient_email": to,
+                            "subject": subject,
+                            "sent_at": datetime.utcnow(),
+                            "status": "sent" if ok else "failed",
+                            "error": None if ok else "send failed"
+                        }
+                        await db.email_logs.insert_one(email_log)
+                    except Exception as e:
+                        logger.error(f"Failed to store email log for {to}: {e}")
+                
                 if ok:
                     succeeded += 1
                 else:
                     failures.append({"to": to, "error": "send failed"})
             except Exception as e:
+                # Store failed email log
+                if db:
+                    try:
+                        email_log = {
+                            "campaign_id": campaign_id,
+                            "recipient_email": to,
+                            "subject": subject,
+                            "sent_at": datetime.utcnow(),
+                            "status": "failed",
+                            "error": str(e)
+                        }
+                        await db.email_logs.insert_one(email_log)
+                    except Exception as log_error:
+                        logger.error(f"Failed to store email log for {to}: {log_error}")
+                
                 failures.append({"to": to, "error": str(e)})
 
     await asyncio.gather(*[_send(to) for to in normalized])
+
+    # Update campaign status
+    if db and campaign_id:
+        try:
+            await db.email_campaigns.update_one(
+                {"_id": campaign_id},
+                {
+                    "$set": {
+                        "status": "completed",
+                        "completed_at": datetime.utcnow(),
+                        "succeeded": succeeded,
+                        "failed": len(normalized) - succeeded
+                    }
+                }
+            )
+        except Exception as e:
+            logger.error(f"Failed to update campaign status: {e}")
 
     return {
         "requested": len(normalized),
@@ -474,4 +546,5 @@ async def send_bulk_emails_backend(
         "succeeded": succeeded,
         "failed": len(normalized) - succeeded,
         "failures": failures,
+        "campaign_id": campaign_id,
     }
