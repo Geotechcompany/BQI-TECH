@@ -5,7 +5,7 @@ import string
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from app.config import settings
 from app.database import get_database
 import logging
@@ -399,3 +399,79 @@ async def send_password_reset_email(email: str, reset_link: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to send password reset email to {email}: {str(e)}")
         return False
+
+# ---------------------- Generic & Bulk Email Utilities ----------------------
+def send_generic_email(to: str, subject: str, html: str) -> bool:
+    """Send a generic HTML email via configured SMTP settings.
+
+    This is a synchronous helper designed to be used from async wrappers when needed.
+    """
+    try:
+        message = MIMEMultipart()
+        message["From"] = settings.from_email
+        message["To"] = to
+        message["Subject"] = subject
+        message.attach(MIMEText(html, "html"))
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
+            server.login(settings.smtp_user, settings.smtp_pass)
+            server.sendmail(settings.from_email, to, message.as_string())
+
+        logger.info(f"Email sent to {to}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed sending email to {to}: {e}")
+        return False
+
+
+async def send_bulk_emails_backend(
+    recipients: List[str],
+    subject: str,
+    html: str,
+    concurrency: int = 10,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Send emails to many recipients with simple concurrency and aggregation.
+
+    - De-duplicates recipient list
+    - Respects a small concurrency window to avoid SMTP throttling
+    - Returns summary with failures
+    """
+    import asyncio
+
+    # Normalize and deduplicate
+    normalized = list({(e or "").strip().lower() for e in recipients if (e or "").strip()})
+    if not normalized:
+        return {"requested": 0, "attempted": 0, "succeeded": 0, "failed": 0, "failures": []}
+
+    if dry_run:
+        return {"requested": len(normalized), "attempted": 0, "succeeded": 0, "failed": 0, "failures": []}
+
+    # Simple semaphore to cap concurrent SMTP connections
+    sem = asyncio.Semaphore(max(1, int(concurrency)))
+    succeeded = 0
+    failures: List[Dict[str, str]] = []
+
+    async def _send(to: str):
+        nonlocal succeeded
+        async with sem:
+            try:
+                loop = asyncio.get_running_loop()
+                ok = await loop.run_in_executor(None, send_generic_email, to, subject, html)
+                if ok:
+                    succeeded += 1
+                else:
+                    failures.append({"to": to, "error": "send failed"})
+            except Exception as e:
+                failures.append({"to": to, "error": str(e)})
+
+    await asyncio.gather(*[_send(to) for to in normalized])
+
+    return {
+        "requested": len(normalized),
+        "attempted": len(normalized),
+        "succeeded": succeeded,
+        "failed": len(normalized) - succeeded,
+        "failures": failures,
+    }
