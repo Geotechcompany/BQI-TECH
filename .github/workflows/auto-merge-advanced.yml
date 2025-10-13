@@ -1,0 +1,259 @@
+name: Advanced Auto Merge Pull Requests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+  check_suite:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to auto-merge"
+        required: true
+        type: string
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Check if auto-merge is disabled
+        id: check-disabled
+        run: |
+          if [ -f ".github/auto-merge-disabled" ]; then
+            echo "disabled=true" >> $GITHUB_OUTPUT
+            echo "Auto-merge is currently disabled"
+            cat .github/auto-merge-disabled
+          else
+            echo "disabled=false" >> $GITHUB_OUTPUT
+            echo "Auto-merge is enabled"
+          fi
+
+      - name: Skip if disabled
+        if: steps.check-disabled.outputs.disabled == 'true'
+        run: |
+          echo "Skipping auto-merge - currently disabled"
+          exit 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+      - name: Set PR number
+        id: set-pr
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "pr_number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get PR details
+        id: pr-details
+        run: |
+          PR_NUMBER=${{ steps.set-pr.outputs.pr_number }}
+
+          # Get PR details
+          PR_DATA=$(gh pr view $PR_NUMBER --json state,mergeable,mergeableState,isDraft,author,title,headRefName,baseRefName)
+
+          echo "pr_state=$(echo $PR_DATA | jq -r '.state')" >> $GITHUB_OUTPUT
+          echo "pr_mergeable=$(echo $PR_DATA | jq -r '.mergeable')" >> $GITHUB_OUTPUT
+          echo "pr_mergeable_state=$(echo $PR_DATA | jq -r '.mergeableState')" >> $GITHUB_OUTPUT
+          echo "pr_is_draft=$(echo $PR_DATA | jq -r '.isDraft')" >> $GITHUB_OUTPUT
+          echo "pr_author=$(echo $PR_DATA | jq -r '.author.login')" >> $GITHUB_OUTPUT
+          echo "pr_title=$(echo $PR_DATA | jq -r '.title')" >> $GITHUB_OUTPUT
+          echo "pr_head_ref=$(echo $PR_DATA | jq -r '.headRefName')" >> $GITHUB_OUTPUT
+          echo "pr_base_ref=$(echo $PR_DATA | jq -r '.baseRefName')" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check PR conditions
+        id: check-conditions
+        run: |
+          # Check if PR is open
+          if [ "${{ steps.pr-details.outputs.pr_state }}" != "OPEN" ]; then
+            echo "❌ PR is not open (state: ${{ steps.pr-details.outputs.pr_state }})"
+            echo "can_merge=false" >> $GITHUB_OUTPUT
+            echo "reason=PR is not open" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if PR is not draft
+          if [ "${{ steps.pr-details.outputs.pr_is_draft }}" = "true" ]; then
+            echo "❌ PR is still a draft"
+            echo "can_merge=false" >> $GITHUB_OUTPUT
+            echo "reason=PR is still a draft" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if PR is mergeable
+          if [ "${{ steps.pr-details.outputs.pr_mergeable }}" != "true" ]; then
+            echo "❌ PR is not mergeable"
+            echo "can_merge=false" >> $GITHUB_OUTPUT
+            echo "reason=PR is not mergeable" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if PR is in clean state
+          if [ "${{ steps.pr-details.outputs.pr_mergeable_state }}" != "clean" ]; then
+            echo "❌ PR mergeable state is not clean (state: ${{ steps.pr-details.outputs.pr_mergeable_state }})"
+            echo "can_merge=false" >> $GITHUB_OUTPUT
+            echo "reason=PR mergeable state is not clean" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if PR is targeting main/master branch
+          if [ "${{ steps.pr-details.outputs.pr_base_ref }}" != "main" ] && [ "${{ steps.pr-details.outputs.pr_base_ref }}" != "master" ]; then
+            echo "❌ PR is not targeting main/master branch (targeting: ${{ steps.pr-details.outputs.pr_base_ref }})"
+            echo "can_merge=false" >> $GITHUB_OUTPUT
+            echo "reason=PR is not targeting main/master branch" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if PR author is not a bot (optional safety check)
+          if [[ "${{ steps.pr-details.outputs.pr_author }}" == *"bot"* ]] || [[ "${{ steps.pr-details.outputs.pr_author }}" == *"Bot"* ]]; then
+            echo "⚠️  PR author appears to be a bot: ${{ steps.pr-details.outputs.pr_author }}"
+            # Uncomment the next lines to prevent auto-merging bot PRs
+            # echo "can_merge=false" >> $GITHUB_OUTPUT
+            # echo "reason=PR author is a bot" >> $GITHUB_OUTPUT
+            # exit 0
+          fi
+
+          echo "✅ All conditions met for auto-merge"
+          echo "can_merge=true" >> $GITHUB_OUTPUT
+          echo "reason=All conditions met" >> $GITHUB_OUTPUT
+
+      - name: Wait for checks to complete
+        if: steps.check-conditions.outputs.can_merge == 'true'
+        run: |
+          PR_NUMBER=${{ steps.set-pr.outputs.pr_number }}
+          echo "⏳ Waiting for all checks to complete..."
+
+          # Wait up to 10 minutes for checks to complete
+          for i in {1..60}; do
+            CHECKS=$(gh pr checks $PR_NUMBER --json conclusion,status)
+            ALL_COMPLETE=$(echo $CHECKS | jq -r '.[] | select(.status != "completed") | .status' | wc -l)
+            
+            if [ "$ALL_COMPLETE" -eq 0 ]; then
+              echo "✅ All checks completed"
+              break
+            fi
+            
+            echo "⏳ Still waiting for checks to complete... ($i/60)"
+            sleep 10
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if all checks passed
+        if: steps.check-conditions.outputs.can_merge == 'true'
+        id: check-status
+        run: |
+          PR_NUMBER=${{ steps.set-pr.outputs.pr_number }}
+
+          # Get check statuses
+          CHECKS=$(gh pr checks $PR_NUMBER --json conclusion,status,name)
+
+          # Check if any checks failed
+          FAILED_CHECKS=$(echo $CHECKS | jq -r '.[] | select(.conclusion == "failure") | .name')
+          if [ ! -z "$FAILED_CHECKS" ]; then
+            echo "❌ Some checks failed:"
+            echo "$FAILED_CHECKS"
+            echo "checks_passed=false" >> $GITHUB_OUTPUT
+            echo "failed_checks=$FAILED_CHECKS" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if any checks are still pending
+          PENDING_CHECKS=$(echo $CHECKS | jq -r '.[] | select(.status == "in_progress" or .status == "queued") | .name')
+          if [ ! -z "$PENDING_CHECKS" ]; then
+            echo "⏳ Some checks are still pending:"
+            echo "$PENDING_CHECKS"
+            echo "checks_passed=false" >> $GITHUB_OUTPUT
+            echo "pending_checks=$PENDING_CHECKS" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "✅ All checks passed"
+          echo "checks_passed=true" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge PR
+        if: steps.check-conditions.outputs.can_merge == 'true' && steps.check-status.outputs.checks_passed == 'true'
+        run: |
+          PR_NUMBER=${{ steps.set-pr.outputs.pr_number }}
+          echo "🚀 Auto-merging PR #$PR_NUMBER"
+
+          # Merge the PR with squash strategy
+          gh pr merge $PR_NUMBER --squash --delete-branch --subject "Auto-merge: ${{ steps.pr-details.outputs.pr_title }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment success
+        if: steps.check-conditions.outputs.can_merge == 'true' && steps.check-status.outputs.checks_passed == 'true'
+        run: |
+          PR_NUMBER=${{ steps.set-pr.outputs.pr_number }}
+          gh pr comment $PR_NUMBER --body "🤖 **Auto-merged by GitHub Actions** 
+
+          ✅ This PR has been automatically merged and the branch has been deleted.
+
+          **Merge Details:**
+          - PR: #$PR_NUMBER
+          - Author: @${{ steps.pr-details.outputs.pr_author }}
+          - Target: ${{ steps.pr-details.outputs.pr_base_ref }} ← ${{ steps.pr-details.outputs.pr_head_ref }}
+          - Strategy: Squash merge
+
+          🎉 Thanks for your contribution!"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment failure
+        if: steps.check-conditions.outputs.can_merge == 'false' || steps.check-status.outputs.checks_passed == 'false'
+        run: |
+          PR_NUMBER=${{ steps.set-pr.outputs.pr_number }}
+
+          if [ "${{ steps.check-conditions.outputs.can_merge }}" = "false" ]; then
+            REASON="${{ steps.check-conditions.outputs.reason }}"
+            gh pr comment $PR_NUMBER --body "⏳ **Auto-merge pending** 
+
+            ❌ This PR is not ready for auto-merge yet.
+            
+            **Reason:** $REASON
+            
+            Please ensure:
+            - PR is not a draft
+            - All checks pass
+            - PR is targeting main/master branch
+            - No merge conflicts"
+          else
+            FAILED_CHECKS="${{ steps.check-status.outputs.failed_checks }}"
+            PENDING_CHECKS="${{ steps.check-status.outputs.pending_checks }}"
+            
+            if [ ! -z "$FAILED_CHECKS" ]; then
+              gh pr comment $PR_NUMBER --body "❌ **Auto-merge failed** 
+
+              Some checks failed:
+              $FAILED_CHECKS
+              
+              Please fix the failing checks and try again."
+            elif [ ! -z "$PENDING_CHECKS" ]; then
+              gh pr comment $PR_NUMBER --body "⏳ **Auto-merge pending** 
+
+              Some checks are still running:
+              $PENDING_CHECKS
+              
+              Auto-merge will proceed once all checks complete successfully."
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

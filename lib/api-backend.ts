@@ -394,6 +394,34 @@ export const adminApi = {
   deleteSurvey: (id: string) => backendApi.delete(`/api/admin/surveys/${id}`),
   getSurveyAnalytics: (id: string) =>
     backendApi.get(`/api/admin/surveys/${id}/analytics`),
+
+  // Email Broadcast
+  getUsersCount: () => backendApi.get("/api/admin/users/count"),
+  generateAIEmail: (data: { prompt: string }) =>
+    backendApi.post("/api/admin/email/ai/generate", data),
+  sendEmailBroadcast: (data: {
+    subject: string;
+    body: string;
+    recipients: string[];
+    mode: string;
+  }) => backendApi.post("/api/admin/email/broadcast", data),
+  searchUsers: (params: { q: string }) =>
+    backendApi.get("/api/admin/users/search", params),
+
+  // Broadcast Lists
+  listBroadcastLists: (params?: { skip?: number; limit?: number }) =>
+    backendApi.get("/api/admin/broadcast-lists", params),
+  createBroadcastList: (data: any) =>
+    backendApi.post("/api/admin/broadcast-lists", data),
+  getBroadcastList: (id: string) =>
+    backendApi.get(`/api/admin/broadcast-lists/${id}`),
+  updateBroadcastList: (id: string, data: any) =>
+    backendApi.put(`/api/admin/broadcast-lists/${id}`, data),
+  deleteBroadcastList: (id: string) =>
+    backendApi.delete(`/api/admin/broadcast-lists/${id}`),
+  getBroadcastListUsers: (id: string) =>
+    backendApi.get(`/api/admin/broadcast-lists/${id}/users`),
+
   uploadAdminFile: (file: File) => backendApi.upload(`/api/upload`, file),
   exportSurveyResponses: async (
     id: string,
