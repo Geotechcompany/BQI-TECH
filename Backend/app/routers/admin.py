@@ -13,6 +13,8 @@ from fastapi import status
 from pathlib import Path
 import os
 import re
+from typing import Dict, Any, List
+from app.lib.email import send_bulk_emails_backend
 
 router = APIRouter(tags=["admin"])
 
@@ -56,6 +58,62 @@ def generate_slug(title: str) -> str:
     slug = re.sub(r'[^\w\s-]', '', slug)
     slug = re.sub(r'[-\s]+', '-', slug)
     return slug
+
+# ---------------------- Admin Email Broadcast ----------------------
+@router.post("/emails/broadcast")
+async def admin_email_broadcast(
+    payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Broadcast an email to all users or a specific list of recipients.
+
+    Body:
+      {
+        "mode": "all" | "list",
+        "recipients": ["a@example.com", ...], // required when mode=list
+        "subject": "...",
+        "body": "<html>...",
+        "dryRun": false,
+        "concurrency": 10
+      }
+    """
+    try:
+        db = get_database()
+
+        mode = str(payload.get("mode", "list")).lower()
+        subject = str(payload.get("subject", "")).strip()
+        html = str(payload.get("body", "")).strip()
+        dry_run = bool(payload.get("dryRun", False))
+        concurrency = int(payload.get("concurrency", 10))
+
+        if not subject or not html:
+            raise HTTPException(status_code=400, detail="subject and body are required")
+
+        recipients: List[str] = []
+        if mode == "all":
+            cursor = db.users.find({"email": {"$exists": True, "$ne": None}}, {"email": 1})
+            docs = await cursor.to_list(length=None)
+            recipients = [str(doc.get("email")) for doc in docs if doc.get("email")]
+        else:
+            provided = payload.get("recipients", []) or []
+            if not isinstance(provided, list) or len(provided) == 0:
+                raise HTTPException(status_code=400, detail="Provide recipients when mode=list")
+            recipients = [str(e) for e in provided]
+
+        result = await send_bulk_emails_backend(
+            recipients=recipients,
+            subject=subject,
+            html=html,
+            concurrency=concurrency,
+            dry_run=dry_run,
+        )
+
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Email broadcast failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send emails")
 
 async def get_enhanced_applications_data(db, query: Dict[Any, Any] = None, limit: int = None) -> List[Dict[Any, Any]]:
     """Get applications with enhanced job title resolution and data extraction"""

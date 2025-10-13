@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Token Refresh Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        min-height: 100vh;
+      }
+
+      .container {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 30px;
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+
+      .test-section {
+        margin: 20px 0;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        border-left: 4px solid #31cdff;
+      }
+
+      button {
+        background: linear-gradient(135deg, #31cdff, #2bb8e8);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 10px 5px;
+        transition: all 0.3s ease;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(49, 205, 255, 0.3);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .status {
+        margin: 10px 0;
+        padding: 10px;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+
+      .success {
+        background: rgba(34, 197, 94, 0.2);
+        border-left: 4px solid #22c55e;
+      }
+
+      .error {
+        background: rgba(239, 68, 68, 0.2);
+        border-left: 4px solid #ef4444;
+      }
+
+      .info {
+        background: rgba(59, 130, 246, 0.2);
+        border-left: 4px solid #3b82f6;
+      }
+
+      .log {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 15px;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 14px;
+        max-height: 300px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>🔄 Token Refresh Mechanism Test</h1>
+      <p>
+        This page tests the automatic token refresh mechanism without requiring
+        manual re-login.
+      </p>
+
+      <div class="test-section">
+        <h3>🔐 Authentication Status</h3>
+        <div id="authStatus" class="status info">
+          Checking authentication status...
+        </div>
+        <button onclick="checkAuthStatus()">Check Status</button>
+        <button onclick="login()">Login</button>
+        <button onclick="logout()">Logout</button>
+      </div>
+
+      <div class="test-section">
+        <h3>🔄 Token Refresh Tests</h3>
+        <button onclick="testTokenRefresh()">Test Token Refresh</button>
+        <button onclick="testExpiredToken()">Simulate Expired Token</button>
+        <button onclick="testPeriodicRefresh()">Test Periodic Refresh</button>
+        <div id="refreshStatus" class="status info">
+          Ready to test token refresh
+        </div>
+      </div>
+
+      <div class="test-section">
+        <h3>🌐 API Call Tests</h3>
+        <button onclick="testApiCall()">Test API Call</button>
+        <button onclick="testApiWithRefresh()">
+          Test API with Auto-Refresh
+        </button>
+        <div id="apiStatus" class="status info">Ready to test API calls</div>
+      </div>
+
+      <div class="test-section">
+        <h3>📋 Test Log</h3>
+        <button onclick="clearLog()">Clear Log</button>
+        <div id="log" class="log">Test log will appear here...\n</div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = "http://localhost:9000";
+      const FRONTEND_BASE = "http://localhost:3000";
+
+      let logElement = document.getElementById("log");
+
+      function log(message, type = "info") {
+        const timestamp = new Date().toLocaleTimeString();
+        const logMessage = `[${timestamp}] ${message}\n`;
+        logElement.textContent += logMessage;
+        logElement.scrollTop = logElement.scrollHeight;
+        console.log(`[${type.toUpperCase()}] ${message}`);
+      }
+
+      function clearLog() {
+        logElement.textContent = "Test log cleared...\n";
+      }
+
+      function updateStatus(elementId, message, type = "info") {
+        const element = document.getElementById(elementId);
+        element.textContent = message;
+        element.className = `status ${type}`;
+      }
+
+      async function checkAuthStatus() {
+        try {
+          log("Checking authentication status...");
+          const response = await fetch(`${API_BASE}/api/users/profile`, {
+            credentials: "include",
+            headers: {
+              Authorization: `Bearer ${
+                localStorage.getItem("auth_token") || ""
+              }`,
+            },
+          });
+
+          if (response.ok) {
+            const user = await response.json();
+            updateStatus(
+              "authStatus",
+              `✅ Authenticated as: ${user.email}`,
+              "success"
+            );
+            log(`Authenticated as: ${user.email}`, "success");
+          } else {
+            updateStatus("authStatus", "❌ Not authenticated", "error");
+            log("Not authenticated", "error");
+          }
+        } catch (error) {
+          updateStatus("authStatus", `❌ Error: ${error.message}`, "error");
+          log(`Error checking auth: ${error.message}`, "error");
+        }
+      }
+
+      async function login() {
+        try {
+          log("Attempting login...");
+          const response = await fetch(`${API_BASE}/api/auth/login`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              email: "admin@example.com",
+              password: "admin123",
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem("auth_token", data.access_token);
+            localStorage.setItem("refresh_token", data.refresh_token);
+            updateStatus(
+              "authStatus",
+              `✅ Logged in as: ${data.user.email}`,
+              "success"
+            );
+            log(`Logged in successfully as: ${data.user.email}`, "success");
+          } else {
+            const error = await response.json();
+            updateStatus(
+              "authStatus",
+              `❌ Login failed: ${error.detail}`,
+              "error"
+            );
+            log(`Login failed: ${error.detail}`, "error");
+          }
+        } catch (error) {
+          updateStatus(
+            "authStatus",
+            `❌ Login error: ${error.message}`,
+            "error"
+          );
+          log(`Login error: ${error.message}`, "error");
+        }
+      }
+
+      async function logout() {
+        try {
+          log("Logging out...");
+          const response = await fetch(`${API_BASE}/api/auth/logout`, {
+            method: "POST",
+            credentials: "include",
+          });
+
+          localStorage.removeItem("auth_token");
+          localStorage.removeItem("refresh_token");
+          updateStatus("authStatus", "✅ Logged out", "success");
+          log("Logged out successfully", "success");
+        } catch (error) {
+          updateStatus(
+            "authStatus",
+            `❌ Logout error: ${error.message}`,
+            "error"
+          );
+          log(`Logout error: ${error.message}`, "error");
+        }
+      }
+
+      async function testTokenRefresh() {
+        try {
+          log("Testing token refresh...");
+          const refreshToken = localStorage.getItem("refresh_token");
+
+          if (!refreshToken) {
+            updateStatus(
+              "refreshStatus",
+              "❌ No refresh token available",
+              "error"
+            );
+            log("No refresh token available", "error");
+            return;
+          }
+
+          const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              refresh_token: refreshToken,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem("auth_token", data.access_token);
+            localStorage.setItem("refresh_token", data.refresh_token);
+            updateStatus(
+              "refreshStatus",
+              "✅ Token refreshed successfully",
+              "success"
+            );
+            log("Token refreshed successfully", "success");
+          } else {
+            const error = await response.json();
+            updateStatus(
+              "refreshStatus",
+              `❌ Refresh failed: ${error.detail}`,
+              "error"
+            );
+            log(`Token refresh failed: ${error.detail}`, "error");
+          }
+        } catch (error) {
+          updateStatus(
+            "refreshStatus",
+            `❌ Refresh error: ${error.message}`,
+            "error"
+          );
+          log(`Token refresh error: ${error.message}`, "error");
+        }
+      }
+
+      async function testExpiredToken() {
+        try {
+          log("Simulating expired token...");
+          // Set an obviously invalid token
+          localStorage.setItem("auth_token", "expired_token_test");
+
+          const response = await fetch(`${API_BASE}/api/users/profile`, {
+            credentials: "include",
+            headers: {
+              Authorization: `Bearer expired_token_test`,
+            },
+          });
+
+          if (response.status === 401) {
+            log("✅ Correctly detected expired token (401)", "success");
+            updateStatus(
+              "refreshStatus",
+              "✅ Expired token detected correctly",
+              "success"
+            );
+
+            // Now test automatic refresh
+            log("Testing automatic refresh...");
+            await testTokenRefresh();
+          } else {
+            updateStatus(
+              "refreshStatus",
+              "❌ Should have detected expired token",
+              "error"
+            );
+            log("Should have detected expired token", "error");
+          }
+        } catch (error) {
+          updateStatus("refreshStatus", `❌ Error: ${error.message}`, "error");
+          log(`Error testing expired token: ${error.message}`, "error");
+        }
+      }
+
+      async function testPeriodicRefresh() {
+        try {
+          log("Testing periodic refresh (will run for 30 seconds)...");
+          updateStatus(
+            "refreshStatus",
+            "⏳ Running periodic refresh test...",
+            "info"
+          );
+
+          let refreshCount = 0;
+          const interval = setInterval(async () => {
+            try {
+              await testTokenRefresh();
+              refreshCount++;
+              log(`Periodic refresh #${refreshCount} completed`, "success");
+            } catch (error) {
+              log(
+                `Periodic refresh #${refreshCount + 1} failed: ${
+                  error.message
+                }`,
+                "error"
+              );
+            }
+          }, 5000); // Every 5 seconds
+
+          // Stop after 30 seconds
+          setTimeout(() => {
+            clearInterval(interval);
+            updateStatus(
+              "refreshStatus",
+              `✅ Periodic refresh test completed (${refreshCount} refreshes)`,
+              "success"
+            );
+            log(
+              `Periodic refresh test completed. Total refreshes: ${refreshCount}`,
+              "success"
+            );
+          }, 30000);
+        } catch (error) {
+          updateStatus("refreshStatus", `❌ Error: ${error.message}`, "error");
+          log(`Error in periodic refresh test: ${error.message}`, "error");
+        }
+      }
+
+      async function testApiCall() {
+        try {
+          log("Testing API call...");
+          const response = await fetch(`${API_BASE}/api/users/profile`, {
+            credentials: "include",
+            headers: {
+              Authorization: `Bearer ${
+                localStorage.getItem("auth_token") || ""
+              }`,
+            },
+          });
+
+          if (response.ok) {
+            const user = await response.json();
+            updateStatus(
+              "apiStatus",
+              `✅ API call successful: ${user.email}`,
+              "success"
+            );
+            log(`API call successful: ${user.email}`, "success");
+          } else {
+            updateStatus(
+              "apiStatus",
+              `❌ API call failed: ${response.status}`,
+              "error"
+            );
+            log(`API call failed with status: ${response.status}`, "error");
+          }
+        } catch (error) {
+          updateStatus("apiStatus", `❌ API error: ${error.message}`, "error");
+          log(`API call error: ${error.message}`, "error");
+        }
+      }
+
+      async function testApiWithRefresh() {
+        try {
+          log("Testing API call with automatic refresh...");
+
+          // Simulate expired token
+          const originalToken = localStorage.getItem("auth_token");
+          localStorage.setItem("auth_token", "expired_token");
+
+          const response = await fetch(`${API_BASE}/api/users/profile`, {
+            credentials: "include",
+            headers: {
+              Authorization: `Bearer expired_token`,
+            },
+          });
+
+          if (response.status === 401) {
+            log("Detected 401, attempting refresh...", "info");
+
+            // Try to refresh token
+            const refreshResponse = await fetch(
+              `${API_BASE}/api/auth/refresh`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                credentials: "include",
+                body: JSON.stringify({
+                  refresh_token: localStorage.getItem("refresh_token"),
+                }),
+              }
+            );
+
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json();
+              localStorage.setItem("auth_token", refreshData.access_token);
+              localStorage.setItem("refresh_token", refreshData.refresh_token);
+
+              // Retry API call with new token
+              const retryResponse = await fetch(
+                `${API_BASE}/api/users/profile`,
+                {
+                  credentials: "include",
+                  headers: {
+                    Authorization: `Bearer ${refreshData.access_token}`,
+                  },
+                }
+              );
+
+              if (retryResponse.ok) {
+                const user = await retryResponse.json();
+                updateStatus(
+                  "apiStatus",
+                  `✅ API call with auto-refresh successful: ${user.email}`,
+                  "success"
+                );
+                log(
+                  `API call with auto-refresh successful: ${user.email}`,
+                  "success"
+                );
+              } else {
+                updateStatus(
+                  "apiStatus",
+                  `❌ Retry failed: ${retryResponse.status}`,
+                  "error"
+                );
+                log(
+                  `Retry failed with status: ${retryResponse.status}`,
+                  "error"
+                );
+              }
+            } else {
+              updateStatus("apiStatus", "❌ Token refresh failed", "error");
+              log("Token refresh failed", "error");
+            }
+          } else {
+            updateStatus("apiStatus", "❌ Should have detected 401", "error");
+            log("Should have detected 401", "error");
+          }
+        } catch (error) {
+          updateStatus("apiStatus", `❌ Error: ${error.message}`, "error");
+          log(`Error in API with refresh test: ${error.message}`, "error");
+        }
+      }
+
+      // Initialize
+      window.addEventListener("load", () => {
+        log("Token refresh test page loaded");
+        checkAuthStatus();
+      });
+    </script>
+  </body>
+</html>
+
