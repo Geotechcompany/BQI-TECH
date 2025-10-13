@@ -48,11 +48,21 @@ export default function EmailBroadcastPage() {
   const [hideHtmlTags, setHideHtmlTags] = useState(true);
   const [showAIModal, setShowAIModal] = useState(false);
   const [showTips, setShowTips] = useState(false);
+  const [selectedBroadcastList, setSelectedBroadcastList] = useState<
+    string | null
+  >(null);
 
   // Load user count on component mount
   useEffect(() => {
     loadUserCount();
   }, []);
+
+  // Clear broadcast list selection when switching away from broadcast mode
+  useEffect(() => {
+    if (mode !== "broadcast") {
+      setSelectedBroadcastList(null);
+    }
+  }, [mode]);
 
   const loadUserCount = async () => {
     try {
@@ -146,9 +156,19 @@ export default function EmailBroadcastPage() {
         recipientList = recipients.split(/[,\n\s]+/).filter(Boolean);
         break;
       case "search":
-      case "broadcast":
         if (selectedUsers.length === 0) {
           toast.error("Please select users to send to");
+          return;
+        }
+        recipientList = selectedUsers.map((user) => user.email);
+        break;
+      case "broadcast":
+        if (!selectedBroadcastList) {
+          toast.error("Please select a broadcast list");
+          return;
+        }
+        if (selectedUsers.length === 0) {
+          toast.error("No users found in selected broadcast list");
           return;
         }
         recipientList = selectedUsers.map((user) => user.email);
@@ -177,6 +197,7 @@ export default function EmailBroadcastPage() {
       setRecipients("");
       setSelectedUsers([]);
       setSelectedTemplate(null);
+      setSelectedBroadcastList(null);
     } catch (error: any) {
       console.error("Send error:", error);
       setResult({ error: true, message: error.message });
@@ -222,6 +243,8 @@ export default function EmailBroadcastPage() {
               setSelectedUsers={setSelectedUsers}
               emailCount={emailCount}
               onShowTips={() => setShowTips(true)}
+              selectedBroadcastList={selectedBroadcastList}
+              setSelectedBroadcastList={setSelectedBroadcastList}
             />
 
             {/* Email Content */}
