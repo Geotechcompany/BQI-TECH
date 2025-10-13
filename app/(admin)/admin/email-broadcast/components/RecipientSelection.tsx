@@ -52,6 +52,8 @@ interface RecipientSelectionProps {
   setSelectedUsers: (users: any[]) => void;
   emailCount: number;
   onShowTips: () => void;
+  selectedBroadcastList: string | null;
+  setSelectedBroadcastList: (listId: string | null) => void;
 }
 
 export function RecipientSelection({
@@ -63,14 +65,13 @@ export function RecipientSelection({
   setSelectedUsers,
   emailCount,
   onShowTips,
+  selectedBroadcastList,
+  setSelectedBroadcastList,
 }: RecipientSelectionProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [broadcastLists, setBroadcastLists] = useState<any[]>([]);
-  const [selectedBroadcastList, setSelectedBroadcastList] = useState<
-    string | null
-  >(null);
   const [showCreateList, setShowCreateList] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [newListDescription, setNewListDescription] = useState("");
@@ -208,6 +209,7 @@ export function RecipientSelection({
     try {
       const response = await adminApi.getBroadcastListUsers(listId);
       setSelectedUsers(response.users || []);
+      setSelectedBroadcastList(listId);
     } catch (error) {
       console.error("Failed to load broadcast list users:", error);
       toast.error("Failed to load broadcast list users");
@@ -583,7 +585,6 @@ export function RecipientSelection({
                         : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
                     }`}
                     onClick={() => {
-                      setSelectedBroadcastList(list._id);
                       loadBroadcastListUsers(list._id);
                     }}
                   >
