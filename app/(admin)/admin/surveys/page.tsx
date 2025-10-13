@@ -18,7 +18,6 @@ import {
   Square,
   Image,
   Loader2,
-  GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api-backend";
@@ -51,7 +50,6 @@ export default function SurveysPage() {
   const [editingSurvey, setEditingSurvey] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -139,41 +137,6 @@ export default function SurveysPage() {
     setQuestions((prev) => prev.filter((q) => q.id !== id));
   };
 
-  const moveQuestion = (dragIndex: number, hoverIndex: number) => {
-    setQuestions((prev) => {
-      const draggedQuestion = prev[dragIndex];
-      const newQuestions = [...prev];
-      newQuestions.splice(dragIndex, 1);
-      newQuestions.splice(hoverIndex, 0, draggedQuestion);
-      return newQuestions;
-    });
-    toast.success("Question reordered");
-  };
-
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData("text/plain", index.toString());
-    e.dataTransfer.effectAllowed = "move";
-    setDraggedIndex(index);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-  };
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    const dragIndex = parseInt(e.dataTransfer.getData("text/plain"));
-    if (dragIndex !== dropIndex) {
-      moveQuestion(dragIndex, dropIndex);
-    }
-    setDraggedIndex(null);
-  };
-
   const handleCreate = async () => {
     if (!title.trim() || questions.length === 0) {
       toast.error("Add a title and at least one question");
@@ -192,10 +155,7 @@ export default function SurveysPage() {
       let res;
       if (isEditing && editingSurvey) {
         // Update existing survey
-        res = await adminApi.updateSurvey(
-          editingSurvey._id || editingSurvey.id,
-          payload
-        );
+        res = await adminApi.updateSurvey(editingSurvey._id, payload);
         toast.success("Survey updated", { description: `Link: ${res.link}` });
         cancelEditing();
       } else {
@@ -429,37 +389,17 @@ export default function SurveysPage() {
 
         {/* Questions List */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm font-semibold text-gray-700">
-              Questions ({questions.length})
-            </Label>
-            {questions.length > 1 && (
-              <span className="text-xs text-gray-500 flex items-center gap-1">
-                <GripVertical className="w-3 h-3" />
-                Drag to reorder
-              </span>
-            )}
-          </div>
+          <Label className="text-sm font-semibold text-gray-700">
+            Questions ({questions.length})
+          </Label>
           <div className="space-y-3">
             {questions.map((q, idx) => (
               <Card
                 key={q.id}
-                className={`p-4 border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all duration-200 ${
-                  draggedIndex === idx
-                    ? "opacity-50 scale-95 shadow-lg"
-                    : "opacity-100 scale-100"
-                }`}
-                draggable
-                onDragStart={(e) => handleDragStart(e, idx)}
-                onDragEnd={handleDragEnd}
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, idx)}
+                className="p-4 border border-gray-200 bg-white shadow-sm"
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <div className="cursor-move text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
-                      <GripVertical className="w-4 h-4" />
-                    </div>
                     {getQuestionIcon(q.type)}
                     <span className="text-sm font-medium text-gray-600">
                       Q{idx + 1} • {q.type.replace("_", " ")}
