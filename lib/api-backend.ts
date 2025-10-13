@@ -398,13 +398,13 @@ export const adminApi = {
   // Email Broadcast
   getUsersCount: () => backendApi.get("/api/admin/users/count"),
   generateAIEmail: (data: { prompt: string }) =>
-    backendApi.post("/api/admin/emails/ai/generate", data),
+    backendApi.post("/api/admin/email/ai/generate", data),
   sendEmailBroadcast: (data: {
     subject: string;
     body: string;
     recipients: string[];
     mode: string;
-  }) => backendApi.post("/api/admin/emails/broadcast", data),
+  }) => backendApi.post("/api/admin/email/broadcast", data),
   searchUsers: (params: { q: string }) =>
     backendApi.get("/api/admin/users/search", params),
 
