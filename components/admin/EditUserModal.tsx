@@ -21,6 +21,7 @@ import {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-hot-toast";
 import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
 
 interface EditUserModalProps {
   user: UserType | null;
@@ -47,19 +48,16 @@ export function EditUserModal({
         throw new Error("User ID is missing");
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/admin/users/${userId}`,
-        {
-          method: "PUT",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${session?.token}`,
-          },
-          body: JSON.stringify(data),
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/admin/users/${userId}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${session?.token}`,
+        },
+        body: JSON.stringify(data),
+      });
 
       if (!response.ok) {
         const error = await response

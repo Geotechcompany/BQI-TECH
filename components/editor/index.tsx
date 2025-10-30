@@ -24,6 +24,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { authService } from "@/lib/auth-backend"
+import { BACKEND_URL } from '@/lib/config'
 
 interface EditorProps {
   value: string
@@ -64,8 +65,7 @@ const MenuBar = ({ editor, isUploading }: { editor: any, isUploading: boolean })
     formData.append('file', file)
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000'
-      const uploadUrl = `${baseUrl}/api/upload/`
+      const uploadUrl = `${BACKEND_URL}/api/upload/`
       const response = await authService.authenticatedFetch(uploadUrl, {
         method: 'POST',
         body: formData,

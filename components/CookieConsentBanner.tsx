@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react'
+import { BACKEND_URL } from '@/lib/config'
 import Image from 'next/image'
 import Link from 'next/link'
 import { X, ChevronDown } from 'lucide-react'
@@ -79,7 +80,7 @@ export default function CookieConsentBanner() {
   useEffect(() => {
     const checkConsent = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/cookie-consent`, {
+        const response = await fetch(`${BACKEND_URL}/api/cookie-consent`, {
           method: 'GET',
           credentials: 'include',
           headers: {
@@ -130,8 +131,7 @@ export default function CookieConsentBanner() {
   // Update handleAgreeAndProceed to set browser cookie
   const handleAgreeAndProceed = async () => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000';
-      const response = await fetch(`${baseUrl}/api/cookie-consent`, {
+      const response = await fetch(`${BACKEND_URL}/api/cookie-consent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -225,8 +225,7 @@ export default function CookieConsentBanner() {
 
   const handleSavePreferences = async () => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000';
-      const response = await fetch(`${baseUrl}/api/cookie-consent`, {
+      const response = await fetch(`${BACKEND_URL}/api/cookie-consent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

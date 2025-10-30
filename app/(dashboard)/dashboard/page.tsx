@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Briefcase, Clock, CheckCircle, XCircle, Calendar, Eye } from "lucide-react";
+import {
+  Briefcase,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Calendar,
+  Eye,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardOverview from "@/components/user/DashboardOverview";
 import Loader from "@/components/Loader";
@@ -14,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-hot-toast";
+import { BACKEND_URL } from "@/lib/config";
 
 interface Application {
   id: string;
@@ -35,25 +43,25 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchApplications = async () => {
       if (!user) return;
-      
+
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/user`, {
-          credentials: 'include',
+        const response = await fetch(`${BACKEND_URL}/api/applications/user`, {
+          credentials: "include",
           headers: {
-            'Accept': 'application/json'
-          }
+            Accept: "application/json",
+          },
         });
 
         if (!response.ok) {
           const error = await response.json();
-          throw new Error(error.error || 'Failed to fetch applications');
+          throw new Error(error.error || "Failed to fetch applications");
         }
 
         const data = await response.json();
         setApplications(data.applications || []);
       } catch (error) {
-        console.error('Error fetching applications:', error);
-        toast.error('Failed to load your applications');
+        console.error("Error fetching applications:", error);
+        toast.error("Failed to load your applications");
         setApplications([]);
       } finally {
         setIsLoading(false);
@@ -67,23 +75,26 @@ export default function Dashboard() {
 
   const handleViewApplication = async (id: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/${id}`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json'
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/${id}`,
+        {
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+          },
         }
-      });
+      );
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to fetch application details');
+        throw new Error(error.error || "Failed to fetch application details");
       }
 
       const data = await response.json();
       setSelectedApp(data.application);
     } catch (error) {
-      console.error('Error fetching application details:', error);
-      toast.error('Failed to load application details');
+      console.error("Error fetching application details:", error);
+      toast.error("Failed to load application details");
     }
   };
 
@@ -121,15 +132,10 @@ export default function Dashboard() {
     }
   };
 
-  if (isLoading)
-    return (
-      <Loader/>
-    );
+  if (isLoading) return <Loader />;
 
   return (
     <div className="space-y-6">
-     
-
       <DashboardOverview />
 
       <h2 className="text-xl md:text-2xl font-semibold text-gray-800">
@@ -150,9 +156,7 @@ export default function Dashboard() {
                   <h2 className="text-xl font-semibold text-gray-800 line-clamp-1">
                     {app.position}
                   </h2>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {app.name}
-                  </p>
+                  <p className="text-sm text-gray-600 mt-1">{app.name}</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -163,7 +167,7 @@ export default function Dashboard() {
                   <Eye className="h-4 w-4" />
                 </Button>
               </div>
-              
+
               <div className="space-y-4">
                 <span
                   className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${statusColor(
@@ -177,19 +181,27 @@ export default function Dashboard() {
                 <div className="text-sm text-gray-600 space-y-1">
                   <div className="flex items-center">
                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                    <p>Applied: {new Date(app.appliedDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}</p>
+                    <p>
+                      Applied:{" "}
+                      {new Date(app.appliedDate).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
                   </div>
                   <div className="flex items-center">
                     <Clock className="h-4 w-4 mr-2 text-gray-400" />
-                    <p>Last Updated: {new Date(app.lastUpdated || app.appliedDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}</p>
+                    <p>
+                      Last Updated:{" "}
+                      {new Date(
+                        app.lastUpdated || app.appliedDate
+                      ).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -211,7 +223,11 @@ export default function Dashboard() {
               </div>
               <div>
                 <h3 className="font-semibold">Status</h3>
-                <span className={`px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center ${statusColor(selectedApp.status)}`}>
+                <span
+                  className={`px-2 py-1 rounded-full text-xs font-semibold inline-flex items-center ${statusColor(
+                    selectedApp.status
+                  )}`}
+                >
                   {statusIcon(selectedApp.status)}
                   <span className="ml-1">{selectedApp.status}</span>
                 </span>
@@ -223,9 +239,9 @@ export default function Dashboard() {
               {selectedApp.resumeUrl && (
                 <div>
                   <h3 className="font-semibold">Resume</h3>
-                  <a 
-                    href={selectedApp.resumeUrl} 
-                    target="_blank" 
+                  <a
+                    href={selectedApp.resumeUrl}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline"
                   >

@@ -1,7 +1,5 @@
 import { authService } from "./auth-backend";
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_PYTHON_API_URL || "https://api.bqitech.com";
+import { BACKEND_URL } from "./config";
 
 // Generic API client class
 export class BackendApiClient {

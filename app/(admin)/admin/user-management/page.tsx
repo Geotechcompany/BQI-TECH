@@ -21,6 +21,7 @@ import {
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import { adminApi } from "@/lib/api-backend";
 import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
 
 export default function UserManagementPage() {
   const { user } = useAuth();
@@ -30,10 +31,10 @@ export default function UserManagementPage() {
   const itemsPerPage = 10;
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Debounce search query to avoid too many API calls
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
-  
+
   // Reset to page 1 when search query changes
   useEffect(() => {
     if (debouncedSearchQuery !== searchQuery) return; // Only reset after debounce
@@ -47,7 +48,9 @@ export default function UserManagementPage() {
       if (debouncedSearchQuery.trim()) {
         const session = authService.getSession();
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/admin/users/search?q=${encodeURIComponent(debouncedSearchQuery)}`,
+          `${BACKEND_URL}/api/admin/users/search?q=${encodeURIComponent(
+            debouncedSearchQuery
+          )}`,
           {
             credentials: "include",
             headers: {
@@ -58,7 +61,9 @@ export default function UserManagementPage() {
           }
         );
         if (!res.ok) {
-          throw new Error(`Failed to search users: ${res.status} ${res.statusText}`);
+          throw new Error(
+            `Failed to search users: ${res.status} ${res.statusText}`
+          );
         }
         const data = await res.json();
         return {
@@ -66,7 +71,7 @@ export default function UserManagementPage() {
           total: data.users?.length ?? 0,
         } as { data: UserType[]; total: number };
       }
-      
+
       // Normal paginated fetch when not searching
       const skip = (currentPage - 1) * itemsPerPage;
       const res = await adminApi.getUsers({ skip, limit: itemsPerPage });

@@ -1,8 +1,6 @@
 import axios from "axios";
 import { authService } from "./auth-backend";
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_PYTHON_API_URL || "https://api.bqitech.com";
+import { BACKEND_URL } from "./config";
 
 export const api = axios.create({
   baseURL: BACKEND_URL,

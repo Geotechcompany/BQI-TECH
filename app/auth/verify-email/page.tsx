@@ -218,7 +218,7 @@ function EmailVerificationContent() {
       setStatus("loading");
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/auth/verify-email`,
+          `${BACKEND_URL}/api/auth/verify-email`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -344,7 +344,7 @@ function EmailVerificationContent() {
         setStatus("loading");
 
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/auth/send-verification-code`,
+          `${BACKEND_URL}/api/auth/send-verification-code`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

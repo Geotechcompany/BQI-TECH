@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
 import { User } from "@/types/user";
 import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
 
@@ -182,7 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Fetch complete user profile
           try {
             const profileResponse = await authService.authenticatedFetch(
-              `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/profile`
+              `${BACKEND_URL}/api/users/profile`
             );
             if (profileResponse.ok) {
               const profileData = await profileResponse.json();
@@ -347,19 +348,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("No refresh token");
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/auth/refresh`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            refresh_token: session.refreshToken,
-          }),
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          refresh_token: session.refreshToken,
+        }),
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

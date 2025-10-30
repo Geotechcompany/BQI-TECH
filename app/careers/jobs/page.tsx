@@ -11,6 +11,7 @@ import Loader from "@/components/Loader";
 import { SafeHtml } from "@/components/ui/safe-html";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "react-hot-toast";
+import { BACKEND_URL } from "@/lib/config";
  
 export default function JobsPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -67,7 +68,7 @@ export default function JobsPage() {
     queryKey: ["jobs"],
     queryFn: async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/jobs`, {
+        const response = await fetch(`${BACKEND_URL}/api/jobs`, {
           credentials: 'include',
           headers: {
             'Accept': 'application/json',
