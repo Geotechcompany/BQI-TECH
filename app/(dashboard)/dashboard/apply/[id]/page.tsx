@@ -406,7 +406,10 @@ function ApplicationForm() {
         userId: user.id,
       };
 
-      // Submit to application endpoint
+      // Submit to application endpoint with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications`,
         {
@@ -418,37 +421,52 @@ function ApplicationForm() {
             Authorization: `Bearer ${authService.getSession()?.token}`,
           },
           body: JSON.stringify(applicationData),
+          signal: controller.signal,
         }
       );
 
-      const result = await response.json();
+      clearTimeout(timeoutId);
 
+      // Check if response is ok before parsing
       if (!response.ok) {
-        const detail = (result?.detail || "").toString();
-        const normalized = detail.toLowerCase();
-        if (
-          (response.status === 400 || response.status === 409) &&
-          normalized.includes("already applied")
-        ) {
-          toast.error("You have already applied for this position");
-          router.push("/dashboard/applications");
-          return;
+        let errorDetail = "Failed to submit application";
+        try {
+          const result = await response.json();
+          errorDetail = result?.detail || result?.message || errorDetail;
+
+          // Check for duplicate application
+          const normalized = errorDetail.toLowerCase();
+          if (
+            (response.status === 400 || response.status === 409) &&
+            normalized.includes("already applied")
+          ) {
+            toast.error("You have already applied for this position");
+            router.push("/dashboard/applications");
+            return;
+          }
+        } catch (parseError) {
+          console.error("Error parsing error response:", parseError);
+          errorDetail = `Server error: ${response.status} ${response.statusText}`;
         }
-        throw new Error(result.detail || "Failed to submit application");
+        throw new Error(errorDetail);
       }
+
+      // Parse success response
+      const result = await response.json();
+      console.log("Application submitted successfully:", result);
 
       // Show success message and redirect
       toast.success("Application submitted successfully!");
       router.push("/dashboard/apply/thank-you");
     } catch (error: any) {
       console.error("Application submission error:", error);
-      
+
       // Network errors can occur after the backend has already inserted the application.
       // Fallback: check if an application for this job now exists for the current user.
       try {
         // Wait a moment for DB to sync
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         const verifyRes = await fetch(
           `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/user`,
           {
@@ -459,7 +477,7 @@ function ApplicationForm() {
             },
           }
         );
-        
+
         if (verifyRes.ok) {
           const verifyData = await verifyRes.json();
           const list = Array.isArray(verifyData?.applications)
@@ -468,7 +486,7 @@ function ApplicationForm() {
             ? verifyData
             : [];
           const exists = list.some((a: any) => String(a.jobId) === String(id));
-          
+
           if (exists) {
             // Application was successfully saved despite error
             console.log("Application verified in database");
@@ -484,7 +502,9 @@ function ApplicationForm() {
 
       setIsSubmitting(false);
       toast.error("Failed to submit application. Please try again.");
-      setFormErrors(["Network error occurred. Please check your connection and try again."]);
+      setFormErrors([
+        "Network error occurred. Please check your connection and try again.",
+      ]);
       setShowErrorDialog(true);
     }
   };
