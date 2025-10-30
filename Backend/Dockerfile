@@ -27,12 +27,15 @@ ENV GUNICORN_GRACEFUL_TIMEOUT=180
 EXPOSE ${PORT}
 
 # Run the application with Gunicorn
+# Reduced workers for memory-constrained environments (free tier)
 # Increased timeout for file uploads and email sending
 CMD gunicorn app.main:app \
-    --workers 4 \
+    --workers 2 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind 0.0.0.0:${PORT} \
     --timeout ${GUNICORN_TIMEOUT} \
     --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT} \
     --keep-alive 5 \
-    --log-level debug 
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --log-level info 
