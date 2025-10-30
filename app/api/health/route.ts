@@ -1,3 +1,4 @@
+import { BACKEND_URL } from "@/lib/config";
 import { NextResponse } from "next/server";
 
 // Track uptime from first module load within the current runtime instance
@@ -11,8 +12,7 @@ export async function GET() {
     environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
     uptimeMs: Math.max(0, now - startedAt),
-    backendUrl:
-      process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000",
+    backendUrl: BACKEND_URL,
   };
 
   return NextResponse.json(payload, {
@@ -27,4 +27,5 @@ export async function HEAD() {
     headers: { "Cache-Control": "no-store" },
   });
 }
+
 

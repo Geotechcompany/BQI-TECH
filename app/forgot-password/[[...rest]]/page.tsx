@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { BACKEND_URL } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,16 +31,11 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000"
-        }/api/auth/forgot-password`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: data.email }),
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: data.email }),
+      });
 
       const responseData = await response.json();
 

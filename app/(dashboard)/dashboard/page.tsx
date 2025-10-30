@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { BACKEND_URL } from "@/lib/config";
 import { motion } from "framer-motion";
 import {
   Briefcase,
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "react-hot-toast";
-import { BACKEND_URL } from "@/lib/config";
+
 
 interface Application {
   id: string;
@@ -75,9 +76,9 @@ export default function Dashboard() {
 
   const handleViewApplication = async (id: string) => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/${id}`,
-        {
+       const response = await fetch(
+         `${BACKEND_URL}/api/applications/${id}`,
+         {
           credentials: "include",
           headers: {
             Accept: "application/json",

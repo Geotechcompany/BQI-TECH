@@ -19,6 +19,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,15 +48,12 @@ function ApplicationForm() {
     queryKey: ["job", id],
     queryFn: async () => {
       if (!id) return null;
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/jobs/${id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${authService.getSession()?.token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/jobs/${id}`, {
+        headers: {
+          Authorization: `Bearer ${authService.getSession()?.token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (!response.ok) throw new Error("Failed to fetch job");
       return response.json();
     },
@@ -77,15 +75,12 @@ function ApplicationForm() {
     queryKey: ["jobQuestions", id],
     queryFn: async () => {
       if (!id) return [];
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/jobs/${id}/questions`,
-        {
-          headers: {
-            Authorization: `Bearer ${authService.getSession()?.token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/jobs/${id}/questions`, {
+        headers: {
+          Authorization: `Bearer ${authService.getSession()?.token}`,
+          "Content-Type": "application/json",
+        },
+      });
       if (!response.ok) {
         // If no questions found, return empty array
         if (response.status === 404) return [];
@@ -410,20 +405,17 @@ function ApplicationForm() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout (longer for file uploads)
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authService.getSession()?.token}`,
-          },
-          body: JSON.stringify(applicationData),
-          signal: controller.signal,
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/applications/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authService.getSession()?.token}`,
+        },
+        body: JSON.stringify(applicationData),
+        signal: controller.signal,
+      });
 
       clearTimeout(timeoutId);
 
@@ -467,16 +459,13 @@ function ApplicationForm() {
         // Wait a bit longer for DB to sync and worker to restart
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-        const verifyRes = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/user`,
-          {
-            credentials: "include",
-            headers: {
-              Accept: "application/json",
-              Authorization: `Bearer ${authService.getSession()?.token}`,
-            },
-          }
-        );
+        const verifyRes = await fetch(`${BACKEND_URL}/api/applications/user`, {
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${authService.getSession()?.token}`,
+          },
+        });
 
         if (verifyRes.ok) {
           const verifyData = await verifyRes.json();
@@ -666,7 +655,7 @@ function ApplicationForm() {
                         const formData = new FormData();
                         formData.append("file", file);
                         const response = await fetch(
-                          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/upload/`,
+                          `${BACKEND_URL}/api/upload/`,
                           {
                             method: "POST",
                             headers: {

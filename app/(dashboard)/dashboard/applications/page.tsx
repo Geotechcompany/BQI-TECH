@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { BACKEND_URL } from "@/lib/config";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Application } from "@/types/application";
@@ -173,7 +174,7 @@ export default function ApplicationsPage() {
         } : null);
 
         const response = await authService.authenticatedFetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications`
+          `${BACKEND_URL}/api/applications`
         );
 
         console.log('Response status:', response.status);
