@@ -411,7 +411,7 @@ function ApplicationForm() {
       const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout (longer for file uploads)
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications`,
+        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/`,
         {
           method: "POST",
           credentials: "include",
