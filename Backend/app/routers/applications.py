@@ -10,6 +10,7 @@ from app.models import Application
 import logging
 from fastapi.responses import Response
 import json
+import re
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -630,11 +631,16 @@ async def get_application(
             logger.error("Database not connected")
             raise HTTPException(status_code=503, detail="Database not available")
         
+        # Guard: only accept 24-hex ObjectId-like values
+        if not re.fullmatch(r"[0-9a-fA-F]{24}", application_id):
+            # Do not leak format details; behave as not found
+            raise HTTPException(status_code=404, detail="Application not found")
+        
         try:
             application = await db.applications.find_one({"_id": ObjectId(application_id)})
         except Exception as e:
             logger.error(f"Error converting application ID {application_id} to ObjectId: {str(e)}")
-            raise HTTPException(status_code=400, detail="Invalid application ID format")
+            raise HTTPException(status_code=404, detail="Application not found")
         
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
@@ -682,11 +688,13 @@ async def update_application(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Validate application ID format
+        if not re.fullmatch(r"[0-9a-fA-F]{24}", application_id):
+            raise HTTPException(status_code=404, detail="Application not found")
         try:
             obj_id = ObjectId(application_id)
         except Exception as e:
             logger.error(f"Error converting application ID {application_id} to ObjectId: {str(e)}")
-            raise HTTPException(status_code=400, detail="Invalid application ID format")
+            raise HTTPException(status_code=404, detail="Application not found")
         
         # Remove immutable and server-managed fields if present in payload
         for key in ["_id", "id", "createdAt"]:
@@ -760,6 +768,8 @@ async def delete_application(
     """Delete an application"""
     try:
         db = get_database()
+        if not re.fullmatch(r"[0-9a-fA-F]{24}", application_id):
+            raise HTTPException(status_code=404, detail="Application not found")
         result = await db.applications.delete_one({"_id": ObjectId(application_id)})
         
         if result.deleted_count == 0:
@@ -792,7 +802,7 @@ async def get_user_applications(current_user: dict = Depends(get_current_user)):
         
         # Find all applications for the user
         applications = await db.applications.find({
-            "userId": ObjectId(current_user["_id"])
+            "userId": ObjectId(current_user["_id"])  # keep as stored
         }).sort("appliedDate", -1).to_list(length=None)
         
         # Transform ObjectIds to strings for JSON serialization
@@ -810,40 +820,7 @@ async def get_user_applications(current_user: dict = Depends(get_current_user)):
             detail=str(e)
         )
 
-@router.get("/{application_id}", response_model=Dict[str, Any])
-async def get_application(
-    application_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get a specific application by ID"""
-    try:
-        db = get_database()
-        
-        # Find the specific application
-        application = await db.applications.find_one({
-            "_id": ObjectId(application_id),
-            "userId": ObjectId(current_user["_id"])
-        })
-        
-        if not application:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Application not found"
-            )
-        
-        # Transform ObjectIds to strings
-        application["id"] = str(application["_id"])
-        application["_id"] = str(application["_id"])
-        application["userId"] = str(application["userId"])
-        if "jobId" in application:
-            application["jobId"] = str(application["jobId"])
-        
-        return application
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+# Removed duplicate get_application definition to avoid route conflicts with parameterized path
 
 @router.get("/stats", response_model=Dict[str, Dict[str, int]])
 async def get_application_stats(current_user: dict = Depends(get_current_user)):
