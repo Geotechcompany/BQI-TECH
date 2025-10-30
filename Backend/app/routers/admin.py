@@ -979,7 +979,8 @@ async def options_blog_post_by_id(request: Request, post_id: str):
 # Analytics and Overview endpoints
 @router.get("/overview")
 async def get_admin_overview(
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(get_current_admin_user),
+    job_id: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get admin overview"""
     try:
@@ -987,24 +988,33 @@ async def get_admin_overview(
         if db is None:
             raise HTTPException(status_code=503, detail="Database connection failed")
         
+        # Build job filter for applications
+        job_filter = {}
+        if job_id:
+            try:
+                job_filter["jobId"] = ObjectId(job_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid job ID format")
+        
         # Get base counts
         total_users = await db.users.count_documents({})
         total_jobs = await db.jobpostings.count_documents({})
         active_jobs = await db.jobpostings.count_documents({"isActive": True})
-        total_applications = await db.applications.count_documents({})
+        total_applications = await db.applications.count_documents(job_filter)
         
         # Get application counts by status
-        new_applications = await db.applications.count_documents({"status": "New"})
-        shortlisted = await db.applications.count_documents({"status": "Shortlisted"})
-        technical_assessment = await db.applications.count_documents({"status": "Technical Assessment"})
-        interviewing = await db.applications.count_documents({"status": "Interviewing"})
-        hired = await db.applications.count_documents({"status": "Hired"})
-        rejected = await db.applications.count_documents({"status": "Rejected"})
-        disqualified = await db.applications.count_documents({"status": "Disqualified"})
+        new_applications = await db.applications.count_documents({**job_filter, "status": "New"})
+        shortlisted = await db.applications.count_documents({**job_filter, "status": "Shortlisted"})
+        technical_assessment = await db.applications.count_documents({**job_filter, "status": "Technical Assessment"})
+        interviewing = await db.applications.count_documents({**job_filter, "status": "Interviewing"})
+        hired = await db.applications.count_documents({**job_filter, "status": "Hired"})
+        rejected = await db.applications.count_documents({**job_filter, "status": "Rejected"})
+        disqualified = await db.applications.count_documents({**job_filter, "status": "Disqualified"})
         
         # Get recent applications (last 7 days)
         seven_days_ago = datetime.utcnow() - timedelta(days=7)
         recent_count = await db.applications.count_documents({
+            **job_filter,
             "createdAt": {"$gte": seven_days_ago}
         })
         
@@ -1012,7 +1022,7 @@ async def get_admin_overview(
         status_breakdown = []
         statuses = ["New", "Shortlisted", "Technical Assessment", "Interviewing", "Hired", "Rejected", "Disqualified"]
         for status in statuses:
-            count = await db.applications.count_documents({"status": status})
+            count = await db.applications.count_documents({**job_filter, "status": status})
             status_breakdown.append({"status": status, "count": count})
         
         response_data = {
@@ -1080,7 +1090,8 @@ async def get_admin_applications(
     sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
     search: Optional[str] = Query(None, description="Search term for name, email, or position"),
-    position: Optional[str] = Query(None, description="Filter by position/job title")
+    position: Optional[str] = Query(None, description="Filter by position/job title"),
+    jobId: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get all applications for admin with optimized aggregation and filtering"""
     try:
@@ -1092,6 +1103,13 @@ async def get_admin_applications(
         match_query = {}
         if status and status != "all":
             match_query["status"] = status
+        
+        # Add job filtering
+        if jobId:
+            try:
+                match_query["jobId"] = ObjectId(jobId)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid job ID format")
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
@@ -1264,7 +1282,7 @@ async def get_application_positions(
         if status and status != "all":
             match_query["status"] = status
         
-        # Aggregation pipeline to get unique positions
+        # Aggregation pipeline to get unique positions from applications
         pipeline = [
             {"$match": match_query},
             {
@@ -1304,16 +1322,30 @@ async def get_application_positions(
         ]
         
         cursor = db.applications.aggregate(pipeline)
-        positions = await cursor.to_list(length=None)
-        
-        # Format response
+        positions_from_apps = await cursor.to_list(length=None)
+
+        # Also include ALL job titles from jobpostings (even without applications)
+        job_titles = []
+        try:
+            async for job in db.jobpostings.find({}, {"title": 1}):
+                title = job.get("title")
+                if title:
+                    job_titles.append(title)
+        except Exception as e:
+            logger.error(f"Failed to load job titles for positions list: {e}")
+
+        # Merge: map title -> count (default 0), then overlay counts from applications
+        title_to_count: dict[str, int] = {t: 0 for t in job_titles}
+        for pos in positions_from_apps:
+            title = pos.get("_id")
+            if title:
+                title_to_count[title] = title_to_count.get(title, 0) + int(pos.get("count", 0))
+
+        # Build sorted list
         position_options = [
-            {
-                "value": pos["_id"],
-                "label": pos["_id"],
-                "count": pos["count"]
-            }
-            for pos in positions if pos["_id"]
+            {"value": title, "label": title, "count": count}
+            for title, count in sorted(title_to_count.items(), key=lambda x: x[0])
+            if title not in (None, "", "Position Not Available")
         ]
         
         return JSONResponse(
@@ -1888,7 +1920,8 @@ async def delete_admin_application(
 @router.get("/trends")
 async def get_application_trends(
     current_user: dict = Depends(get_current_admin_user),
-    days: int = Query(30, ge=1, le=365)
+    days: int = Query(30, ge=1, le=365),
+    job_id: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get application trends"""
     db = get_database()
@@ -1897,10 +1930,19 @@ async def get_application_trends(
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
     
+    # Build job filter
+    job_filter = {}
+    if job_id:
+        try:
+            job_filter["jobId"] = ObjectId(job_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid job ID format")
+    
     # Get daily application counts
     pipeline = [
         {
             "$match": {
+                **job_filter,
                 "createdAt": {
                     "$gte": start_date,
                     "$lte": end_date
@@ -1941,7 +1983,8 @@ async def get_application_trends(
 
 @router.get("/applications-by-job")
 async def get_applications_by_job(
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(get_current_admin_user),
+    job_id: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get applications grouped by job"""
     try:
@@ -1949,8 +1992,17 @@ async def get_applications_by_job(
         if db is None:
             raise HTTPException(status_code=503, detail="Database not available")
         
+        # Build job filter for applications
+        job_filter = {}
+        if job_id:
+            try:
+                job_filter["jobId"] = ObjectId(job_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid job ID format")
+
         # Get applications grouped by job
         pipeline = [
+            {"$match": job_filter},
             {
                 "$addFields": {
                     "jobIdStr": { "$toString": "$jobId" }

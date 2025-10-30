@@ -50,6 +50,11 @@ class Settings(BaseModel):
         "http://localhost:3000,http://localhost:3001,https://bqitech.com,https://www.bqitech.com"
     )
     BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in ALLOWED_ORIGINS_RAW.split(",") if origin.strip()]
+    # Optional regex to match subdomains (e.g., https://*.bqitech.com)
+    CORS_ORIGIN_REGEX: Optional[str] = os.getenv(
+        "CORS_ORIGIN_REGEX",
+        r"https?:\/\/(.*\.)?bqitech\.com$|https?:\/\/localhost(:\d+)?$|https?:\/\/bqitech-nonprod-1\.onrender\.com$",
+    )
     
     # Email Configuration
     smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
