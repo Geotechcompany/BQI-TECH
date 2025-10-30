@@ -1,12 +1,13 @@
-import axios from 'axios';
-import { authService } from './auth-backend';
+import axios from "axios";
+import { authService } from "./auth-backend";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'https://api.bqitech.com';
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_PYTHON_API_URL || "https://api.bqitech.com";
 
 export const api = axios.create({
   baseURL: BACKEND_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
   withCredentials: true, // Enable sending credentials
 });
@@ -20,7 +21,7 @@ api.interceptors.request.use(
       // Add X-User-Session header with properly serialized user data
       if (session.user) {
         const { id, _id, ...userData } = session.user;
-        config.headers['X-User-Session'] = JSON.stringify({
+        config.headers["X-User-Session"] = JSON.stringify({
           ...userData,
           id: id || _id,
           _id: _id || id,
@@ -47,7 +48,7 @@ api.interceptors.response.use(
       try {
         // Try to refresh the token
         await authService.refreshToken();
-        
+
         // Get new token and update request
         const session = authService.getSession();
         if (session?.token) {
@@ -55,7 +56,7 @@ api.interceptors.response.use(
           // Update X-User-Session header with new token
           if (session.user) {
             const { id, _id, ...userData } = session.user;
-            originalRequest.headers['X-User-Session'] = JSON.stringify({
+            originalRequest.headers["X-User-Session"] = JSON.stringify({
               ...userData,
               id: id || _id,
               _id: _id || id,
