@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { BACKEND_URL } from "@/lib/config";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Loader2, CheckCircle2, XCircle, Zap } from "lucide-react";
