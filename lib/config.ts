@@ -4,7 +4,7 @@
  */
 
 export const API_CONFIG = {
-  BACKEND_URL: "https://api.bqitech.com",
+  BACKEND_URL: "https://bqi-tech-0fiv.onrender.com",
   APP_URL: "https://bqitech.com",
 } as const;
 
