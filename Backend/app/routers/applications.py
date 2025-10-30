@@ -46,6 +46,20 @@ def convert_objectids_to_strings(doc):
                 doc[i] = convert_objectids_to_strings(item)
     return doc
 
+@router.options("/")
+async def options_submit_application():
+    """Handle CORS preflight for application submission"""
+    return JSONResponse(
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+
 @router.post("/")
 async def submit_application(
     application_data: Dict[str, Any] = Body(...),
@@ -146,10 +160,26 @@ async def submit_application(
         except Exception as email_err:
             logger.error(f"Failed to send application confirmation email: {str(email_err)}")
 
-        return {
+        # Return success response with proper CORS headers
+        response_data = {
             "message": "Application submitted successfully",
             "application": application_data
         }
+        
+        logger.info(f"Application submission successful, returning response")
+        
+        return JSONResponse(
+            content=json.loads(json.dumps(response_data, cls=JSONEncoder)),
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+                "Access-Control-Allow-Credentials": "true",
+            }
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error submitting application: {str(e)}")
         logger.exception("Full traceback:")

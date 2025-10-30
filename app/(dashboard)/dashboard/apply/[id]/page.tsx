@@ -441,9 +441,14 @@ function ApplicationForm() {
       toast.success("Application submitted successfully!");
       router.push("/dashboard/apply/thank-you");
     } catch (error: any) {
+      console.error("Application submission error:", error);
+      
       // Network errors can occur after the backend has already inserted the application.
       // Fallback: check if an application for this job now exists for the current user.
       try {
+        // Wait a moment for DB to sync
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         const verifyRes = await fetch(
           `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/user`,
           {
@@ -454,6 +459,7 @@ function ApplicationForm() {
             },
           }
         );
+        
         if (verifyRes.ok) {
           const verifyData = await verifyRes.json();
           const list = Array.isArray(verifyData?.applications)
@@ -462,19 +468,23 @@ function ApplicationForm() {
             ? verifyData
             : [];
           const exists = list.some((a: any) => String(a.jobId) === String(id));
+          
           if (exists) {
+            // Application was successfully saved despite error
+            console.log("Application verified in database");
             toast.success("Application submitted successfully!");
             router.push("/dashboard/apply/thank-you");
             return;
           }
         }
-      } catch (_) {
-        // ignore and show the original error UI
+      } catch (verifyError) {
+        console.error("Verification error:", verifyError);
+        // Continue to show error if verification also fails
       }
 
       setIsSubmitting(false);
-      toast.error(error.message || "Failed to submit application");
-      setFormErrors([error.message || "Failed to submit application"]);
+      toast.error("Failed to submit application. Please try again.");
+      setFormErrors(["Network error occurred. Please check your connection and try again."]);
       setShowErrorDialog(true);
     }
   };
