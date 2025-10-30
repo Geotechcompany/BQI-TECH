@@ -79,6 +79,23 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+# Force HTTPS in production - must be first middleware
+@app.middleware("http")
+async def force_https_redirect(request: Request, call_next):
+    """Force HTTPS redirects to use HTTPS scheme"""
+    # Check if we're behind a proxy that forwarded HTTPS
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    forwarded_host = request.headers.get("x-forwarded-host", "")
+    
+    # If request came via HTTPS proxy, ensure redirects use HTTPS
+    if forwarded_proto == "https":
+        # Override the request URL scheme
+        request.scope["scheme"] = "https"
+        request.scope["server"] = (forwarded_host or request.scope["server"][0], 443)
+    
+    response = await call_next(request)
+    return response
+
 # Add security headers middleware
 @app.middleware("http")
 async def debug_requests(request: Request, call_next):
