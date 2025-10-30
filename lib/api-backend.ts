@@ -1,7 +1,7 @@
 import { authService } from "./auth-backend";
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:10000";
+  process.env.NEXT_PUBLIC_PYTHON_API_URL || "https://api.bqitech.com";
 
 // Generic API client class
 export class BackendApiClient {
@@ -233,6 +233,7 @@ export const adminApi = {
     search?: string;
     sort_by?: string;
     sort_order?: "asc" | "desc";
+    jobId?: string;
   }) => backendApi.get("/api/admin/applications", params),
 
   getApplication: (id: string) =>
@@ -310,11 +311,20 @@ export const adminApi = {
     backendApi.delete(`/api/admin/blog-posts/${id}`),
 
   // Overview & Analytics
-  getOverview: () => backendApi.get("/api/admin/overview"),
+  getOverview: (jobId?: string) =>
+    backendApi.get("/api/admin/overview", jobId ? { job_id: jobId } : {}),
 
-  getTrends: (days?: number) => backendApi.get("/api/admin/trends", { days }),
+  getTrends: (days?: number, jobId?: string) =>
+    backendApi.get("/api/admin/trends", {
+      days,
+      ...(jobId && { job_id: jobId }),
+    }),
 
-  getApplicationsByJob: () => backendApi.get("/api/admin/applications-by-job"),
+  getApplicationsByJob: (jobId?: string) =>
+    backendApi.get(
+      "/api/admin/applications-by-job",
+      jobId ? { job_id: jobId } : {}
+    ),
 
   // Questions
   getQuestions: (jobId?: string) =>

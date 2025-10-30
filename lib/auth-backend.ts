@@ -25,7 +25,7 @@ interface SessionData {
 }
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:10000";
+  process.env.NEXT_PUBLIC_PYTHON_API_URL || "https://api.bqitech.com";
 
 // Token storage utilities
 const TOKEN_KEY = "auth_token";

@@ -28,7 +28,7 @@ export interface BulkUpdateRequest {
 }
 
 class AdminApplicationsApi {
-  private baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:9000';
+  private baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'https://api.bqitech.com';
 
   private async makeRequest<T>(
     endpoint: string, 

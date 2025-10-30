@@ -13,6 +13,7 @@ export interface ApplicationFilters {
   limit?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  jobId?: string;
 }
 
 export interface ApiResponse<T> {
@@ -28,7 +29,7 @@ export interface BulkUpdateRequest {
 }
 
 class AdminApplicationsApi {
-  private baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:9000';
+  private baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'https://api.bqitech.com';
 
   private async makeRequest<T>(
     endpoint: string, 
@@ -113,6 +114,7 @@ class AdminApplicationsApi {
     if (filters.sortOrder) params.append('sort_order', filters.sortOrder);
     if (filters.search) params.append('search', filters.search);
     if (filters.position && filters.position !== 'all') params.append('position', filters.position);
+    if (filters.jobId) params.append('jobId', filters.jobId);
 
     const queryString = params.toString();
     
@@ -210,6 +212,7 @@ class AdminApplicationsApi {
     if (filters.sortOrder) params.append('sort_order', filters.sortOrder);
     if (filters.search) params.append('search', filters.search);
     if (filters.position && filters.position !== 'all') params.append('position', filters.position);
+    if (filters.jobId) params.append('jobId', filters.jobId);
 
     const queryString = params.toString();
     const endpoint = `/applications${queryString ? `?${queryString}` : ''}`;
