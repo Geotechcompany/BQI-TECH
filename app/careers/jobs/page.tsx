@@ -437,7 +437,7 @@ export default function JobsPage() {
                         {[
                           { label: "Department", value: selectedJob.department },
                           { label: "Location", value: selectedJob.location },
-                          { label: "Position Type", value: "Full time" },
+                          { label: "Position Type", value: selectedJob.employmentType },
                           { label: "Posted Date", value: new Date(selectedJob.postedDate).toLocaleDateString() }
                         ].map((item) => (
                           <div key={item.label} className="bg-gray-50 p-4 rounded-xl">
