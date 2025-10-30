@@ -132,18 +132,14 @@ function ApplicationForm() {
           }
           break;
         case "select":
-          schema = z
-            .string()
-            .min(1, {
-              message: `Please select an option for ${question.question.toLowerCase()}`,
-            });
+          schema = z.string().min(1, {
+            message: `Please select an option for ${question.question.toLowerCase()}`,
+          });
           break;
         case "radio":
-          schema = z
-            .string()
-            .min(1, {
-              message: `Please select an option for ${question.question.toLowerCase()}`,
-            });
+          schema = z.string().min(1, {
+            message: `Please select an option for ${question.question.toLowerCase()}`,
+          });
           break;
         case "boolean":
           schema = z
@@ -151,11 +147,9 @@ function ApplicationForm() {
             .min(1, { message: `${question.question} is required` });
           break;
         case "file":
-          schema = z
-            .string()
-            .min(1, {
-              message: `Please upload a file for ${question.question.toLowerCase()}`,
-            });
+          schema = z.string().min(1, {
+            message: `Please upload a file for ${question.question.toLowerCase()}`,
+          });
           break;
         default:
           schema = z
@@ -447,6 +441,37 @@ function ApplicationForm() {
       toast.success("Application submitted successfully!");
       router.push("/dashboard/apply/thank-you");
     } catch (error: any) {
+      // Network errors can occur after the backend has already inserted the application.
+      // Fallback: check if an application for this job now exists for the current user.
+      try {
+        const verifyRes = await fetch(
+          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/user`,
+          {
+            credentials: "include",
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${authService.getSession()?.token}`,
+            },
+          }
+        );
+        if (verifyRes.ok) {
+          const verifyData = await verifyRes.json();
+          const list = Array.isArray(verifyData?.applications)
+            ? verifyData.applications
+            : Array.isArray(verifyData)
+            ? verifyData
+            : [];
+          const exists = list.some((a: any) => String(a.jobId) === String(id));
+          if (exists) {
+            toast.success("Application submitted successfully!");
+            router.push("/dashboard/apply/thank-you");
+            return;
+          }
+        }
+      } catch (_) {
+        // ignore and show the original error UI
+      }
+
       setIsSubmitting(false);
       toast.error(error.message || "Failed to submit application");
       setFormErrors([error.message || "Failed to submit application"]);
