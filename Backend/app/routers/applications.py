@@ -113,6 +113,8 @@ async def submit_application(
             logger.warning("Could not verify application in database after insertion")
         
         # Try to send confirmation email (non-blocking for response)
+        # Run email in background to prevent timeout
+        import asyncio
         try:
             # Extract applicant email and name from answers if present
             answers = application_data.get("answers", [])
@@ -135,11 +137,12 @@ async def submit_application(
                 pass
 
             if applicant_email:
-                await send_application_confirmation_email(
+                # Fire and forget - don't await to prevent timeout
+                asyncio.create_task(send_application_confirmation_email(
                     applicant_email=applicant_email,
                     applicant_name=applicant_name,
                     job_title=job_title
-                )
+                ))
         except Exception as email_err:
             logger.error(f"Failed to send application confirmation email: {str(email_err)}")
 
@@ -794,6 +797,32 @@ async def options_applications(request: Request):
         }
     )
 
+@router.get("/user")
+async def get_user_applications_endpoint(current_user: dict = Depends(get_current_user)):
+    """Get all applications for the current user (simple endpoint for verification)"""
+    try:
+        db = get_database()
+        
+        # Find all applications for the user
+        applications = await db.applications.find({
+            "userId": str(current_user["_id"])
+        }).sort("appliedDate", -1).to_list(length=None)
+        
+        # Transform ObjectIds to strings for JSON serialization
+        for app in applications:
+            app["id"] = str(app["_id"])
+            app["_id"] = str(app["_id"])
+            app["userId"] = str(app["userId"])
+            if "jobId" in app:
+                app["jobId"] = str(app["jobId"])
+        
+        return {"applications": applications}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
 @router.get("/", response_model=Dict[str, List[Dict[str, Any]]])
 async def get_user_applications(current_user: dict = Depends(get_current_user)):
     """Get all applications for the current user"""
@@ -802,7 +831,7 @@ async def get_user_applications(current_user: dict = Depends(get_current_user)):
         
         # Find all applications for the user
         applications = await db.applications.find({
-            "userId": ObjectId(current_user["_id"])  # keep as stored
+            "userId": str(current_user["_id"])
         }).sort("appliedDate", -1).to_list(length=None)
         
         # Transform ObjectIds to strings for JSON serialization
