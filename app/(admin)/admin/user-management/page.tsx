@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import { adminApi } from "@/lib/api-backend";
+import { authService } from "@/lib/auth-backend";
 
 export default function UserManagementPage() {
   const { user } = useAuth();
@@ -28,10 +30,44 @@ export default function UserManagementPage() {
   const itemsPerPage = 10;
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Debounce search query to avoid too many API calls
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  
+  // Reset to page 1 when search query changes
+  useEffect(() => {
+    if (debouncedSearchQuery !== searchQuery) return; // Only reset after debounce
+    setCurrentPage(1);
+  }, [debouncedSearchQuery]);
 
   const { data: usersData, isLoading } = useQuery({
-    queryKey: ["admin-users", currentPage],
+    queryKey: ["admin-users", currentPage, debouncedSearchQuery],
     queryFn: async () => {
+      // If searching, use search endpoint instead of paginated list
+      if (debouncedSearchQuery.trim()) {
+        const session = authService.getSession();
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/admin/users/search?q=${encodeURIComponent(debouncedSearchQuery)}`,
+          {
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${session?.token}`,
+            },
+          }
+        );
+        if (!res.ok) {
+          throw new Error(`Failed to search users: ${res.status} ${res.statusText}`);
+        }
+        const data = await res.json();
+        return {
+          data: data.users ?? [],
+          total: data.users?.length ?? 0,
+        } as { data: UserType[]; total: number };
+      }
+      
+      // Normal paginated fetch when not searching
       const skip = (currentPage - 1) * itemsPerPage;
       const res = await adminApi.getUsers({ skip, limit: itemsPerPage });
       // Normalize shape for the table props
@@ -42,16 +78,8 @@ export default function UserManagementPage() {
     },
   });
 
-  // Client-side filter for current page
-  const filteredUsers: UserType[] = (usersData?.data || []).filter((u) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      u.name?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q) ||
-      (u.role || "").toLowerCase().includes(q)
-    );
-  });
+  // Use the data directly (server-side filtering when searching)
+  const filteredUsers: UserType[] = usersData?.data || [];
 
   const queryClient = useQueryClient();
 
@@ -202,12 +230,15 @@ export default function UserManagementPage() {
           onEdit={(user) => setEditingUser(user)}
         />
 
-        <Pagination
-          currentPage={currentPage}
-          totalPages={Math.ceil((usersData?.total || 0) / itemsPerPage)}
-          onPageChange={handlePageChange}
-          className="mt-6"
-        />
+        {/* Only show pagination when not searching */}
+        {!debouncedSearchQuery.trim() && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil((usersData?.total || 0) / itemsPerPage)}
+            onPageChange={handlePageChange}
+            className="mt-6"
+          />
+        )}
       </AdminPageLayout>
 
       <EditUserModal
