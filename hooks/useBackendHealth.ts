@@ -10,7 +10,7 @@ type BackendHealthResponse = {
 }
 
 export function useBackendHealth({ refetchIntervalMs = 15000 } = {}) {
-  const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:10000"
+  const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || "https://api.bqitech.com"
 
   const query = useQuery({
     queryKey: ["backend-health"],
