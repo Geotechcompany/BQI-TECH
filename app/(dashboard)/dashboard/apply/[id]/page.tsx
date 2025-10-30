@@ -408,7 +408,7 @@ function ApplicationForm() {
 
       // Submit to application endpoint with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout (longer for file uploads)
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications`,
@@ -464,8 +464,8 @@ function ApplicationForm() {
       // Network errors can occur after the backend has already inserted the application.
       // Fallback: check if an application for this job now exists for the current user.
       try {
-        // Wait a moment for DB to sync
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Wait a bit longer for DB to sync and worker to restart
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
         const verifyRes = await fetch(
           `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications/user`,
