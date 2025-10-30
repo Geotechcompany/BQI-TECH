@@ -12,6 +12,28 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def get_smtp_connection():
+    """
+    Get the appropriate SMTP connection based on port configuration.
+    Office 365 uses port 587 with STARTTLS.
+    Gmail uses port 465 with SSL.
+    """
+    context = ssl.create_default_context()
+    
+    if int(settings.smtp_port) == 587:
+        # STARTTLS (Office 365, most modern SMTP)
+        server = smtplib.SMTP(settings.smtp_host, int(settings.smtp_port))
+        server.ehlo()
+        server.starttls(context=context)
+        server.ehlo()
+        server.login(settings.smtp_user, settings.smtp_pass)
+        return server
+    else:
+        # SSL/TLS (Gmail on 465)
+        server = smtplib.SMTP_SSL(settings.smtp_host, int(settings.smtp_port), context=context)
+        server.login(settings.smtp_user, settings.smtp_pass)
+        return server
+
 def generate_verification_code(length: int = 6) -> str:
     """Generate a random verification code"""
     return ''.join(random.choices(string.digits, k=length))
@@ -117,10 +139,7 @@ def send_verification_email(email: str, verification_code: str) -> bool:
         message.attach(MIMEText(body, "html"))
         
         # Create secure connection and send email
-        context = ssl.create_default_context()
-        
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message.as_string()
             server.sendmail(settings.from_email, email, text)
         
@@ -223,10 +242,7 @@ async def send_contact_form_email(
         message_obj.attach(MIMEText(body, "html"))
         
         # Create secure connection and send email
-        context = ssl.create_default_context()
-        
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message_obj.as_string()
             server.sendmail(settings.from_email, settings.hr_email, text)
         
@@ -281,9 +297,7 @@ async def send_contact_confirmation_email(
 
         message_obj.attach(MIMEText(body, "html"))
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message_obj.as_string()
             server.sendmail(settings.from_email, email, text)
 
@@ -332,9 +346,7 @@ async def send_application_confirmation_email(
 
         message_obj.attach(MIMEText(body, "html"))
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message_obj.as_string()
             server.sendmail(settings.from_email, applicant_email, text)
 
@@ -390,9 +402,7 @@ async def send_password_reset_email(email: str, reset_link: str) -> bool:
         message = build_reset_password_email(reset_link)
         message["To"] = email
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             server.sendmail(settings.from_email, email, message.as_string())
         logger.info(f"Password reset email sent to {email}")
         return True
@@ -413,9 +423,7 @@ def send_generic_email(to: str, subject: str, html: str) -> bool:
         message["Subject"] = subject
         message.attach(MIMEText(html, "html"))
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             server.sendmail(settings.from_email, to, message.as_string())
 
         logger.info(f"Email sent to {to}")

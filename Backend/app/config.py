@@ -56,12 +56,12 @@ class Settings(BaseModel):
         r"https?:\/\/(.*\.)?bqitech\.com$|https?:\/\/localhost(:\d+)?$|https?:\/\/bqitech-nonprod-1\.onrender\.com$",
     )
     
-    # Email Configuration
-    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port: int = int(os.getenv("SMTP_PORT", "465"))
-    smtp_user: str = os.getenv("SMTP_USER", "")
+    # Email Configuration (Office 365 SMTP)
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.office365.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user: str = os.getenv("SMTP_USER", "hr@bqitech.com")
     smtp_pass: str = os.getenv("SMTP_PASS", "")
-    from_email: str = os.getenv("FROM_EMAIL", "")
+    from_email: str = os.getenv("FROM_EMAIL", "hr@bqitech.com")
     hr_email: str = os.getenv("HR_EMAIL", "hr@bqitech.com")
     
     # Cloudinary Configuration
