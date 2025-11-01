@@ -293,9 +293,10 @@ const AuthorProfile = ({ post }: { post: BlogPost }) => {
   )
 }
 
+import { BACKEND_URL } from "@/lib/config";
+
 const fetcher = async (url: string) => {
-  const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000'
-  const response = await fetch(`${baseUrl}/api${url}`)
+  const response = await fetch(`${BACKEND_URL}/api${url}`)
 
   // Gracefully handle not found
   if (response.status === 404) {
