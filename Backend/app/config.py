@@ -20,7 +20,7 @@ class Settings(BaseModel):
     # API
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "BQI Tech Backend"
-    app_url: str = "http://localhost:8000"
+    app_url: str = "https://api.bqitech.com"
     frontend_url: str = os.getenv("NEXT_PUBLIC_APP_URL", "https://bqitech.com")
     
     # Security

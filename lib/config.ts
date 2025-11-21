@@ -11,3 +11,6 @@ export const API_CONFIG = {
 // Export individual values for convenience
 export const BACKEND_URL = API_CONFIG.BACKEND_URL;
 export const APP_URL = API_CONFIG.APP_URL;
+
+
+
