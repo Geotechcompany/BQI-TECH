@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { BACKEND_URL } from "@/lib/config";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,7 @@ export default function SurveyAnalyticsPage() {
         // fallback: try direct fetch via backend client
         try {
           const backend = await fetch(
-            `${
-              process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000"
-            }/api/admin/surveys/${surveyId}/analytics`,
+            `${BACKEND_URL}/api/admin/surveys/${surveyId}/analytics`,
             { credentials: "include" }
           );
           const json = await backend.json();
