@@ -91,7 +91,7 @@ const team = [
     role: "Junior Configuration Analyst",
     image: "/Teams/Geo1.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/geoffrey-audia",
+      linkedin: "https://www.linkedin.com/in/geoffrey-audia-28a839307",
     },
   },
   {
@@ -341,12 +341,10 @@ export default function AboutPage() {
                       src={member.image}
                       alt={member.name}
                       fill
-                      className="object-cover object-top transition-transform duration-700 group-hover:scale-110"
+                      className="object-cover object-top team-member-image"
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                      unoptimized
                     />
-
-                    {/* Overlay Gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 
                     {/* Social Links Overlay */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-4 group-hover:translate-y-0">
