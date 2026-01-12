@@ -170,24 +170,28 @@ function FloatingShapes() {
 }
 
 function Shape({ position, rotation, scale, color, speed, pulseSpeed }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
+  // NOTE: We keep this ref typed as `any` to avoid TS type mismatches caused by
+  // differing BufferGeometry type augmentations (e.g. from three-mesh-bvh) across deps.
+  // Runtime-wise this is a normal THREE.Mesh ref.
+  const meshRef = useRef<any>(null);
   const initialScale = scale;
 
   useFrame((state, delta) => {
-    if (!meshRef.current) return;
+    const mesh = meshRef.current as THREE.Mesh | null;
+    if (!mesh) return;
     
     const time = state.clock.getElapsedTime();
     
     // Rotation animation
-    meshRef.current.rotation.x += delta * speed;
-    meshRef.current.rotation.y += delta * speed * 0.8;
+    mesh.rotation.x += delta * speed;
+    mesh.rotation.y += delta * speed * 0.8;
     
     // Floating animation
-    meshRef.current.position.y += Math.sin(time + position[0]) * delta * 0.5;
+    mesh.position.y += Math.sin(time + position[0]) * delta * 0.5;
     
     // Pulsing scale animation
     const pulseFactor = Math.sin(time * pulseSpeed) * 0.2 + 1;
-    meshRef.current.scale.set(
+    mesh.scale.set(
       initialScale * pulseFactor,
       initialScale * pulseFactor,
       initialScale * pulseFactor
