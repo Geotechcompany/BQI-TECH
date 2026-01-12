@@ -20,7 +20,7 @@ class Settings(BaseModel):
     # API
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "BQI Tech Backend"
-    app_url: str = "http://localhost:8000"
+    app_url: str = "https://api.bqitech.com"
     frontend_url: str = os.getenv("NEXT_PUBLIC_APP_URL", "https://bqitech.com")
     
     # Security
@@ -44,15 +44,24 @@ class Settings(BaseModel):
     encryption_master_key: str = os.getenv("ENCRYPTION_MASTER_KEY", "")
     
     # CORS
-    ALLOWED_ORIGINS_RAW: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
+    # Include production origins by default; can be overridden via ALLOWED_ORIGINS env
+    ALLOWED_ORIGINS_RAW: str = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:3001,https://bqitech.com,https://www.bqitech.com"
+    )
     BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in ALLOWED_ORIGINS_RAW.split(",") if origin.strip()]
+    # Optional regex to match subdomains (e.g., https://*.bqitech.com)
+    CORS_ORIGIN_REGEX: Optional[str] = os.getenv(
+        "CORS_ORIGIN_REGEX",
+        r"https?:\/\/(.*\.)?bqitech\.com$|https?:\/\/localhost(:\d+)?$|https?:\/\/bqitech-nonprod-1\.onrender\.com$",
+    )
     
-    # Email Configuration
-    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port: int = int(os.getenv("SMTP_PORT", "465"))
-    smtp_user: str = os.getenv("SMTP_USER", "")
+    # Email Configuration (Office 365 SMTP)
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.office365.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user: str = os.getenv("SMTP_USER", "hr@bqitech.com")
     smtp_pass: str = os.getenv("SMTP_PASS", "")
-    from_email: str = os.getenv("FROM_EMAIL", "")
+    from_email: str = os.getenv("FROM_EMAIL", "hr@bqitech.com")
     hr_email: str = os.getenv("HR_EMAIL", "hr@bqitech.com")
     
     # Cloudinary Configuration

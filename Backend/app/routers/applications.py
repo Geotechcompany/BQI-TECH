@@ -10,6 +10,7 @@ from app.models import Application
 import logging
 from fastapi.responses import Response
 import json
+import re
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -44,6 +45,20 @@ def convert_objectids_to_strings(doc):
             elif isinstance(item, list):
                 doc[i] = convert_objectids_to_strings(item)
     return doc
+
+@router.options("/")
+async def options_submit_application():
+    """Handle CORS preflight for application submission"""
+    return JSONResponse(
+        content={"message": "OK"},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
 
 @router.post("/")
 async def submit_application(
@@ -112,6 +127,8 @@ async def submit_application(
             logger.warning("Could not verify application in database after insertion")
         
         # Try to send confirmation email (non-blocking for response)
+        # Run email in background to prevent timeout
+        import asyncio
         try:
             # Extract applicant email and name from answers if present
             answers = application_data.get("answers", [])
@@ -134,18 +151,35 @@ async def submit_application(
                 pass
 
             if applicant_email:
-                await send_application_confirmation_email(
+                # Fire and forget - don't await to prevent timeout
+                asyncio.create_task(send_application_confirmation_email(
                     applicant_email=applicant_email,
                     applicant_name=applicant_name,
                     job_title=job_title
-                )
+                ))
         except Exception as email_err:
             logger.error(f"Failed to send application confirmation email: {str(email_err)}")
 
-        return {
+        # Return success response with proper CORS headers
+        response_data = {
             "message": "Application submitted successfully",
             "application": application_data
         }
+        
+        logger.info(f"Application submission successful, returning response")
+        
+        return JSONResponse(
+            content=json.loads(json.dumps(response_data, cls=JSONEncoder)),
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+                "Access-Control-Allow-Credentials": "true",
+            }
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error submitting application: {str(e)}")
         logger.exception("Full traceback:")
@@ -630,11 +664,16 @@ async def get_application(
             logger.error("Database not connected")
             raise HTTPException(status_code=503, detail="Database not available")
         
+        # Guard: only accept 24-hex ObjectId-like values
+        if not re.fullmatch(r"[0-9a-fA-F]{24}", application_id):
+            # Do not leak format details; behave as not found
+            raise HTTPException(status_code=404, detail="Application not found")
+        
         try:
             application = await db.applications.find_one({"_id": ObjectId(application_id)})
         except Exception as e:
             logger.error(f"Error converting application ID {application_id} to ObjectId: {str(e)}")
-            raise HTTPException(status_code=400, detail="Invalid application ID format")
+            raise HTTPException(status_code=404, detail="Application not found")
         
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
@@ -682,11 +721,13 @@ async def update_application(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Validate application ID format
+        if not re.fullmatch(r"[0-9a-fA-F]{24}", application_id):
+            raise HTTPException(status_code=404, detail="Application not found")
         try:
             obj_id = ObjectId(application_id)
         except Exception as e:
             logger.error(f"Error converting application ID {application_id} to ObjectId: {str(e)}")
-            raise HTTPException(status_code=400, detail="Invalid application ID format")
+            raise HTTPException(status_code=404, detail="Application not found")
         
         # Remove immutable and server-managed fields if present in payload
         for key in ["_id", "id", "createdAt"]:
@@ -760,6 +801,8 @@ async def delete_application(
     """Delete an application"""
     try:
         db = get_database()
+        if not re.fullmatch(r"[0-9a-fA-F]{24}", application_id):
+            raise HTTPException(status_code=404, detail="Application not found")
         result = await db.applications.delete_one({"_id": ObjectId(application_id)})
         
         if result.deleted_count == 0:
@@ -784,15 +827,15 @@ async def options_applications(request: Request):
         }
     )
 
-@router.get("/", response_model=Dict[str, List[Dict[str, Any]]])
-async def get_user_applications(current_user: dict = Depends(get_current_user)):
-    """Get all applications for the current user"""
+@router.get("/user")
+async def get_user_applications_endpoint(current_user: dict = Depends(get_current_user)):
+    """Get all applications for the current user (simple endpoint for verification)"""
     try:
         db = get_database()
         
         # Find all applications for the user
         applications = await db.applications.find({
-            "userId": ObjectId(current_user["_id"])
+            "userId": str(current_user["_id"])
         }).sort("appliedDate", -1).to_list(length=None)
         
         # Transform ObjectIds to strings for JSON serialization
@@ -810,40 +853,33 @@ async def get_user_applications(current_user: dict = Depends(get_current_user)):
             detail=str(e)
         )
 
-@router.get("/{application_id}", response_model=Dict[str, Any])
-async def get_application(
-    application_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get a specific application by ID"""
+@router.get("/", response_model=Dict[str, List[Dict[str, Any]]])
+async def get_user_applications(current_user: dict = Depends(get_current_user)):
+    """Get all applications for the current user"""
     try:
         db = get_database()
         
-        # Find the specific application
-        application = await db.applications.find_one({
-            "_id": ObjectId(application_id),
-            "userId": ObjectId(current_user["_id"])
-        })
+        # Find all applications for the user
+        applications = await db.applications.find({
+            "userId": str(current_user["_id"])
+        }).sort("appliedDate", -1).to_list(length=None)
         
-        if not application:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Application not found"
-            )
+        # Transform ObjectIds to strings for JSON serialization
+        for app in applications:
+            app["id"] = str(app["_id"])
+            app["_id"] = str(app["_id"])
+            app["userId"] = str(app["userId"])
+            if "jobId" in app:
+                app["jobId"] = str(app["jobId"])
         
-        # Transform ObjectIds to strings
-        application["id"] = str(application["_id"])
-        application["_id"] = str(application["_id"])
-        application["userId"] = str(application["userId"])
-        if "jobId" in application:
-            application["jobId"] = str(application["jobId"])
-        
-        return application
+        return {"applications": applications}
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+# Removed duplicate get_application definition to avoid route conflicts with parameterized path
 
 @router.get("/stats", response_model=Dict[str, Dict[str, int]])
 async def get_application_stats(current_user: dict = Depends(get_current_user)):

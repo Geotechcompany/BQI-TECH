@@ -1,0 +1,67 @@
+# Auto-merge configuration
+# This file controls the behavior of the auto-merge workflow
+
+# Enable/disable auto-merge globally
+enabled: true
+
+# Branches that are allowed for auto-merge
+allowed_branches:
+  - main
+  - master
+  - develop
+
+# Branches that are NOT allowed for auto-merge (takes precedence over allowed_branches)
+blocked_branches:
+  - staging
+  - production
+
+# Required checks that must pass before auto-merge
+required_checks:
+  - "build"
+  - "test"
+  - "lint"
+
+# Optional checks (if they exist, they must pass)
+optional_checks:
+  - "security-scan"
+  - "dependency-check"
+
+# Minimum number of approvals required (0 = no approval required)
+min_approvals: 0
+
+# Users who can trigger auto-merge via workflow_dispatch
+allowed_users:
+  - "admin"
+  - "maintainer"
+
+# PR title patterns that should be auto-merged
+title_patterns:
+  - "^feat:"
+  - "^fix:"
+  - "^docs:"
+  - "^chore:"
+  - "^refactor:"
+
+# PR title patterns that should NOT be auto-merged
+blocked_title_patterns:
+  - "^BREAKING:"
+  - "^WIP:"
+  - "^DO NOT MERGE"
+
+# Maximum number of commits allowed in a PR for auto-merge
+max_commits: 50
+
+# Maximum number of files changed allowed in a PR for auto-merge
+max_files_changed: 100
+
+# Auto-merge strategy (squash, merge, rebase)
+merge_strategy: "squash"
+
+# Delete source branch after merge
+delete_branch: true
+
+# Comment on PR after auto-merge
+comment_on_merge: true
+
+# Wait time for checks to complete (in minutes)
+max_wait_time: 30

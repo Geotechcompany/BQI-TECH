@@ -1,29 +1,25 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { useRouter, useParams } from "next/navigation"
-import { useForm, SubmitHandler } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { useActionState } from "@/hooks/useActionState"
-import toast, { Toaster } from 'react-hot-toast'
-import { 
-  ArrowLeft, 
-  ArrowRight, 
-  Send, 
-  Loader2 
-} from "lucide-react"
-import { useQuery } from "@tanstack/react-query"
-import { Button } from "@/components/ui/button"
-import { 
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useRouter, useParams } from "next/navigation";
+import { useForm, SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useActionState } from "@/hooks/useActionState";
+import toast, { Toaster } from "react-hot-toast";
+import { ArrowLeft, ArrowRight, Send, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import {
   ExclamationTriangleIcon,
   ExclamationCircleIcon,
   DocumentIcon,
-  XMarkIcon
-} from "@heroicons/react/24/outline"
-import { useAuth } from "@/contexts/AuthContext"
-import { authService } from "@/lib/auth-backend"
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
+import { useAuth } from "@/contexts/AuthContext";
+import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,67 +29,67 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { userApi } from "@/lib/api-backend"
+} from "@/components/ui/alert-dialog";
+import { userApi } from "@/lib/api-backend";
 
 function ApplicationForm() {
-  const router = useRouter()
-  const { id } = useParams()
-  const { user, authLoading } = useAuth()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [formErrors, setFormErrors] = useState<string[]>([])
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null)
-  const [showErrorDialog, setShowErrorDialog] = useState(false)
+  const router = useRouter();
+  const { id } = useParams();
+  const { user, authLoading } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
 
   // Fetch job details
   const { data: job, isLoading: jobLoading } = useQuery({
-    queryKey: ['job', id],
+    queryKey: ["job", id],
     queryFn: async () => {
       if (!id) return null;
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/jobs/${id}`, {
+      const response = await fetch(`${BACKEND_URL}/api/jobs/${id}`, {
         headers: {
-          'Authorization': `Bearer ${authService.getSession()?.token}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Bearer ${authService.getSession()?.token}`,
+          "Content-Type": "application/json",
+        },
       });
-      if (!response.ok) throw new Error('Failed to fetch job');
+      if (!response.ok) throw new Error("Failed to fetch job");
       return response.json();
     },
-    enabled: !!id
-  })
+    enabled: !!id,
+  });
 
   // Check if user has already applied for this job
   const { data: hasApplied = false, isLoading: hasAppliedLoading } = useQuery({
-    queryKey: ['hasApplied', id, user?.id],
+    queryKey: ["hasApplied", id, user?.id],
     queryFn: async () => {
-      if (!id) return false
-      return userApi.hasApplied(String(id))
+      if (!id) return false;
+      return userApi.hasApplied(String(id));
     },
     enabled: !!id && !!user,
-  })
+  });
 
   // Fetch job-specific questions
   const { data: questions = [], isLoading: questionsLoading } = useQuery({
-    queryKey: ['jobQuestions', id],
+    queryKey: ["jobQuestions", id],
     queryFn: async () => {
       if (!id) return [];
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/jobs/${id}/questions`, {
+      const response = await fetch(`${BACKEND_URL}/api/jobs/${id}/questions`, {
         headers: {
-          'Authorization': `Bearer ${authService.getSession()?.token}`,
-          'Content-Type': 'application/json'
-        }
+          Authorization: `Bearer ${authService.getSession()?.token}`,
+          "Content-Type": "application/json",
+        },
       });
       if (!response.ok) {
         // If no questions found, return empty array
         if (response.status === 404) return [];
-        throw new Error('Failed to fetch questions');
+        throw new Error("Failed to fetch questions");
       }
       return response.json();
     },
-    enabled: !!id
-  })
+    enabled: !!id,
+  });
 
   // Dynamically build the form schema based on questions
   const buildFormSchema = () => {
@@ -103,46 +99,56 @@ function ApplicationForm() {
 
       // Add type-specific validation with custom error messages
       switch (question.type) {
-        case 'text':
-          if (question.question.toLowerCase().includes('email')) {
-            schema = z.string()
+        case "text":
+          if (question.question.toLowerCase().includes("email")) {
+            schema = z
+              .string()
               .min(1, { message: `${question.question} is required` })
-              .email({ message: 'Please enter a valid email address' });
-          } else if (question.question.toLowerCase().includes('phone')) {
-            schema = z.string()
+              .email({ message: "Please enter a valid email address" });
+          } else if (question.question.toLowerCase().includes("phone")) {
+            schema = z
+              .string()
               .min(1, { message: `${question.question} is required` })
-              .regex(/^\+?[0-9\s-()]{10,}$/, { 
-                message: 'Please enter a valid phone number (at least 10 digits)' 
+              .regex(/^\+?[0-9\s-()]{10,}$/, {
+                message:
+                  "Please enter a valid phone number (at least 10 digits)",
               });
-          } else if (question.question.toLowerCase().includes('salary')) {
-            schema = z.string()
+          } else if (question.question.toLowerCase().includes("salary")) {
+            schema = z
+              .string()
               .min(1, { message: `${question.question} is required` })
               .regex(/^\d+(?:\.\d+)?$/, {
-                message: 'Please enter a valid number for salary'
+                message: "Please enter a valid number for salary",
               });
           } else {
-            schema = z.string()
+            schema = z
+              .string()
               .min(1, { message: `${question.question} is required` });
           }
           break;
-        case 'select':
-          schema = z.string()
-            .min(1, { message: `Please select an option for ${question.question.toLowerCase()}` });
+        case "select":
+          schema = z.string().min(1, {
+            message: `Please select an option for ${question.question.toLowerCase()}`,
+          });
           break;
-        case 'radio':
-          schema = z.string()
-            .min(1, { message: `Please select an option for ${question.question.toLowerCase()}` });
+        case "radio":
+          schema = z.string().min(1, {
+            message: `Please select an option for ${question.question.toLowerCase()}`,
+          });
           break;
-        case 'boolean':
-          schema = z.string()
+        case "boolean":
+          schema = z
+            .string()
             .min(1, { message: `${question.question} is required` });
           break;
-        case 'file':
-          schema = z.string()
-            .min(1, { message: `Please upload a file for ${question.question.toLowerCase()}` });
+        case "file":
+          schema = z.string().min(1, {
+            message: `Please upload a file for ${question.question.toLowerCase()}`,
+          });
           break;
         default:
-          schema = z.string()
+          schema = z
+            .string()
             .min(1, { message: `${question.question} is required` });
       }
 
@@ -153,7 +159,7 @@ function ApplicationForm() {
 
       return {
         ...acc,
-        [fieldName]: schema
+        [fieldName]: schema,
       };
     }, {} as Record<string, z.ZodString | z.ZodOptional<z.ZodString>>);
 
@@ -161,91 +167,124 @@ function ApplicationForm() {
   };
 
   // Form setup with mode: "onSubmit" to only validate on submit
-  const { register, handleSubmit, formState, reset, setValue, setError, trigger, watch, getValues, clearErrors } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState,
+    reset,
+    setValue,
+    setError,
+    trigger,
+    watch,
+    getValues,
+    clearErrors,
+  } = useForm({
     defaultValues: getDefaultValues(questions),
     resolver: zodResolver(buildFormSchema()),
     mode: "onSubmit", // Only validate on submit
-    reValidateMode: "onSubmit" // Only revalidate on submit
+    reValidateMode: "onSubmit", // Only revalidate on submit
   });
 
   // Multistep grouping: derive steps from questions
   const steps = useMemo(() => {
-    const basicInfoIds: string[] = []
-    const questionIds: string[] = []
-    const attachmentIds: string[] = []
+    const basicInfoIds: string[] = [];
+    const questionIds: string[] = [];
+    const attachmentIds: string[] = [];
 
     for (const q of questions) {
-      const id = (q._id || q.id) as string
-      if (!id) continue
-      const qText = (q.question || '').toLowerCase()
-      if (q.type === 'file') {
-        attachmentIds.push(id)
-      } else if (qText.includes('email') || qText.includes('phone') || qText.includes('name')) {
-        basicInfoIds.push(id)
+      const id = (q._id || q.id) as string;
+      if (!id) continue;
+      const qText = (q.question || "").toLowerCase();
+      if (q.type === "file") {
+        attachmentIds.push(id);
+      } else if (
+        qText.includes("email") ||
+        qText.includes("phone") ||
+        qText.includes("name")
+      ) {
+        basicInfoIds.push(id);
       } else {
-        questionIds.push(id)
+        questionIds.push(id);
       }
     }
 
     const result = [
-      { key: 'basic', title: 'Basic Info', fieldIds: basicInfoIds },
-      { key: 'questions', title: 'Questions', fieldIds: questionIds },
-      { key: 'attachments', title: 'Attachments', fieldIds: attachmentIds },
-    ].filter(s => s.fieldIds.length > 0)
+      { key: "basic", title: "Basic Info", fieldIds: basicInfoIds },
+      { key: "questions", title: "Questions", fieldIds: questionIds },
+      { key: "attachments", title: "Attachments", fieldIds: attachmentIds },
+    ].filter((s) => s.fieldIds.length > 0);
 
     // Fallback single step if nothing grouped
     if (result.length === 0) {
-      return [{ key: 'all', title: 'Application', fieldIds: questions.map((q: any) => q._id || q.id).filter(Boolean) }]
+      return [
+        {
+          key: "all",
+          title: "Application",
+          fieldIds: questions.map((q: any) => q._id || q.id).filter(Boolean),
+        },
+      ];
     }
-    return result
-  }, [questions])
+    return result;
+  }, [questions]);
 
-  const [currentStep, setCurrentStep] = useState(0)
+  const [currentStep, setCurrentStep] = useState(0);
 
-  const currentFieldIds = useMemo(() => steps[currentStep]?.fieldIds || [], [steps, currentStep])
+  const currentFieldIds = useMemo(
+    () => steps[currentStep]?.fieldIds || [],
+    [steps, currentStep]
+  );
 
   const validateCurrentStep = useCallback(async () => {
-    if (currentFieldIds.length === 0) return { ok: true, errors: [] as string[] }
+    if (currentFieldIds.length === 0)
+      return { ok: true, errors: [] as string[] };
 
     // Run schema-based validation for only the fields in the current step
-    clearErrors(currentFieldIds as any)
-    const valid = await trigger(currentFieldIds as any)
+    clearErrors(currentFieldIds as any);
+    const valid = await trigger(currentFieldIds as any);
 
     if (valid) {
-      return { ok: true, errors: [] as string[] }
+      return { ok: true, errors: [] as string[] };
     }
 
     // Collect concrete error messages for the fields in this step
-    const stepErrors: string[] = []
+    const stepErrors: string[] = [];
     for (const fieldId of currentFieldIds) {
-      const anyErrors: any = formState.errors as any
-      const msg = anyErrors?.[fieldId]?.message as string | undefined
-      if (msg) stepErrors.push(msg)
+      const anyErrors: any = formState.errors as any;
+      const msg = anyErrors?.[fieldId]?.message as string | undefined;
+      if (msg) stepErrors.push(msg);
     }
 
     // Fallback: ensure required fields also surface a message if none provided
     if (stepErrors.length === 0) {
-      const values = getValues()
+      const values = getValues();
       for (const fieldId of currentFieldIds) {
-        const q = questions.find((qq: any) => (qq._id || qq.id) === fieldId)
-        if (!q || !q.required) continue
-        const raw = values[fieldId as any]
-        const str = typeof raw === 'string' ? raw.trim() : ''
+        const q = questions.find((qq: any) => (qq._id || qq.id) === fieldId);
+        if (!q || !q.required) continue;
+        const raw = values[fieldId as any];
+        const str = typeof raw === "string" ? raw.trim() : "";
         if (!str) {
-          const msg = `${q.question} is required`
-          stepErrors.push(msg)
-          setError(fieldId as any, { type: 'manual', message: msg })
+          const msg = `${q.question} is required`;
+          stepErrors.push(msg);
+          setError(fieldId as any, { type: "manual", message: msg });
         }
       }
     }
 
-    return { ok: false, errors: stepErrors }
-  }, [currentFieldIds, trigger, clearErrors, formState.errors, getValues, questions, setError])
+    return { ok: false, errors: stepErrors };
+  }, [
+    currentFieldIds,
+    trigger,
+    clearErrors,
+    formState.errors,
+    getValues,
+    questions,
+    setError,
+  ]);
 
   const getFieldError = (fieldId: string): string | undefined => {
-    const anyErrors: any = formState.errors as any
-    return anyErrors?.[fieldId]?.message as string | undefined
-  }
+    const anyErrors: any = formState.errors as any;
+    return anyErrors?.[fieldId]?.message as string | undefined;
+  };
 
   // Effect: Redirect if not authenticated
   useEffect(() => {
@@ -257,10 +296,10 @@ function ApplicationForm() {
   // Effect: Redirect if already applied
   useEffect(() => {
     if (hasApplied) {
-      toast.error('You have already applied for this position');
-      router.push('/dashboard/applications');
+      toast.error("You have already applied for this position");
+      router.push("/dashboard/applications");
     }
-  }, [hasApplied, router])
+  }, [hasApplied, router]);
 
   // Effect: Update form when questions change
   useEffect(() => {
@@ -271,14 +310,15 @@ function ApplicationForm() {
 
   // Effect: Handle invalid job ID
   useEffect(() => {
-    if (id === 'undefined' || !id) {
-      toast.error('Invalid job application. Redirecting to jobs page...');
-      router.push('/dashboard/jobs');
+    if (id === "undefined" || !id) {
+      toast.error("Invalid job application. Redirecting to jobs page...");
+      router.push("/dashboard/jobs");
     }
   }, [id, router]);
 
   // Loading states
-  const isLoading = authLoading || jobLoading || questionsLoading || hasAppliedLoading;
+  const isLoading =
+    authLoading || jobLoading || questionsLoading || hasAppliedLoading;
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -298,8 +338,10 @@ function ApplicationForm() {
       <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
         <ExclamationTriangleIcon className="h-12 w-12 text-red-500" />
         <h1 className="text-xl font-semibold">Job Not Found</h1>
-        <p className="text-gray-600">The job posting you're looking for doesn't exist or has been removed.</p>
-        <Button onClick={() => router.push('/dashboard/jobs')}>
+        <p className="text-gray-600">
+          The job posting you're looking for doesn't exist or has been removed.
+        </p>
+        <Button onClick={() => router.push("/dashboard/jobs")}>
           View All Jobs
         </Button>
       </div>
@@ -311,7 +353,9 @@ function ApplicationForm() {
     setFormErrors([]);
 
     // Check for validation errors
-    const errors = Object.entries(formState.errors).map(([field, error]) => error.message as string);
+    const errors = Object.entries(formState.errors).map(
+      ([field, error]) => error.message as string
+    );
     if (errors.length > 0) {
       setFormErrors(errors);
       setShowErrorDialog(true);
@@ -321,28 +365,30 @@ function ApplicationForm() {
     setIsSubmitting(true);
     try {
       // Validate email format if email field exists
-      const emailQuestion = questions.find(q => q.question.toLowerCase().includes('email'));
+      const emailQuestion = questions.find((q) =>
+        q.question.toLowerCase().includes("email")
+      );
       if (emailQuestion && data[emailQuestion._id]) {
         const email = data[emailQuestion._id];
         if (!z.string().email().safeParse(email).success) {
-          throw new Error('Please enter a valid email address');
+          throw new Error("Please enter a valid email address");
         }
       }
 
       // Format answers in the expected structure
-      const answers = questions.map(q => {
+      const answers = questions.map((q) => {
         const questionId = q._id || q.id;
         const answer = data[questionId];
-        
+
         // Additional validation for required fields
-        if (q.required && (!answer || answer.trim() === '')) {
+        if (q.required && (!answer || answer.trim() === "")) {
           throw new Error(`${q.question} is required`);
         }
 
         return {
           questionId,
           questionText: q.question,
-          answer: answer || ''
+          answer: answer || "",
         };
       });
 
@@ -352,39 +398,102 @@ function ApplicationForm() {
         answers,
         status: "New",
         appliedDate: new Date().toISOString(),
-        userId: user.id
+        userId: user.id,
       };
 
-      // Submit to application endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/applications`, {
-        method: 'POST',
-        credentials: 'include',
+      // Submit to application endpoint with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout (longer for file uploads)
+
+      const response = await fetch(`${BACKEND_URL}/api/applications/`, {
+        method: "POST",
+        credentials: "include",
         headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authService.getSession()?.token}`
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authService.getSession()?.token}`,
         },
         body: JSON.stringify(applicationData),
+        signal: controller.signal,
       });
 
-      const result = await response.json();
-      
+      clearTimeout(timeoutId);
+
+      // Check if response is ok before parsing
       if (!response.ok) {
-        if (response.status === 400 && result.detail === "You have already applied for this position") {
-          toast.error("You have already applied for this position");
-          router.push('/dashboard/applications');
-          return;
+        let errorDetail = "Failed to submit application";
+        try {
+          const result = await response.json();
+          errorDetail = result?.detail || result?.message || errorDetail;
+
+          // Check for duplicate application
+          const normalized = errorDetail.toLowerCase();
+          if (
+            (response.status === 400 || response.status === 409) &&
+            normalized.includes("already applied")
+          ) {
+            toast.error("You have already applied for this position");
+            router.push("/dashboard/applications");
+            return;
+          }
+        } catch (parseError) {
+          console.error("Error parsing error response:", parseError);
+          errorDetail = `Server error: ${response.status} ${response.statusText}`;
         }
-        throw new Error(result.detail || 'Failed to submit application');
+        throw new Error(errorDetail);
       }
 
+      // Parse success response
+      const result = await response.json();
+      console.log("Application submitted successfully:", result);
+
       // Show success message and redirect
-      toast.success('Application submitted successfully!');
-      router.push('/dashboard/apply/thank-you');
+      toast.success("Application submitted successfully!");
+      router.push("/dashboard/apply/thank-you");
     } catch (error: any) {
+      console.error("Application submission error:", error);
+
+      // Network errors can occur after the backend has already inserted the application.
+      // Fallback: check if an application for this job now exists for the current user.
+      try {
+        // Wait a bit longer for DB to sync and worker to restart
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        const verifyRes = await fetch(`${BACKEND_URL}/api/applications/user`, {
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${authService.getSession()?.token}`,
+          },
+        });
+
+        if (verifyRes.ok) {
+          const verifyData = await verifyRes.json();
+          const list = Array.isArray(verifyData?.applications)
+            ? verifyData.applications
+            : Array.isArray(verifyData)
+            ? verifyData
+            : [];
+          const exists = list.some((a: any) => String(a.jobId) === String(id));
+
+          if (exists) {
+            // Application was successfully saved despite error
+            console.log("Application verified in database");
+            toast.success("Application submitted successfully!");
+            router.push("/dashboard/apply/thank-you");
+            return;
+          }
+        }
+      } catch (verifyError) {
+        console.error("Verification error:", verifyError);
+        // Continue to show error if verification also fails
+      }
+
       setIsSubmitting(false);
-      toast.error(error.message || 'Failed to submit application');
-      setFormErrors([error.message || 'Failed to submit application']);
+      toast.error("Failed to submit application. Please try again.");
+      setFormErrors([
+        "Network error occurred. Please check your connection and try again.",
+      ]);
       setShowErrorDialog(true);
     }
   };
@@ -392,11 +501,13 @@ function ApplicationForm() {
   // Render dynamic form fields
   const renderQuestionField = (question: any) => {
     const fieldName = question._id || question.id;
-    
-    const baseInputClasses = "w-full px-3 py-2 border rounded-md transition-all duration-200 focus:outline-none focus:ring-2";
-    const normalClasses = "border-gray-300 focus:ring-blue-500 focus:border-blue-500";
+
+    const baseInputClasses =
+      "w-full px-3 py-2 border rounded-md transition-all duration-200 focus:outline-none focus:ring-2";
+    const normalClasses =
+      "border-gray-300 focus:ring-blue-500 focus:border-blue-500";
     const inputClasses = `${baseInputClasses} ${normalClasses}`;
-    
+
     const renderLabel = () => (
       <label className="block text-sm font-medium text-gray-700 mb-1">
         {question.question}
@@ -405,7 +516,7 @@ function ApplicationForm() {
     );
 
     switch (question.type) {
-      case 'text':
+      case "text":
         return (
           <div key={fieldName} className="space-y-2">
             {renderLabel()}
@@ -413,8 +524,16 @@ function ApplicationForm() {
               <input
                 {...register(fieldName)}
                 className={inputClasses}
-                type={String(question.question).toLowerCase().includes('salary') ? 'number' : 'text'}
-                inputMode={String(question.question).toLowerCase().includes('salary') ? 'decimal' : undefined}
+                type={
+                  String(question.question).toLowerCase().includes("salary")
+                    ? "number"
+                    : "text"
+                }
+                inputMode={
+                  String(question.question).toLowerCase().includes("salary")
+                    ? "decimal"
+                    : undefined
+                }
                 placeholder={`Enter your ${question.question.toLowerCase()}`}
               />
             </div>
@@ -424,7 +543,7 @@ function ApplicationForm() {
           </div>
         );
 
-      case 'select':
+      case "select":
         return (
           <div key={fieldName} className="space-y-2">
             {renderLabel()}
@@ -434,7 +553,9 @@ function ApplicationForm() {
                 className={inputClasses}
                 defaultValue=""
               >
-                <option value="" disabled>Select an option</option>
+                <option value="" disabled>
+                  Select an option
+                </option>
                 {question.options?.map((option: string) => (
                   <option key={option} value={option}>
                     {option}
@@ -448,7 +569,7 @@ function ApplicationForm() {
           </div>
         );
 
-      case 'radio':
+      case "radio":
         return (
           <div key={fieldName} className="space-y-2">
             {renderLabel()}
@@ -464,8 +585,8 @@ function ApplicationForm() {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                     />
                   </div>
-                  <label 
-                    htmlFor={`${fieldName}-${option}`} 
+                  <label
+                    htmlFor={`${fieldName}-${option}`}
                     className="ml-3 text-sm text-gray-700 dark:text-gray-300 select-none cursor-pointer"
                   >
                     {option}
@@ -479,12 +600,12 @@ function ApplicationForm() {
           </div>
         );
 
-      case 'boolean':
+      case "boolean":
         return (
           <div key={fieldName} className="space-y-2">
             {renderLabel()}
             <div className="space-y-3 bg-white dark:bg-gray-900 p-3 rounded-md border border-gray-200 dark:border-gray-800">
-              {['Yes', 'No'].map((option) => (
+              {["Yes", "No"].map((option) => (
                 <div key={option} className="relative flex items-start">
                   <div className="flex items-center h-5">
                     <input
@@ -495,8 +616,8 @@ function ApplicationForm() {
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                     />
                   </div>
-                  <label 
-                    htmlFor={`${fieldName}-${option}`} 
+                  <label
+                    htmlFor={`${fieldName}-${option}`}
                     className="ml-3 text-sm text-gray-700 dark:text-gray-300 select-none cursor-pointer"
                   >
                     {option}
@@ -510,7 +631,7 @@ function ApplicationForm() {
           </div>
         );
 
-      case 'file':
+      case "file":
         return (
           <div key={fieldName} className="space-y-2">
             {renderLabel()}
@@ -521,8 +642,9 @@ function ApplicationForm() {
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                      toast.error('File size should not exceed 5MB');
+                    if (file.size > 5 * 1024 * 1024) {
+                      // 5MB limit
+                      toast.error("File size should not exceed 5MB");
                       return;
                     }
                     setUploadedFile(file);
@@ -531,47 +653,70 @@ function ApplicationForm() {
                       // Try to upload with current token
                       const uploadFile = async (token: string) => {
                         const formData = new FormData();
-                        formData.append('file', file);
-                        const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/upload/`, {
-                          method: 'POST',
-                          headers: {
-                            'Authorization': `Bearer ${token}`
-                          },
-                          body: formData
-                        });
+                        formData.append("file", file);
+                        const response = await fetch(
+                          `${BACKEND_URL}/api/upload/`,
+                          {
+                            method: "POST",
+                            headers: {
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: formData,
+                          }
+                        );
 
                         if (response.status === 401) {
                           // Token expired, try to refresh
                           const refreshed = await authService.refreshToken();
                           if (refreshed) {
                             // Retry with new token
-                            return uploadFile(authService.getSession()?.token || '');
+                            return uploadFile(
+                              authService.getSession()?.token || ""
+                            );
                           }
-                          throw new Error('Session expired. Please log in again.');
+                          throw new Error(
+                            "Session expired. Please log in again."
+                          );
                         }
 
                         if (!response.ok) {
                           const error = await response.json();
-                          throw new Error(error.detail || 'Upload failed');
+                          throw new Error(error.detail || "Upload failed");
                         }
 
                         return response.json();
                       };
 
-                      const data = await uploadFile(authService.getSession()?.token || '');
+                      const data = await uploadFile(
+                        authService.getSession()?.token || ""
+                      );
                       setUploadedFileUrl(data.url);
-                      setValue(fieldName, data.url, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
-                      toast.success('File uploaded successfully!');
+                      setValue(fieldName, data.url, {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                        shouldTouch: true,
+                      });
+                      toast.success("File uploaded successfully!");
                     } catch (error) {
-                      console.error('Upload error:', error);
-                      if (error.message === 'Session expired. Please log in again.') {
+                      console.error("Upload error:", error);
+                      if (
+                        error.message ===
+                        "Session expired. Please log in again."
+                      ) {
                         // Redirect to login
                         router.push(`/login?redirect=/dashboard/apply/${id}`);
                       } else {
-                        toast.error(error.message || 'Failed to upload file. Please try again.');
+                        toast.error(
+                          error.message ||
+                            "Failed to upload file. Please try again."
+                        );
                       }
                       setUploadedFile(null);
-                      setValue(fieldName, '', { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+                      setValue(fieldName, "", {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                        shouldTouch: true,
+                      });
                     } finally {
                       setIsUploading(false);
                     }
@@ -580,13 +725,20 @@ function ApplicationForm() {
                 className={`${inputClasses} file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100`}
               />
               {/* Hidden registered field carrying uploaded file URL for validation */}
-              <input type="hidden" {...register(fieldName)} value={uploadedFileUrl || ''} readOnly />
+              <input
+                type="hidden"
+                {...register(fieldName)}
+                value={uploadedFileUrl || ""}
+                readOnly
+              />
             </div>
             {uploadedFile && (
               <div className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
                 <div className="flex items-center gap-2">
                   <DocumentIcon className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm text-gray-600">{uploadedFile.name}</span>
+                  <span className="text-sm text-gray-600">
+                    {uploadedFile.name}
+                  </span>
                 </div>
                 {uploadedFileUrl && (
                   <button
@@ -594,7 +746,7 @@ function ApplicationForm() {
                     onClick={() => {
                       setUploadedFile(null);
                       setUploadedFileUrl(null);
-                      setValue(fieldName, '');
+                      setValue(fieldName, "");
                     }}
                     className="text-gray-400 hover:text-gray-600"
                   >
@@ -622,7 +774,7 @@ function ApplicationForm() {
 
   return (
     <>
-      <motion.div 
+      <motion.div
         className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -631,7 +783,7 @@ function ApplicationForm() {
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-6">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {job?.title || 'Job Application'}
+              {job?.title || "Job Application"}
             </h1>
             <p className="text-gray-600">
               Complete the form below to apply for this position
@@ -643,13 +795,29 @@ function ApplicationForm() {
             <ol className="flex items-center justify-center gap-4">
               {steps.map((s, idx) => (
                 <li key={s.key} className="flex items-center">
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border ${
-                    idx < currentStep ? 'bg-blue-600 text-white border-blue-600' : idx === currentStep ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800' : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-                  }`}>
-                    <span className={`w-5 h-5 inline-flex items-center justify-center rounded-full border ${idx <= currentStep ? 'border-current' : 'border-gray-300 dark:border-gray-600'}`}>{idx+1}</span>
+                  <div
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border ${
+                      idx < currentStep
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : idx === currentStep
+                        ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800"
+                        : "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+                    }`}
+                  >
+                    <span
+                      className={`w-5 h-5 inline-flex items-center justify-center rounded-full border ${
+                        idx <= currentStep
+                          ? "border-current"
+                          : "border-gray-300 dark:border-gray-600"
+                      }`}
+                    >
+                      {idx + 1}
+                    </span>
                     <span className="whitespace-nowrap">{s.title}</span>
                   </div>
-                  {idx < steps.length-1 && <span className="mx-2 h-px w-6 bg-gray-200 dark:bg-gray-700" />}
+                  {idx < steps.length - 1 && (
+                    <span className="mx-2 h-px w-6 bg-gray-200 dark:bg-gray-700" />
+                  )}
                 </li>
               ))}
             </ol>
@@ -660,8 +828,8 @@ function ApplicationForm() {
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                 <div className="space-y-6">
                   {questions
-                    .filter(q => currentFieldIds.includes(q._id || q.id))
-                    .map(question => renderQuestionField(question))}
+                    .filter((q) => currentFieldIds.includes(q._id || q.id))
+                    .map((question) => renderQuestionField(question))}
                 </div>
 
                 <div className="mt-8 pt-5 border-t border-gray-200 dark:border-gray-800 flex items-center gap-3">
@@ -669,7 +837,7 @@ function ApplicationForm() {
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setCurrentStep(s => Math.max(0, s-1))}
+                      onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
                     >
                       <ArrowLeft className="h-4 w-4 mr-2" /> Back
                     </Button>
@@ -679,12 +847,17 @@ function ApplicationForm() {
                       type="button"
                       className="ml-auto"
                       onClick={async () => {
-                        const result = await validateCurrentStep()
+                        const result = await validateCurrentStep();
                         if (result.ok) {
-                          setCurrentStep(s => Math.min(steps.length-1, s+1))
+                          setCurrentStep((s) =>
+                            Math.min(steps.length - 1, s + 1)
+                          );
                         } else {
                           // Show the first concrete error so users know which field to fix
-                          toast.error(result.errors[0] || 'Please complete required fields to continue')
+                          toast.error(
+                            result.errors[0] ||
+                              "Please complete required fields to continue"
+                          );
                         }
                       }}
                     >
@@ -692,11 +865,13 @@ function ApplicationForm() {
                     </Button>
                   )}
                   {currentStep === steps.length - 1 && (
-                    <Button 
-                      type="submit" 
+                    <Button
+                      type="submit"
                       disabled={isSubmitting}
                       className={`ml-auto py-3 text-lg transition-all duration-200 ${
-                        isSubmitting ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+                        isSubmitting
+                          ? "bg-blue-400"
+                          : "bg-blue-600 hover:bg-blue-700"
                       } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       {isSubmitting ? (
@@ -730,7 +905,9 @@ function ApplicationForm() {
           <AlertDialogDescription>
             <ul className="list-disc pl-5 space-y-2">
               {formErrors.map((error, index) => (
-                <li key={index} className="text-gray-700">{error}</li>
+                <li key={index} className="text-gray-700">
+                  {error}
+                </li>
               ))}
             </ul>
           </AlertDialogDescription>
@@ -742,26 +919,26 @@ function ApplicationForm() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Toaster 
+      <Toaster
         position="top-center"
         toastOptions={{
           duration: 5000,
           style: {
-            background: '#363636',
-            color: '#fff',
+            background: "#363636",
+            color: "#fff",
           },
           success: {
             duration: 3000,
             iconTheme: {
-              primary: '#4ade80',
-              secondary: '#fff',
+              primary: "#4ade80",
+              secondary: "#fff",
             },
           },
           error: {
             duration: 4000,
             iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
+              primary: "#ef4444",
+              secondary: "#fff",
             },
           },
         }}
@@ -770,29 +947,31 @@ function ApplicationForm() {
   );
 }
 
-function getDefaultValues(questions: Array<{ _id?: string; id?: string; type: string }>) {
+function getDefaultValues(
+  questions: Array<{ _id?: string; id?: string; type: string }>
+) {
   return questions.reduce((acc, question) => {
     const fieldName = question._id || question.id;
     if (!fieldName) return acc;
 
     switch (question.type) {
-      case 'text':
-        acc[fieldName] = '';
+      case "text":
+        acc[fieldName] = "";
         break;
-      case 'select':
-        acc[fieldName] = '';
+      case "select":
+        acc[fieldName] = "";
         break;
-      case 'radio':
-        acc[fieldName] = '';
+      case "radio":
+        acc[fieldName] = "";
         break;
-      case 'boolean':
-        acc[fieldName] = '';
+      case "boolean":
+        acc[fieldName] = "";
         break;
-      case 'file':
-        acc[fieldName] = '';
+      case "file":
+        acc[fieldName] = "";
         break;
       default:
-        acc[fieldName] = '';
+        acc[fieldName] = "";
     }
     return acc;
   }, {} as Record<string, string>);
@@ -801,5 +980,3 @@ function getDefaultValues(questions: Array<{ _id?: string; id?: string; type: st
 export default function ApplyPage() {
   return <ApplicationForm />;
 }
-
-

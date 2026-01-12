@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
 import { User } from "@/types/user";
 import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
 
@@ -22,6 +23,10 @@ interface AuthContextType {
   isEmailVerified: () => boolean;
   checkEmailVerification: () => void;
   updateEmailVerificationStatus: (isVerified: boolean) => void;
+  // Session timeout
+  showSessionTimeout: boolean;
+  sessionTimeRemaining: number;
+  refreshSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,7 +40,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authLoading: true,
   });
   const [showSessionExpired, setShowSessionExpired] = useState(false);
+  const [showSessionTimeout, setShowSessionTimeout] = useState(false);
+  const [sessionTimeRemaining, setSessionTimeRemaining] = useState(0);
+  const [sessionTimeoutId, setSessionTimeoutId] =
+    useState<NodeJS.Timeout | null>(null);
+  const [sessionWarningId, setSessionWarningId] =
+    useState<NodeJS.Timeout | null>(null);
   const router = useRouter();
+
+  // Session timeout configuration (in minutes)
+  const SESSION_TIMEOUT_MINUTES = 30; // 30 minutes
+  const SESSION_WARNING_MINUTES = 5; // Show warning 5 minutes before expiry
+
+  const roleIsAdmin = (role?: string): boolean => {
+    if (!role) return false;
+    const upper = role.toUpperCase();
+    return upper === "ADMIN" || upper === "SUPER_ADMIN";
+  };
 
   // Check email verification and redirect if needed
   const checkEmailVerification = () => {
@@ -117,8 +138,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       error?.message?.includes("authentication") ||
       error?.message?.includes("token") ||
       error?.message?.includes("unauthorized") ||
+      error?.message?.includes("expired") ||
       error?.detail?.includes("authentication") ||
-      error?.detail?.includes("token");
+      error?.detail?.includes("token") ||
+      error?.detail?.includes("expired");
 
     // Only show session expired dialog if user was previously authenticated
     // Don't show it if user was never logged in or already logged out
@@ -132,9 +155,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "Authentication error for non-authenticated user, redirecting to login"
       );
       // For non-authenticated users, just redirect to login
-      router.push("/login");
+      router.push("/login?message=Please log in to continue");
     }
   };
+
+  // Global error handler for API calls
+  useEffect(() => {
+    const handleGlobalError = (event: any) => {
+      if (event.detail?.error) {
+        handleAuthError(event.detail.error);
+      }
+    };
+
+    // Listen for global authentication errors
+    window.addEventListener("auth-error", handleGlobalError);
+
+    return () => {
+      window.removeEventListener("auth-error", handleGlobalError);
+    };
+  }, [authState.isAuthenticated, authState.user]);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -144,28 +183,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Fetch complete user profile
           try {
             const profileResponse = await authService.authenticatedFetch(
-              `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/profile`
+              `${BACKEND_URL}/api/users/profile`
             );
             if (profileResponse.ok) {
               const profileData = await profileResponse.json();
+              const resolvedRole =
+                (profileData &&
+                  typeof profileData.role === "string" &&
+                  profileData.role) ||
+                (session?.user?.role as string | undefined) ||
+                undefined;
 
               setAuthState({
                 isAuthenticated: true,
-                isAdmin: profileData.role === "admin",
+                isAdmin: roleIsAdmin(resolvedRole),
                 user: {
                   ...session.user,
                   ...profileData,
                   firstName: profileData.firstName || "",
                   lastName: profileData.lastName || "",
                 },
-                userRole: profileData.role,
+                userRole: resolvedRole,
                 authLoading: false,
               });
             } else {
               // Fallback to session user if profile fetch fails
               setAuthState({
                 isAuthenticated: true,
-                isAdmin: session.user.role === "admin",
+                isAdmin: roleIsAdmin(session.user.role),
                 user: session.user,
                 userRole: session.user.role,
                 authLoading: false,
@@ -173,10 +218,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (profileError) {
             console.error("Error fetching profile on init:", profileError);
+            handleAuthError(profileError);
             // Fallback to session user if profile fetch fails
             setAuthState({
               isAuthenticated: true,
-              isAdmin: session.user.role === "admin",
+              isAdmin: roleIsAdmin(session.user.role),
               user: session.user,
               userRole: session.user.role,
               authLoading: false,
@@ -187,6 +233,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error("Auth initialization error:", error);
+        handleAuthError(error);
         setAuthState((prev) => ({ ...prev, authLoading: false }));
       }
     };
@@ -205,24 +252,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
         if (profileResponse.ok) {
           const profileData = await profileResponse.json();
+          const resolvedRole =
+            (profileData &&
+              typeof profileData.role === "string" &&
+              profileData.role) ||
+            (response?.user?.role as string | undefined) ||
+            undefined;
 
           setAuthState({
             isAuthenticated: true,
-            isAdmin: profileData.role === "admin",
+            isAdmin: roleIsAdmin(resolvedRole),
             user: {
               ...response.user,
               ...profileData,
               firstName: profileData.firstName || "",
               lastName: profileData.lastName || "",
             },
-            userRole: profileData.role,
+            userRole: resolvedRole,
             authLoading: false,
           });
         } else {
           // Fallback to login response if profile fetch fails
           setAuthState({
             isAuthenticated: true,
-            isAdmin: response.user.role === "admin",
+            isAdmin: roleIsAdmin(response.user.role),
             user: response.user,
             userRole: response.user.role,
             authLoading: false,
@@ -233,7 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Fallback to login response if profile fetch fails
         setAuthState({
           isAuthenticated: true,
-          isAdmin: response.user.role === "admin",
+          isAdmin: roleIsAdmin(response.user.role),
           user: response.user,
           userRole: response.user.role,
           authLoading: false,
@@ -295,21 +348,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("No refresh token");
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/auth/refresh`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            refresh_token: session.refreshToken,
-          }),
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          refresh_token: session.refreshToken,
+        }),
+      });
 
       if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Token refresh failed:", response.status, errorData);
+
+        // If refresh token is expired, clear session and redirect to login
+        if (response.status === 401 || errorData.detail?.includes("expired")) {
+          console.log("Refresh token expired, redirecting to login");
+          authService.clearSession();
+          setAuthState((prev) => ({
+            ...prev,
+            isAuthenticated: false,
+            isAdmin: false,
+            user: null,
+            userRole: undefined,
+            authLoading: false,
+          }));
+          router.push("/login?message=Session expired. Please log in again.");
+          return;
+        }
+
         throw new Error("Failed to refresh token");
       }
 
@@ -321,6 +390,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       authService.setSession(newSession);
+
+      // Update auth state with new session
+      setAuthState((prev) => ({
+        ...prev,
+        isAuthenticated: true,
+        isAdmin: roleIsAdmin(session.user.role),
+        user: session.user,
+        userRole: session.user.role,
+        authLoading: false,
+      }));
     } catch (error) {
       console.error("Token refresh failed:", error);
       authService.clearSession();
@@ -332,7 +411,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRole: undefined,
         authLoading: false,
       }));
-      router.push("/login");
+      router.push("/login?message=Session expired. Please log in again.");
     }
   };
 
@@ -406,7 +485,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           user: updatedUser,
           userRole: profileData.role,
-          isAdmin: profileData.role === "admin",
+          isAdmin: roleIsAdmin(profileData.role),
           authLoading: false,
         }));
       } else {
@@ -464,6 +543,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  // Session timeout management
+  const startSessionTimeout = () => {
+    // Clear existing timeouts
+    if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+    if (sessionWarningId) clearTimeout(sessionWarningId);
+
+    // Set warning timeout (5 minutes before expiry)
+    const warningTimeout =
+      (SESSION_TIMEOUT_MINUTES - SESSION_WARNING_MINUTES) * 60 * 1000;
+    const warningId = setTimeout(() => {
+      setShowSessionTimeout(true);
+      setSessionTimeRemaining(SESSION_WARNING_MINUTES * 60); // 5 minutes in seconds
+
+      // Start countdown timer
+      const countdownInterval = setInterval(() => {
+        setSessionTimeRemaining((prev) => {
+          if (prev <= 1) {
+            clearInterval(countdownInterval);
+            handleSessionExpiry();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }, warningTimeout);
+
+    // Set actual session timeout
+    const timeoutId = setTimeout(() => {
+      handleSessionExpiry();
+    }, SESSION_TIMEOUT_MINUTES * 60 * 1000);
+
+    setSessionWarningId(warningId);
+    setSessionTimeoutId(timeoutId);
+  };
+
+  const handleSessionExpiry = () => {
+    setShowSessionTimeout(false);
+    setShowSessionExpired(true);
+    setSessionTimeRemaining(0);
+  };
+
+  const refreshSession = async () => {
+    try {
+      await refreshToken();
+      setShowSessionTimeout(false);
+      setSessionTimeRemaining(0);
+      startSessionTimeout(); // Restart the timeout
+    } catch (error) {
+      console.error("Failed to refresh session:", error);
+      handleSessionExpiry();
+    }
+  };
+
+  // Start session timeout when user logs in
+  useEffect(() => {
+    if (authState.isAuthenticated && !authState.authLoading) {
+      startSessionTimeout();
+    } else {
+      // Clear timeouts when not authenticated
+      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+      if (sessionWarningId) clearTimeout(sessionWarningId);
+      setShowSessionTimeout(false);
+      setSessionTimeRemaining(0);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
+      if (sessionWarningId) clearTimeout(sessionWarningId);
+    };
+  }, [authState.isAuthenticated, authState.authLoading]);
+
+  // Periodic token refresh to prevent expiration
+  useEffect(() => {
+    if (!authState.isAuthenticated || authState.authLoading) return;
+
+    const refreshInterval = setInterval(async () => {
+      try {
+        const session = authService.getSession();
+        if (session?.refreshToken) {
+          await refreshToken();
+        }
+      } catch (error) {
+        console.error("Periodic token refresh failed:", error);
+        // Don't clear session on periodic refresh failure
+        // Let the next API call handle it
+      }
+    }, 15 * 60 * 1000); // Refresh every 15 minutes
+
+    return () => clearInterval(refreshInterval);
+  }, [authState.isAuthenticated, authState.authLoading]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -478,6 +649,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isEmailVerified,
         checkEmailVerification,
         updateEmailVerificationStatus,
+        showSessionTimeout,
+        sessionTimeRemaining,
+        refreshSession,
       }}
     >
       {children}

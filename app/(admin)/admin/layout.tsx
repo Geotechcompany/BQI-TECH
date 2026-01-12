@@ -1,26 +1,37 @@
 "use client";
 
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import DashboardSidebar from '@/components/admin/DashboardSidebar';
-import MobileDashboardSidebar from '@/components/admin/MobileDashboardSidebar';
-import { EmailVerificationGuard } from '@/components/auth/EmailVerificationGuard';
-import { Menu } from 'lucide-react';
-import { AdminThemeProvider } from '@/contexts/AdminThemeContext';
-import { useRouter, usePathname } from 'next/navigation';
+import DashboardSidebar from "@/components/admin/DashboardSidebar";
+import MobileDashboardSidebar from "@/components/admin/MobileDashboardSidebar";
+import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
+import { Menu } from "lucide-react";
+import { AdminThemeProvider } from "@/contexts/AdminThemeContext";
+import { useRouter, usePathname } from "next/navigation";
 import { toast } from "react-hot-toast";
+import WhatsNewFloat from "@/components/admin/WhatsNewFloat";
+import { SessionTimeoutModal } from "@/components/admin/SessionTimeoutModal";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { sidebarCollapsed } = useSettings();
-  const { user, authLoading, isAuthenticated, isAdmin } = useAuth();
+  const {
+    user,
+    authLoading,
+    isAuthenticated,
+    isAdmin,
+    showSessionTimeout,
+    sessionTimeRemaining,
+    refreshSession,
+    logout,
+  } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   // Debug admin layout
   useEffect(() => {
-    console.log('Admin Layout Debug:', {
+    console.log("Admin Layout Debug:", {
       pathname,
       authLoading,
       isAuthenticated,
@@ -32,29 +43,29 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   // Handle authentication redirects ONLY for protected admin pages (not login)
   useEffect(() => {
     // Skip redirect logic for login page - let the login page handle its own redirects
-    if (pathname?.includes('/login')) {
+    if (pathname?.includes("/login")) {
       return;
     }
-    
+
     if (!authLoading) {
       // For non-login pages, check authentication
       if (!isAuthenticated) {
-        console.log('Not authenticated, redirecting to login');
-        window.location.href = '/admin/login';
+        console.log("Not authenticated, redirecting to login");
+        window.location.href = "/admin/login";
         return;
       }
-      
+
       if (isAuthenticated && !isAdmin) {
-        console.log('Not admin, redirecting to dashboard');
-        toast.error('Access denied. Admin privileges required.');
-        window.location.href = '/dashboard';
+        console.log("Not admin, redirecting to dashboard");
+        toast.error("Access denied. Admin privileges required.");
+        window.location.href = "/dashboard";
         return;
       }
     }
   }, [authLoading, isAuthenticated, isAdmin, pathname]);
 
   // Show loading only for non-login pages
-  if (authLoading && !pathname?.includes('/login')) {
+  if (authLoading && !pathname?.includes("/login")) {
     return (
       <div className="flex items-center justify-center h-screen w-screen">
         <div className="text-center">
@@ -66,8 +77,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }
 
   // For login page, don't show sidebar and let login page handle everything
-  if (pathname?.includes('/login')) {
-    return <div data-admin-page className="h-screen w-screen">{children}</div>;
+  if (pathname?.includes("/login")) {
+    return (
+      <div data-admin-page className="h-screen w-screen">
+        {children}
+      </div>
+    );
   }
 
   // Don't render admin interface if not authenticated or not admin
@@ -78,37 +93,66 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <EmailVerificationGuard requireVerification={true}>
       <AdminThemeProvider targetId="admin-root">
-      <div id="admin-root" data-admin-page className="flex flex-col h-screen w-screen bg-gray-100 md:flex-row overflow-hidden">
-        <div className="md:hidden bg-white flex justify-between items-center h-16 px-4 flex-shrink-0 z-50">
-          <h1 className="text-xl font-bold text-gray-800">BQI Tech HR</h1>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500">
-            <Menu size={24} />
-          </button>
-        </div>
-        
-        {/* Desktop Sidebar */}
-        <DashboardSidebar 
-          isOpen={sidebarOpen} 
-          onClose={() => setSidebarOpen(false)}
-          className="hidden md:block flex-shrink-0"
-        />
-        
-        {/* Mobile Sidebar */}
-        <MobileDashboardSidebar
-          isOpen={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-        />
-        
-        <main className={`
+        <div
+          id="admin-root"
+          data-admin-page
+          className="flex flex-col h-screen w-screen bg-gray-100 md:flex-row overflow-hidden"
+        >
+          <div className="md:hidden bg-white flex justify-between items-center h-16 px-4 flex-shrink-0 z-50">
+            <h1 className="text-xl font-bold text-gray-800">BQI Tech HR</h1>
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="text-gray-500"
+            >
+              <Menu size={24} />
+            </button>
+          </div>
+
+          {/* Desktop Sidebar */}
+          <DashboardSidebar
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            className="hidden md:block flex-shrink-0"
+          />
+
+          {/* Mobile Sidebar */}
+          <MobileDashboardSidebar
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+          />
+
+          <main
+            className={`
           flex-1 h-full w-full overflow-x-hidden overflow-y-auto bg-gray-100
           transition-all duration-300 ease-in-out
-          ${sidebarCollapsed ? 'md:ml-20' : 'md:ml-64'}
-        `}>
-          <div className="h-full w-full">
-            {children}
-          </div>
-        </main>
-      </div>
+          ${sidebarCollapsed ? "md:ml-20" : "md:ml-64"}
+        `}
+          >
+            <div className="h-full w-full">{children}</div>
+            <WhatsNewFloat
+              features={[
+                {
+                  title: "Surveys",
+                  description:
+                    "Create and share surveys under Content → Surveys.",
+                },
+                {
+                  title: "Email Broadcast",
+                  description: "Now in Workspace menu for quick access.",
+                },
+              ]}
+            />
+          </main>
+        </div>
+
+        {/* Session Timeout Modal */}
+        <SessionTimeoutModal
+          isOpen={showSessionTimeout}
+          onStayLoggedIn={refreshSession}
+          onLogout={logout}
+          timeRemaining={sessionTimeRemaining}
+          totalTime={5 * 60} // 5 minutes warning period
+        />
       </AdminThemeProvider>
     </EmailVerificationGuard>
   );

@@ -2,11 +2,29 @@ from fastapi import APIRouter, HTTPException, Body, Query, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, Optional
 from app.database import get_database
+from app.utils.ip_utils import get_real_client_ip
 from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["misc"])
+
+@router.get("/ip-debug")
+async def debug_ip_address(request: Request):
+    """Debug endpoint to test IP address detection"""
+    from app.utils.ip_utils import get_client_ip_with_metadata
+    
+    ip_info = get_client_ip_with_metadata(request)
+    
+    return {
+        "message": "IP Debug Information",
+        "detected_ip": ip_info['real_ip'],
+        "direct_ip": ip_info['direct_ip'],
+        "is_private": ip_info['is_private'],
+        "user_agent": ip_info['user_agent'],
+        "forwarded_headers": ip_info['forwarded_headers'],
+        "all_headers": dict(request.headers)
+    }
 
 @router.get("/cookie-consent")
 async def get_cookie_consent(request: Request):
@@ -15,7 +33,7 @@ async def get_cookie_consent(request: Request):
         db = get_database()
         
         # Get user IP or session identifier
-        client_id = request.headers.get("x-forwarded-for") or request.client.host
+        client_id = get_real_client_ip(request) or "unknown"
         
         # Try to find existing consent for this client
         consent = await db.cookie_consents.find_one({"client_id": client_id})
@@ -81,7 +99,7 @@ async def set_cookie_consent(request: Request, preferences: Dict[str, Any]):
         db = get_database()
         
         # Get user IP or session identifier
-        client_id = request.headers.get("x-forwarded-for") or request.client.host
+        client_id = get_real_client_ip(request) or "unknown"
         
         # Get the origin from the request headers
         origin = request.headers.get("origin", "http://localhost:3000")

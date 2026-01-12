@@ -1,14 +1,27 @@
 "use client";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Loader, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { User as UserType } from "@/src/types/user";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-hot-toast";
+import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
 
 interface EditUserModalProps {
   user: UserType | null;
@@ -17,27 +30,54 @@ interface EditUserModalProps {
   onSuccess?: () => void;
 }
 
-export function EditUserModal({ user, open, onOpenChange, onSuccess }: EditUserModalProps) {
+export function EditUserModal({
+  user,
+  open,
+  onOpenChange,
+  onSuccess,
+}: EditUserModalProps) {
   const queryClient = useQueryClient();
   const { register, handleSubmit, reset, setValue } = useForm<UserType>();
 
   const updateUser = useMutation({
     mutationFn: async (data: UserType) => {
-      const response = await fetch(`/api/admin/users/${user?.id}`, {
+      const session = authService.getSession();
+      const userId = user?.id || (user as any)?._id;
+
+      if (!userId) {
+        throw new Error("User ID is missing");
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/admin/users/${userId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${session?.token}`,
+        },
+        body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to update user");
+
+      if (!response.ok) {
+        const error = await response
+          .json()
+          .catch(() => ({ detail: "Failed to update user" }));
+        throw new Error(error.detail || "Failed to update user");
+      }
+
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       toast.success("User updated successfully");
       onOpenChange(false);
       onSuccess?.();
     },
-    onError: () => toast.error("Failed to update user"),
+    onError: (error: Error) => {
+      console.error("Failed to update user:", error);
+      toast.error(error.message || "Failed to update user");
+    },
   });
 
   return (
@@ -50,7 +90,7 @@ export function EditUserModal({ user, open, onOpenChange, onSuccess }: EditUserM
           </DialogTitle>
         </DialogHeader>
 
-        <form 
+        <form
           onSubmit={handleSubmit((data) => updateUser.mutate(data))}
           className="space-y-4"
         >
@@ -59,7 +99,7 @@ export function EditUserModal({ user, open, onOpenChange, onSuccess }: EditUserM
             {...register("name", { required: true })}
             defaultValue={user?.name}
           />
-          
+
           <Input
             label="Email"
             type="email"
@@ -68,7 +108,9 @@ export function EditUserModal({ user, open, onOpenChange, onSuccess }: EditUserM
           />
 
           <Select
-            onValueChange={(value) => setValue("role", value as "USER" | "ADMIN")}
+            onValueChange={(value) =>
+              setValue("role", value as "USER" | "ADMIN")
+            }
             defaultValue={user?.role}
           >
             <SelectTrigger>
@@ -88,11 +130,10 @@ export function EditUserModal({ user, open, onOpenChange, onSuccess }: EditUserM
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={updateUser.isPending}
-            >
-              {updateUser.isPending ? <Loader className="animate-spin mr-2" /> : null}
+            <Button type="submit" disabled={updateUser.isPending}>
+              {updateUser.isPending ? (
+                <Loader className="animate-spin mr-2" />
+              ) : null}
               Save Changes
             </Button>
           </div>
@@ -100,4 +141,4 @@ export function EditUserModal({ user, open, onOpenChange, onSuccess }: EditUserM
       </DialogContent>
     </Dialog>
   );
-} 
+}

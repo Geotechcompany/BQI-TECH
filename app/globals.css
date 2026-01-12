@@ -358,6 +358,15 @@ html {
     z-index: 9999 !important;
 }
 
+/* Prevent crispy sharpness on images - force smooth rendering */
+.team-member-image {
+    image-rendering: auto !important;
+    -ms-interpolation-mode: bicubic;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+}
 
 /* Ensure Dialog portals have proper z-index */
 

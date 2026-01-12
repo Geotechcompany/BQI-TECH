@@ -1,46 +1,56 @@
-"use client"
+"use client";
 
-import { motion } from 'framer-motion'
-import Image from 'next/image'
-import { Shield, Lightbulb, Code, Users, Target, Award, Linkedin } from 'lucide-react'
-import { Breadcrumb } from '@/components/ui/breadcrumb'
-import { useRouter } from 'next/navigation'
-import { ChevronRight } from 'lucide-react'
+import { motion } from "framer-motion";
+import Image from "next/image";
+import {
+  Shield,
+  Lightbulb,
+  Code,
+  Users,
+  Target,
+  Award,
+  Linkedin,
+} from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 
 const expertise = [
-  { 
-    icon: Code, 
-    title: 'Custom Software Development', 
-    description: 'We design and develop high-performance, scalable software solutions tailored to meet the unique needs of government agencies and enterprises.',
+  {
+    icon: Code,
+    title: "Custom Software Development",
+    description:
+      "We design and develop high-performance, scalable software solutions tailored to meet the unique needs of government agencies and enterprises.",
     features: [
-      'Web Application Development - Secure, responsive, and user-friendly digital solutions.',
-      'Legacy System Modernization - Transform outdated systems into modern, cloud-based platforms.',
-      'Cloud-Native Solutions - Scalable, secure cloud applications to improve operational efficiency.',
-      'API Development & Integration - Seamless data connectivity between systems.'
-    ]
+      "Web Application Development - Secure, responsive, and user-friendly digital solutions.",
+      "Legacy System Modernization - Transform outdated systems into modern, cloud-based platforms.",
+      "Cloud-Native Solutions - Scalable, secure cloud applications to improve operational efficiency.",
+      "API Development & Integration - Seamless data connectivity between systems.",
+    ],
   },
-  { 
-    icon: Lightbulb, 
-    title: 'Enterprise Platform Configuration & IT Consulting', 
-    description: 'We provide comprehensive IT consulting and enterprise platform optimization services to help organizations implement and manage large-scale systems.',
+  {
+    icon: Lightbulb,
+    title: "Enterprise Platform Configuration & IT Consulting",
+    description:
+      "We provide comprehensive IT consulting and enterprise platform optimization services to help organizations implement and manage large-scale systems.",
     features: [
-      'Enterprise Platform Setup - Full-scale implementation and configuration for government IT solutions.',
-      'System Optimization & Performance Tuning - Enhancing speed, security, and efficiency.',
-      'Workflow Automation - Streamlining processes with AI-powered automation.',
-      'Custom Configuration Services - Tailored adjustments to maximize your system\'s capabilities.'
-    ]
+      "Enterprise Platform Setup - Full-scale implementation and configuration for government IT solutions.",
+      "System Optimization & Performance Tuning - Enhancing speed, security, and efficiency.",
+      "Workflow Automation - Streamlining processes with AI-powered automation.",
+      "Custom Configuration Services - Tailored adjustments to maximize your system's capabilities.",
+    ],
   },
-]
+];
 
 const leadership = [
- 
   {
     title: "Our Community",
-    description: "We actively participate in technology conferences and government innovation forums to stay at the forefront of public sector solutions.",
+    description:
+      "We actively participate in technology conferences and government innovation forums to stay at the forefront of public sector solutions.",
     image: "/community.jpg",
-    link: "Join our Community"
-  }
-]
+    link: "Join our Community",
+  },
+];
 
 const team = [
   {
@@ -48,16 +58,16 @@ const team = [
     role: "Chief Executive Officer",
     image: "/Teams/ezra-yego.jpg",
     social: {
-      linkedin: "#",
-    }
+      linkedin: "https://www.linkedin.com/in/ezra-k-a12046b4/",
+    },
   },
   {
     name: "Lynn Sugut",
     role: "Chief Technology Officer",
-    image: "/Teams/lynn 2 1.jpg",
+    image: "/Teams/Lynn 2 1.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/lynn-sugut-6a275016",
-    }
+    },
   },
   {
     name: "Victor Ongeto",
@@ -66,23 +76,23 @@ const team = [
     image: "/Teams/Victor.jpg",
     social: {
       linkedin: "https://linkedin.com/in/victor-ongeto",
-    }
+    },
   },
   {
     name: "Lovell Oduor",
-    role: "Junior Configuration Analyst", 
+    role: "Junior Configuration Analyst",
     image: "/Teams/Lovell.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/lovelloduor/",
-    }
+    },
   },
   {
     name: "Geoffrey Audia",
     role: "Junior Configuration Analyst",
     image: "/Teams/Geo1.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/geoffrey-audia"
-    }
+      linkedin: "https://www.linkedin.com/in/geoffrey-audia-28a839307",
+    },
   },
   {
     name: "Ian Mosonik",
@@ -90,7 +100,7 @@ const team = [
     image: "/Teams/Ian 1.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/ian-mosonik-a18089225/",
-    }
+    },
   },
   {
     name: "Gloria Onyancha",
@@ -98,7 +108,7 @@ const team = [
     image: "/Teams/Gloria 2.jpg",
     social: {
       linkedin: "#",
-    }
+    },
   },
   {
     name: "Geoffrey Nyakundi",
@@ -106,16 +116,15 @@ const team = [
     image: "/Teams/Geoffrey Nyakundi.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/geoffreynyakundi/",
-      
-    }
+    },
   },
   {
     name: "Felix Rono",
     role: "Software Engineer",
     image: "/Teams/Felix.jpg",
     social: {
-      linkedin: "https://www.linkedin.com/in/felixrono/",
-    }
+      linkedin: "https://www.linkedin.com/in/felix-rono-ba54b6bb/",
+    },
   },
   {
     name: "Nigel Watunu",
@@ -123,25 +132,23 @@ const team = [
     image: "/Teams/Nigel.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/nigelwatunu",
-    }
-  }
-]
+    },
+  },
+];
 
 export default function AboutPage() {
-  const breadcrumbItems = [
-    { label: "About" }
-  ]
+  const breadcrumbItems = [{ label: "About" }];
 
   const pageVariants = {
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 }
-  }
+    exit: { opacity: 0, y: -20 },
+  };
 
-  const router = useRouter()
+  const router = useRouter();
 
   return (
-    <motion.main 
+    <motion.main
       className="container mx-auto px-4 py-16 -mt-16"
       initial="initial"
       animate="animate"
@@ -173,8 +180,6 @@ export default function AboutPage() {
           </div>
         </div>
 
-      
-
         {/* Content */}
         <div className="relative z-10 text-center px-4">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 text-white">
@@ -184,14 +189,18 @@ export default function AboutPage() {
             </span>
           </h1>
           <p className="text-xl text-gray-100 max-w-3xl mx-auto">
-          BQI Tech is a leading software development and IT consulting firm specializing in custom technology solutions for government agencies and businesses. We combine cutting-edge innovation, security-first approaches, and enterprise-level expertise to help organizations streamline operations, modernize legacy systems, and enhance digital transformation.          </p>
+            BQI Tech is a leading software development and IT consulting firm
+            specializing in custom technology solutions for government agencies
+            and businesses. We combine cutting-edge innovation, security-first
+            approaches, and enterprise-level expertise to help organizations
+            streamline operations, modernize legacy systems, and enhance digital
+            transformation.{" "}
+          </p>
         </div>
       </motion.section>
 
-    
-
       {/* Our Mission Section */}
-      <motion.section 
+      <motion.section
         className="mb-16 bg-gradient-to-br from-[#31CDFF]/10 to-blue-500/10 p-8 rounded-2xl border border-[#31CDFF]/20"
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
@@ -206,9 +215,11 @@ export default function AboutPage() {
               Our Mission
             </h2>
             <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed">
-              We empower organizations with tailor-made technology solutions designed to improve efficiency, 
-              security, and scalability. Our mission is to bridge the gap between technology and government 
-              operations, ensuring that agencies can deliver better public services through digital innovation.
+              We empower organizations with tailor-made technology solutions
+              designed to improve efficiency, security, and scalability. Our
+              mission is to bridge the gap between technology and government
+              operations, ensuring that agencies can deliver better public
+              services through digital innovation.
             </p>
           </div>
         </div>
@@ -245,7 +256,7 @@ export default function AboutPage() {
                 <p className="text-gray-600 dark:text-gray-300 mb-6 text-lg leading-relaxed">
                   {item.description}
                 </p>
-                
+
                 {/* Features List */}
                 <div className="w-full space-y-4 mt-4">
                   {item.features.map((feature, i) => (
@@ -255,7 +266,7 @@ export default function AboutPage() {
                       initial={{ opacity: 0, x: -10 }}
                       whileInView={{ opacity: 1, x: 0 }}
                       viewport={{ once: true }}
-                      transition={{ delay: 0.2 + (i * 0.1) }}
+                      transition={{ delay: 0.2 + i * 0.1 }}
                     >
                       <div className="bg-[#31CDFF]/10 p-2 rounded-full">
                         <ChevronRight className="w-5 h-5 text-[#31CDFF]" />
@@ -293,49 +304,48 @@ export default function AboutPage() {
               Meet Our Team
             </h2>
             <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
-              Our diverse team of experts brings together years of experience in technology, innovation, and client success.
+              Our diverse team of experts brings together years of experience in
+              technology, innovation, and client success.
             </p>
           </motion.div>
 
           {/* Team Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8 relative z-10">
             {team.map((member, index) => (
-              <motion.div 
+              <motion.div
                 key={member.name}
                 className={`group relative w-full max-w-[280px] ${
-                  member.name === 'Felix Rono'
-                    ? 'lg:col-start-2'  // Centered on large screens
-                    : member.name === 'Nigel Watunu'
-                    ? 'lg:col-start-3'  // Next to Felix, also centered
-                    : ''
+                  member.name === "Felix Rono"
+                    ? "lg:col-start-2" // Centered on large screens
+                    : member.name === "Nigel Watunu"
+                    ? "lg:col-start-3" // Next to Felix, also centered
+                    : ""
                 }`}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
-                transition={{ 
-                  delay: index * 0.1, 
+                transition={{
+                  delay: index * 0.1,
                   duration: 0.6,
-                  ease: [0.21, 0.47, 0.32, 0.98]
+                  ease: [0.21, 0.47, 0.32, 0.98],
                 }}
               >
                 {/* Main Card */}
                 <div className="relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-500 group-hover:-translate-y-1">
                   {/* Gradient Border Effect */}
                   <div className="absolute inset-0 bg-gradient-to-br from-[#31CDFF] via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-sm -z-10 scale-105"></div>
-                  
+
                   {/* Image Container */}
                   <div className="relative aspect-[5/4] overflow-hidden bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-700 dark:to-gray-800">
                     <Image
                       src={member.image}
                       alt={member.name}
                       fill
-                      className="object-cover object-top transition-transform duration-700 group-hover:scale-110"
+                      className="object-cover object-top team-member-image"
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                      unoptimized
                     />
-                    
-                    {/* Overlay Gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                    
+
                     {/* Social Links Overlay */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-4 group-hover:translate-y-0">
                       <div className="flex gap-3">
@@ -359,7 +369,7 @@ export default function AboutPage() {
                   <div className="p-4 relative">
                     {/* Decorative Element */}
                     <div className="absolute top-0 left-4 w-8 h-1 bg-gradient-to-r from-[#31CDFF] to-purple-600 transform -translate-y-1/2 rounded-full"></div>
-                    
+
                     <div className="pt-1">
                       <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1 group-hover:text-[#31CDFF] transition-colors duration-300">
                         {member.name}
@@ -367,7 +377,7 @@ export default function AboutPage() {
                       <p className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-2 uppercase tracking-wider">
                         {member.role}
                       </p>
-                      
+
                       {/* Animated Underline */}
                       <div className="w-0 h-0.5 bg-gradient-to-r from-[#31CDFF] to-purple-600 group-hover:w-full transition-all duration-500 rounded-full"></div>
                     </div>
@@ -393,13 +403,14 @@ export default function AboutPage() {
             transition={{ duration: 0.8, delay: 0.5 }}
           >
             <p className="text-base text-gray-600 dark:text-gray-300 mb-6 max-w-xl mx-auto">
-              Ready to work with our exceptional team? Let's discuss how we can help transform your business.
+              Ready to work with our exceptional team? Let's discuss how we can
+              help transform your business.
             </p>
             <motion.button
               className="bg-gradient-to-r from-[#31CDFF] to-purple-600 text-white px-6 py-3 rounded-full font-semibold hover:shadow-lg hover:shadow-[#31CDFF]/25 transition-all duration-300"
               whileHover={{ scale: 1.05, y: -2 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => router.push('/contact-us')}
+              onClick={() => router.push("/contact-us")}
             >
               Get In Touch
             </motion.button>
@@ -417,19 +428,33 @@ export default function AboutPage() {
           className="mb-24"
         >
           <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className={`space-y-6 ${index % 2 === 0 ? 'md:order-1' : 'md:order-2'}`}>
-              <h2 className="text-3xl font-bold text-gray-800">{section.title}</h2>
+            <div
+              className={`space-y-6 ${
+                index % 2 === 0 ? "md:order-1" : "md:order-2"
+              }`}
+            >
+              <h2 className="text-3xl font-bold text-gray-800">
+                {section.title}
+              </h2>
               <p className="text-lg text-gray-600">{section.description}</p>
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 className="bg-teal-500 text-white px-6 py-3 rounded-full font-semibold hover:bg-teal-600 transition-colors duration-300"
-                onClick={() => router.push('https://www.linkedin.com/company/bqi-technologies')}
+                onClick={() =>
+                  router.push(
+                    "https://www.linkedin.com/company/bqi-technologies"
+                  )
+                }
               >
                 {section.link}
               </motion.button>
             </div>
-            <div className={`relative h-[400px] ${index % 2 === 0 ? 'md:order-2' : 'md:order-1'}`}>
+            <div
+              className={`relative h-[400px] ${
+                index % 2 === 0 ? "md:order-2" : "md:order-1"
+              }`}
+            >
               <div className="absolute inset-0 clip-path-blob-3 animate-float-3 overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-tr from-[#31CDFF]/30 to-purple-600/20 mix-blend-soft-light" />
                 <Image
@@ -437,15 +462,13 @@ export default function AboutPage() {
                   alt={section.title}
                   fill
                   className="object-cover"
-                  style={{ transform: 'scale(1.05)' }}
+                  style={{ transform: "scale(1.05)" }}
                 />
               </div>
             </div>
           </div>
         </motion.section>
       ))}
-
-    
 
       {/* Commitment Section */}
       <motion.section
@@ -455,22 +478,26 @@ export default function AboutPage() {
         className="bg-gradient-to-r from-teal-500 to-blue-600 text-white py-16 px-4 rounded-lg"
       >
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-3xl font-semibold mb-4">Our Commitment to Innovation</h2>
+          <h2 className="text-3xl font-semibold mb-4">
+            Our Commitment to Innovation
+          </h2>
           <p className="text-lg mb-6">
-          We are actively engaged in technology conferences, government innovation forums, and research
-initiatives to stay at the forefront of public sector technology advancements. By continuously adapting to
-emerging trends, we help clients future-proof their IT infrastructure and stay ahead in an evolving digital
-landscapе  </p>
+            We are actively engaged in technology conferences, government
+            innovation forums, and research initiatives to stay at the forefront
+            of public sector technology advancements. By continuously adapting
+            to emerging trends, we help clients future-proof their IT
+            infrastructure and stay ahead in an evolving digital landscapе{" "}
+          </p>
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             className="bg-white text-teal-600 px-6 py-3 rounded-full font-semibold hover:bg-gray-100 transition-colors duration-300"
-            onClick={() => router.push('/services')}
+            onClick={() => router.push("/services")}
           >
             Learn More About Our Services
           </motion.button>
         </div>
       </motion.section>
     </motion.main>
-  )
+  );
 }

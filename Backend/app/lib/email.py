@@ -5,12 +5,34 @@ import string
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from app.config import settings
 from app.database import get_database
 import logging
 
 logger = logging.getLogger(__name__)
+
+def get_smtp_connection():
+    """
+    Get the appropriate SMTP connection based on port configuration.
+    Office 365 uses port 587 with STARTTLS.
+    Gmail uses port 465 with SSL.
+    """
+    context = ssl.create_default_context()
+    
+    if int(settings.smtp_port) == 587:
+        # STARTTLS (Office 365, most modern SMTP)
+        server = smtplib.SMTP(settings.smtp_host, int(settings.smtp_port))
+        server.ehlo()
+        server.starttls(context=context)
+        server.ehlo()
+        server.login(settings.smtp_user, settings.smtp_pass)
+        return server
+    else:
+        # SSL/TLS (Gmail on 465)
+        server = smtplib.SMTP_SSL(settings.smtp_host, int(settings.smtp_port), context=context)
+        server.login(settings.smtp_user, settings.smtp_pass)
+        return server
 
 def generate_verification_code(length: int = 6) -> str:
     """Generate a random verification code"""
@@ -117,10 +139,7 @@ def send_verification_email(email: str, verification_code: str) -> bool:
         message.attach(MIMEText(body, "html"))
         
         # Create secure connection and send email
-        context = ssl.create_default_context()
-        
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message.as_string()
             server.sendmail(settings.from_email, email, text)
         
@@ -223,10 +242,7 @@ async def send_contact_form_email(
         message_obj.attach(MIMEText(body, "html"))
         
         # Create secure connection and send email
-        context = ssl.create_default_context()
-        
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message_obj.as_string()
             server.sendmail(settings.from_email, settings.hr_email, text)
         
@@ -281,9 +297,7 @@ async def send_contact_confirmation_email(
 
         message_obj.attach(MIMEText(body, "html"))
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message_obj.as_string()
             server.sendmail(settings.from_email, email, text)
 
@@ -332,9 +346,7 @@ async def send_application_confirmation_email(
 
         message_obj.attach(MIMEText(body, "html"))
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             text = message_obj.as_string()
             server.sendmail(settings.from_email, applicant_email, text)
 
@@ -390,12 +402,159 @@ async def send_password_reset_email(email: str, reset_link: str) -> bool:
         message = build_reset_password_email(reset_link)
         message["To"] = email
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context) as server:
-            server.login(settings.smtp_user, settings.smtp_pass)
+        with get_smtp_connection() as server:
             server.sendmail(settings.from_email, email, message.as_string())
         logger.info(f"Password reset email sent to {email}")
         return True
     except Exception as e:
         logger.error(f"Failed to send password reset email to {email}: {str(e)}")
         return False
+
+# ---------------------- Generic & Bulk Email Utilities ----------------------
+def send_generic_email(to: str, subject: str, html: str) -> bool:
+    """Send a generic HTML email via configured SMTP settings.
+
+    This is a synchronous helper designed to be used from async wrappers when needed.
+    """
+    try:
+        message = MIMEMultipart()
+        message["From"] = settings.from_email
+        message["To"] = to
+        message["Subject"] = subject
+        message.attach(MIMEText(html, "html"))
+
+        with get_smtp_connection() as server:
+            server.sendmail(settings.from_email, to, message.as_string())
+
+        logger.info(f"Email sent to {to}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed sending email to {to}: {e}")
+        return False
+
+
+async def send_bulk_emails_backend(
+    recipients: List[str],
+    subject: str,
+    html: str,
+    concurrency: int = 10,
+    dry_run: bool = False,
+    sent_by: str = None,
+    campaign_name: str = None,
+) -> Dict[str, Any]:
+    """Send emails to many recipients with simple concurrency and aggregation.
+
+    - De-duplicates recipient list
+    - Respects a small concurrency window to avoid SMTP throttling
+    - Stores email logs in database for tracking
+    - Returns summary with failures
+    """
+    import asyncio
+    from app.database import get_database
+    from datetime import datetime
+
+    # Normalize and deduplicate
+    normalized = list({(e or "").strip().lower() for e in recipients if (e or "").strip()})
+    if not normalized:
+        return {"requested": 0, "attempted": 0, "succeeded": 0, "failed": 0, "failures": []}
+
+    if dry_run:
+        return {"requested": len(normalized), "attempted": 0, "succeeded": 0, "failed": 0, "failures": []}
+
+    # Create email campaign record
+    db = get_database()
+    campaign_id = None
+    if db is not None:
+        try:
+            campaign_doc = {
+                "subject": subject,
+                "html_content": html,
+                "recipient_count": len(normalized),
+                "sent_by": sent_by,
+                "campaign_name": campaign_name or f"Email Campaign - {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                "created_at": datetime.utcnow(),
+                "status": "sending"
+            }
+            result = await db.email_campaigns.insert_one(campaign_doc)
+            campaign_id = str(result.inserted_id)
+        except Exception as e:
+            logger.error(f"Failed to create email campaign record: {e}")
+
+    # Simple semaphore to cap concurrent SMTP connections
+    sem = asyncio.Semaphore(max(1, int(concurrency)))
+    succeeded = 0
+    failures: List[Dict[str, str]] = []
+
+    async def _send(to: str):
+        nonlocal succeeded
+        async with sem:
+            try:
+                loop = asyncio.get_running_loop()
+                ok = await loop.run_in_executor(None, send_generic_email, to, subject, html)
+                
+                # Store individual email log
+                if db is not None:
+                    try:
+                        email_log = {
+                            "campaign_id": campaign_id,
+                            "recipient_email": to,
+                            "subject": subject,
+                            "sent_at": datetime.utcnow(),
+                            "status": "sent" if ok else "failed",
+                            "error": None if ok else "send failed"
+                        }
+                        await db.email_logs.insert_one(email_log)
+                    except Exception as e:
+                        logger.error(f"Failed to store email log for {to}: {e}")
+                
+                if ok:
+                    succeeded += 1
+                else:
+                    failures.append({"to": to, "error": "send failed"})
+            except Exception as e:
+                # Store failed email log
+                if db is not None:
+                    try:
+                        email_log = {
+                            "campaign_id": campaign_id,
+                            "recipient_email": to,
+                            "subject": subject,
+                            "sent_at": datetime.utcnow(),
+                            "status": "failed",
+                            "error": str(e)
+                        }
+                        await db.email_logs.insert_one(email_log)
+                    except Exception as log_error:
+                        logger.error(f"Failed to store email log for {to}: {log_error}")
+                
+                failures.append({"to": to, "error": str(e)})
+
+    await asyncio.gather(*[_send(to) for to in normalized])
+
+    # Update campaign status
+    if db is not None and campaign_id:
+        try:
+            from bson import ObjectId
+            result = await db.email_campaigns.update_one(
+                {"_id": ObjectId(campaign_id)},
+                {
+                    "$set": {
+                        "status": "completed",
+                        "completed_at": datetime.utcnow(),
+                        "succeeded": succeeded,
+                        "failed": len(normalized) - succeeded
+                    }
+                }
+            )
+            logger.info(f"Updated campaign {campaign_id}: {result.modified_count} documents modified")
+        except Exception as e:
+            logger.error(f"Failed to update campaign status: {e}")
+
+    return {
+        "requested": len(normalized),
+        "attempted": len(normalized),
+        "succeeded": succeeded,
+        "failed": len(normalized) - succeeded,
+        "failures": failures,
+        "campaign_id": campaign_id,
+    }

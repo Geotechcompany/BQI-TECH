@@ -112,11 +112,19 @@ export function useAdminApplicationPage({
       setError(null);
       
       const skip = (currentPage - 1) * pageSize;
+      // Try to resolve a jobId from the selected title for more reliable filtering
+      let selectedJobId: string | undefined = undefined;
+      if (selectedPosition && selectedPosition !== 'all') {
+        const entry = Object.entries(jobTitles).find(([, title]) => title === selectedPosition);
+        if (entry) selectedJobId = entry[0];
+      }
+
       const filters: ApplicationFilters = {
         skip,
         limit: pageSize,
         search: debouncedSearchTerm || undefined,
         position: selectedPosition !== 'all' ? selectedPosition : undefined,
+        jobId: selectedJobId,
       };
       
       let response;

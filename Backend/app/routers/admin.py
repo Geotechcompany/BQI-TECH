@@ -13,6 +13,8 @@ from fastapi import status
 from pathlib import Path
 import os
 import re
+from typing import Dict, Any, List
+from app.lib.email import send_bulk_emails_backend
 
 router = APIRouter(tags=["admin"])
 
@@ -56,6 +58,179 @@ def generate_slug(title: str) -> str:
     slug = re.sub(r'[^\w\s-]', '', slug)
     slug = re.sub(r'[-\s]+', '-', slug)
     return slug
+
+# ---------------------- Admin Email Broadcast ----------------------
+@router.post("/emails/broadcast")
+async def admin_email_broadcast(
+    payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Broadcast an email to all users or a specific list of recipients.
+
+    Body:
+      {
+        "mode": "all" | "list",
+        "recipients": ["a@example.com", ...], // required when mode=list
+        "subject": "...",
+        "body": "<html>...",
+        "dryRun": false,
+        "concurrency": 10
+      }
+    """
+    try:
+        db = get_database()
+
+        mode = str(payload.get("mode", "list")).lower()
+        subject = str(payload.get("subject", "")).strip()
+        html = str(payload.get("body", "")).strip()
+        dry_run = bool(payload.get("dryRun", False))
+        concurrency = int(payload.get("concurrency", 10))
+
+        if not subject or not html:
+            raise HTTPException(status_code=400, detail="subject and body are required")
+
+        recipients: List[str] = []
+        if mode == "all":
+            cursor = db.users.find({"email": {"$exists": True, "$ne": None}}, {"email": 1})
+            docs = await cursor.to_list(length=None)
+            recipients = [str(doc.get("email")) for doc in docs if doc.get("email")]
+        else:
+            provided = payload.get("recipients", []) or []
+            if not isinstance(provided, list) or len(provided) == 0:
+                raise HTTPException(status_code=400, detail="Provide recipients when mode=list")
+            recipients = [str(e) for e in provided]
+
+        result = await send_bulk_emails_backend(
+            recipients=recipients,
+            subject=subject,
+            html=html,
+            concurrency=concurrency,
+            dry_run=dry_run,
+            sent_by=str(current_user.get("_id")),
+            campaign_name=payload.get("campaign_name"),
+        )
+
+        return JSONResponse(content=result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Email broadcast failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send emails")
+
+# ---------------------- Email History & Analytics ----------------------
+@router.get("/emails/campaigns")
+async def get_email_campaigns(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get list of email campaigns with pagination"""
+    try:
+        db = get_database()
+        
+        # Get campaigns with pagination
+        cursor = db.email_campaigns.find().sort("created_at", -1).skip(skip).limit(limit)
+        campaigns = []
+        
+        async for campaign in cursor:
+            campaign["_id"] = str(campaign["_id"])
+            campaigns.append(campaign)
+        
+        # Get total count
+        total = await db.email_campaigns.count_documents({})
+        
+        return {
+            "campaigns": campaigns,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Failed to get email campaigns: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get email campaigns")
+
+@router.get("/emails/campaigns/{campaign_id}")
+async def get_email_campaign_details(
+    campaign_id: str,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get detailed information about a specific email campaign"""
+    try:
+        db = get_database()
+        
+        # Get campaign details
+        campaign = await db.email_campaigns.find_one({"_id": ObjectId(campaign_id)})
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        campaign["_id"] = str(campaign["_id"])
+        
+        # Get email logs for this campaign
+        cursor = db.email_logs.find({"campaign_id": campaign_id}).sort("sent_at", -1)
+        logs = []
+        
+        async for log in cursor:
+            log["_id"] = str(log["_id"])
+            logs.append(log)
+        
+        # Get statistics
+        total_sent = await db.email_logs.count_documents({"campaign_id": campaign_id, "status": "sent"})
+        total_failed = await db.email_logs.count_documents({"campaign_id": campaign_id, "status": "failed"})
+        
+        return {
+            "campaign": campaign,
+            "logs": logs,
+            "statistics": {
+                "total_sent": total_sent,
+                "total_failed": total_failed,
+                "total_attempted": total_sent + total_failed
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get campaign details: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get campaign details")
+
+@router.get("/emails/logs")
+async def get_email_logs(
+    skip: int = 0,
+    limit: int = 100,
+    campaign_id: str = None,
+    status: str = None,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get email logs with optional filtering"""
+    try:
+        db = get_database()
+        
+        # Build query
+        query = {}
+        if campaign_id:
+            query["campaign_id"] = campaign_id
+        if status:
+            query["status"] = status
+        
+        # Get logs with pagination
+        cursor = db.email_logs.find(query).sort("sent_at", -1).skip(skip).limit(limit)
+        logs = []
+        
+        async for log in cursor:
+            log["_id"] = str(log["_id"])
+            logs.append(log)
+        
+        # Get total count
+        total = await db.email_logs.count_documents(query)
+        
+        return {
+            "logs": logs,
+            "total": total,
+            "skip": skip,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Failed to get email logs: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get email logs")
 
 async def get_enhanced_applications_data(db, query: Dict[Any, Any] = None, limit: int = None) -> List[Dict[Any, Any]]:
     """Get applications with enhanced job title resolution and data extraction"""
@@ -443,6 +618,15 @@ async def get_users(
     
     return {"users": users, "total": total}
 
+@router.get("/users/count")
+async def get_users_count(
+    current_admin: dict = Depends(get_current_admin_user),
+):
+    """Get total user count"""
+    db = get_database()
+    total = await db.users.count_documents({})
+    return {"count": total}
+
 @router.put("/users/{user_id}")
 async def update_user(
     user_id: str,
@@ -795,7 +979,8 @@ async def options_blog_post_by_id(request: Request, post_id: str):
 # Analytics and Overview endpoints
 @router.get("/overview")
 async def get_admin_overview(
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(get_current_admin_user),
+    job_id: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get admin overview"""
     try:
@@ -803,24 +988,33 @@ async def get_admin_overview(
         if db is None:
             raise HTTPException(status_code=503, detail="Database connection failed")
         
+        # Build job filter for applications
+        job_filter = {}
+        if job_id:
+            try:
+                job_filter["jobId"] = ObjectId(job_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid job ID format")
+        
         # Get base counts
         total_users = await db.users.count_documents({})
         total_jobs = await db.jobpostings.count_documents({})
         active_jobs = await db.jobpostings.count_documents({"isActive": True})
-        total_applications = await db.applications.count_documents({})
+        total_applications = await db.applications.count_documents(job_filter)
         
         # Get application counts by status
-        new_applications = await db.applications.count_documents({"status": "New"})
-        shortlisted = await db.applications.count_documents({"status": "Shortlisted"})
-        technical_assessment = await db.applications.count_documents({"status": "Technical Assessment"})
-        interviewing = await db.applications.count_documents({"status": "Interviewing"})
-        hired = await db.applications.count_documents({"status": "Hired"})
-        rejected = await db.applications.count_documents({"status": "Rejected"})
-        disqualified = await db.applications.count_documents({"status": "Disqualified"})
+        new_applications = await db.applications.count_documents({**job_filter, "status": "New"})
+        shortlisted = await db.applications.count_documents({**job_filter, "status": "Shortlisted"})
+        technical_assessment = await db.applications.count_documents({**job_filter, "status": "Technical Assessment"})
+        interviewing = await db.applications.count_documents({**job_filter, "status": "Interviewing"})
+        hired = await db.applications.count_documents({**job_filter, "status": "Hired"})
+        rejected = await db.applications.count_documents({**job_filter, "status": "Rejected"})
+        disqualified = await db.applications.count_documents({**job_filter, "status": "Disqualified"})
         
         # Get recent applications (last 7 days)
         seven_days_ago = datetime.utcnow() - timedelta(days=7)
         recent_count = await db.applications.count_documents({
+            **job_filter,
             "createdAt": {"$gte": seven_days_ago}
         })
         
@@ -828,7 +1022,7 @@ async def get_admin_overview(
         status_breakdown = []
         statuses = ["New", "Shortlisted", "Technical Assessment", "Interviewing", "Hired", "Rejected", "Disqualified"]
         for status in statuses:
-            count = await db.applications.count_documents({"status": status})
+            count = await db.applications.count_documents({**job_filter, "status": status})
             status_breakdown.append({"status": status, "count": count})
         
         response_data = {
@@ -896,7 +1090,8 @@ async def get_admin_applications(
     sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
     search: Optional[str] = Query(None, description="Search term for name, email, or position"),
-    position: Optional[str] = Query(None, description="Filter by position/job title")
+    position: Optional[str] = Query(None, description="Filter by position/job title"),
+    jobId: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get all applications for admin with optimized aggregation and filtering"""
     try:
@@ -908,6 +1103,13 @@ async def get_admin_applications(
         match_query = {}
         if status and status != "all":
             match_query["status"] = status
+        
+        # Add job filtering
+        if jobId:
+            try:
+                match_query["jobId"] = ObjectId(jobId)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid job ID format")
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
@@ -1080,7 +1282,7 @@ async def get_application_positions(
         if status and status != "all":
             match_query["status"] = status
         
-        # Aggregation pipeline to get unique positions
+        # Aggregation pipeline to get unique positions from applications
         pipeline = [
             {"$match": match_query},
             {
@@ -1120,16 +1322,30 @@ async def get_application_positions(
         ]
         
         cursor = db.applications.aggregate(pipeline)
-        positions = await cursor.to_list(length=None)
-        
-        # Format response
+        positions_from_apps = await cursor.to_list(length=None)
+
+        # Also include ALL job titles from jobpostings (even without applications)
+        job_titles = []
+        try:
+            async for job in db.jobpostings.find({}, {"title": 1}):
+                title = job.get("title")
+                if title:
+                    job_titles.append(title)
+        except Exception as e:
+            logger.error(f"Failed to load job titles for positions list: {e}")
+
+        # Merge: map title -> count (default 0), then overlay counts from applications
+        title_to_count: dict[str, int] = {t: 0 for t in job_titles}
+        for pos in positions_from_apps:
+            title = pos.get("_id")
+            if title:
+                title_to_count[title] = title_to_count.get(title, 0) + int(pos.get("count", 0))
+
+        # Build sorted list
         position_options = [
-            {
-                "value": pos["_id"],
-                "label": pos["_id"],
-                "count": pos["count"]
-            }
-            for pos in positions if pos["_id"]
+            {"value": title, "label": title, "count": count}
+            for title, count in sorted(title_to_count.items(), key=lambda x: x[0])
+            if title not in (None, "", "Position Not Available")
         ]
         
         return JSONResponse(
@@ -1704,7 +1920,8 @@ async def delete_admin_application(
 @router.get("/trends")
 async def get_application_trends(
     current_user: dict = Depends(get_current_admin_user),
-    days: int = Query(30, ge=1, le=365)
+    days: int = Query(30, ge=1, le=365),
+    job_id: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get application trends"""
     db = get_database()
@@ -1713,10 +1930,19 @@ async def get_application_trends(
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
     
+    # Build job filter
+    job_filter = {}
+    if job_id:
+        try:
+            job_filter["jobId"] = ObjectId(job_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid job ID format")
+    
     # Get daily application counts
     pipeline = [
         {
             "$match": {
+                **job_filter,
                 "createdAt": {
                     "$gte": start_date,
                     "$lte": end_date
@@ -1757,7 +1983,8 @@ async def get_application_trends(
 
 @router.get("/applications-by-job")
 async def get_applications_by_job(
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(get_current_admin_user),
+    job_id: Optional[str] = Query(None, description="Filter by specific job ID")
 ):
     """Get applications grouped by job"""
     try:
@@ -1765,8 +1992,17 @@ async def get_applications_by_job(
         if db is None:
             raise HTTPException(status_code=503, detail="Database not available")
         
+        # Build job filter for applications
+        job_filter = {}
+        if job_id:
+            try:
+                job_filter["jobId"] = ObjectId(job_id)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid job ID format")
+
         # Get applications grouped by job
         pipeline = [
+            {"$match": job_filter},
             {
                 "$addFields": {
                     "jobIdStr": { "$toString": "$jobId" }
@@ -2614,3 +2850,188 @@ async def options_bulk_status(request: Request):
             "Access-Control-Max-Age": "3600",
         }
     ) 
+
+@router.get("/users/search")
+async def search_users(
+    request: Request,
+    q: str = "",
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Search users by name, email, or username"""
+    try:
+        if not q.strip():
+            return {"users": []}
+            
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+        
+        # Create case-insensitive regex for search
+        search_regex = {"$regex": q.strip(), "$options": "i"}
+        
+        # Search in multiple fields
+        query = {
+            "$or": [
+                {"name": search_regex},
+                {"email": search_regex},
+                {"firstName": search_regex},
+                {"lastName": search_regex},
+                {"username": search_regex}
+            ]
+        }
+        
+        # Find users (limit to 50 results)
+        users_cursor = db.users.find(
+            query,
+            {"password": 0, "resetToken": 0, "verificationToken": 0}  # Exclude sensitive fields
+        ).limit(50)
+        
+        users = []
+        async for user in users_cursor:
+            # Convert ObjectId to string
+            user["_id"] = str(user["_id"])
+            
+            # Convert datetime fields
+            for field in ["createdAt", "updatedAt", "lastLoginAt"]:
+                if field in user and isinstance(user[field], datetime):
+                    user[field] = user[field].isoformat()
+            
+            users.append(user)
+        
+        return {"users": users}
+        
+    except Exception as e:
+        logger.error(f"Error searching users: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+@router.post("/emails/ai/generate")
+async def ai_generate_email(
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+    current_admin: dict = Depends(get_current_admin_user)
+):
+    """Generate email content using AI based on a prompt"""
+    try:
+        import os
+        import httpx
+        import json
+        import re
+
+        prompt = (payload.get("prompt") or "").strip()
+        if not prompt:
+            raise HTTPException(status_code=400, detail="Prompt is required")
+
+        # Get AI configuration from environment
+        base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+        api_key = os.getenv("NVIDIA_API_KEY")
+        model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
+
+        if not api_key:
+            raise HTTPException(status_code=500, detail="AI service not configured")
+
+        # Create the system prompt for email generation
+        system_prompt = """You are an expert email marketing specialist. Generate professional email content based on the user's prompt.
+
+CRITICAL: You MUST return ONLY valid JSON in this exact format. Do not include any text before or after the JSON.
+
+Requirements:
+1. Return ONLY valid JSON with "subject" and "body" fields
+2. The subject should be compelling and concise (under 60 characters)
+3. The body should be well-formatted HTML with proper styling
+4. Use professional tone appropriate for business communications
+5. Include BQI Tech branding colors: #272055 (dark blue) and #31CDFF (light blue)
+6. Make the email engaging and actionable
+7. Include a clear call-to-action when appropriate
+8. Use proper HTML structure with headings, paragraphs, and styling
+9. ALWAYS use the provided header and footer components
+10. Center-align the main heading after the header
+
+IMPORTANT: Return ONLY this JSON format, nothing else:
+{
+  "subject": "Your Email Subject Here",
+  "body": "[HEADER_COMPONENT]<div style=\"max-width: 600px; margin: 0 auto; padding: 0 20px;\"><h1 style=\"color: #272055; text-align: center; margin-bottom: 25px; font-size: 28px; font-weight: 600;\">Your Heading</h1><p style=\"font-size: 16px; line-height: 1.7; color: #333; margin-bottom: 25px; text-align: center;\">Your content here...</p></div>[FOOTER_COMPONENT]"
+}
+
+Where:
+- [HEADER_COMPONENT] = <div style="background: linear-gradient(135deg, #272055 0%, #31CDFF 100%); padding: 30px 20px; text-align: center; margin-bottom: 30px;"><img src="http://localhost:3000/bqilogo-light.png" alt="BQI Tech Logo" style="max-width: 180px; height: auto; margin-bottom: 15px;"><div style="color: white; font-size: 14px; opacity: 0.9;">bqitech.com</div></div>
+
+- [FOOTER_COMPONENT] = <div style="background-color: #f8f9fa; padding: 30px 20px; text-align: center; margin-top: 40px; border-top: 3px solid #31CDFF;"><div style="margin-bottom: 20px;"><img src="http://localhost:3000/bqilogo-light.png" alt="BQI Tech Logo" style="max-width: 120px; height: auto; opacity: 0.8;"></div><div style="color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 15px;"><strong>BQI Technologies</strong><br>Empowering businesses through innovative technology solutions</div><div style="color: #999; font-size: 12px; margin-bottom: 20px;">Visit us at <a href="https://bqitech.com" style="color: #31CDFF; text-decoration: none;">bqitech.com</a></div><div style="color: #999; font-size: 12px;">Best regards,<br><strong>The BQI Tech Team</strong></div></div>
+
+Generate an email based on this prompt:"""
+
+        user_prompt = f"{system_prompt}\n\n{prompt}"
+
+        # Make request to NVIDIA API
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 2000,
+                },
+                timeout=30.0,
+            )
+
+        if resp.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"AI service error: {resp.status_code}")
+
+        data = resp.json()
+        content = (
+            data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        )
+
+        # Log the AI response for debugging
+        logger.info(f"AI Response: {content[:500]}...")
+
+        # Parse JSON response from AI
+        json_patterns = [
+            r'```json\s*(\{[\s\S]*?\})\s*```',  # JSON in code blocks
+            r'```\s*(\{[\s\S]*?\})\s*```',      # JSON in generic code blocks
+            r'(\{[\s\S]*?\})',                   # Any JSON object
+        ]
+
+        for pattern in json_patterns:
+            match = re.search(pattern, content.strip(), re.DOTALL)
+            if match:
+                try:
+                    json_str = match.group(1)
+                    logger.info(f"Found JSON pattern: {json_str[:200]}...")
+                    parsed = json.loads(json_str)
+                    # Validate the structure
+                    if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
+                        logger.info("Successfully parsed AI response")
+                        return parsed
+                    else:
+                        logger.warning(f"Invalid JSON structure: {parsed}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"JSON parsing error: {e}")
+                    continue
+
+        # Try to parse the entire response as JSON (in case AI returned clean JSON)
+        try:
+            logger.info("Attempting to parse entire response as JSON")
+            parsed = json.loads(content.strip())
+            if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
+                logger.info("Successfully parsed entire response as JSON")
+                return parsed
+        except json.JSONDecodeError:
+            logger.warning("Entire response is not valid JSON")
+
+        logger.warning("No valid JSON found in AI response, using fallback")
+
+        # Fallback: create a basic email structure
+        return {
+            "subject": f"Email: {prompt[:50]}...",
+            "body": f"<div style=\"text-align: center; margin-bottom: 30px;\"><img src=\"http://localhost:3000/bqilogo-light.png\" alt=\"BQI Tech Logo\" style=\"max-width: 200px; height: auto;\"></div><h1 style=\"color: #272055; text-align: center;\">Generated Email</h1><p>Based on your prompt: {prompt}</p><p>Please customize this content as needed.</p>"
+        }
+
+    except Exception as e:
+        logger.error(f"Error in AI email generation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

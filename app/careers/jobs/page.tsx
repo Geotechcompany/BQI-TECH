@@ -1,17 +1,26 @@
 "use client";
- 
+
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Search, MapPin, Clock, ChevronDown, X, Briefcase, Calendar } from "lucide-react";
+import {
+  Search,
+  MapPin,
+  Clock,
+  ChevronDown,
+  X,
+  Briefcase,
+  Calendar,
+} from "lucide-react";
 import { JobPosting } from "@/types/jobPosting";
 import Loader from "@/components/Loader";
 import { SafeHtml } from "@/components/ui/safe-html";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "react-hot-toast";
- 
+import { BACKEND_URL } from "@/lib/config";
+
 export default function JobsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedJob, setSelectedJob] = useState<JobPosting | null>(null);
@@ -30,35 +39,41 @@ export default function JobsPage() {
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (locationDropdownRef.current && !locationDropdownRef.current.contains(event.target as Node)) {
+      if (
+        locationDropdownRef.current &&
+        !locationDropdownRef.current.contains(event.target as Node)
+      ) {
         setIsLocationOpen(false);
       }
-      if (departmentDropdownRef.current && !departmentDropdownRef.current.contains(event.target as Node)) {
+      if (
+        departmentDropdownRef.current &&
+        !departmentDropdownRef.current.contains(event.target as Node)
+      ) {
         setIsDepartmentOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
   // Close dropdowns when pressing Escape key
   useEffect(() => {
     const handleEscapeKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      if (event.key === "Escape") {
         setIsLocationOpen(false);
         setIsDepartmentOpen(false);
       }
     };
 
-    document.addEventListener('keydown', handleEscapeKey);
+    document.addEventListener("keydown", handleEscapeKey);
     return () => {
-      document.removeEventListener('keydown', handleEscapeKey);
+      document.removeEventListener("keydown", handleEscapeKey);
     };
   }, []);
- 
+
   const {
     data: jobs,
     isLoading,
@@ -67,54 +82,57 @@ export default function JobsPage() {
     queryKey: ["jobs"],
     queryFn: async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/jobs`, {
-          credentials: 'include',
+        const response = await fetch(`${BACKEND_URL}/api/jobs`, {
+          credentials: "include",
           headers: {
-            'Accept': 'application/json',
-          }
+            Accept: "application/json",
+          },
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch jobs');
+          throw new Error("Failed to fetch jobs");
         }
 
         const data = await response.json();
         return data.jobs || [];
       } catch (error) {
-        console.error('Error fetching jobs:', error);
-        toast.error('Failed to load job listings');
+        console.error("Error fetching jobs:", error);
+        toast.error("Failed to load job listings");
         throw error;
       }
     },
     staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
     retry: 2, // Retry failed requests up to 2 times
   });
- 
+
   const uniqueLocations = (() => {
     if (!jobs?.length) return [];
-    
+
     // Get all clean locations
     const allLocations = jobs
-      .map(job => job.location?.trim().replace(/\s+/g, ' '))
+      .map((job) => job.location?.trim().replace(/\s+/g, " "))
       .filter(Boolean);
-    
+
     // Remove exact duplicates first
     const uniqueLocationsList = [...new Set(allLocations)];
-    
+
     // Consolidate similar locations (e.g., "Nairobi" + "Nairobi, Kenya" = "Nairobi, Kenya")
     const consolidated = [];
-    
+
     for (const location of uniqueLocationsList) {
       let shouldAdd = true;
       let indexToReplace = -1;
-      
+
       for (let i = 0; i < consolidated.length; i++) {
         const existing = consolidated[i];
         const locationLower = location.toLowerCase();
         const existingLower = existing.toLowerCase();
-        
+
         // Check if they're related (one contains the other)
-        if (locationLower.includes(existingLower) || existingLower.includes(locationLower)) {
+        if (
+          locationLower.includes(existingLower) ||
+          existingLower.includes(locationLower)
+        ) {
           // Keep the longer, more specific one
           if (location.length > existing.length) {
             indexToReplace = i;
@@ -123,7 +141,7 @@ export default function JobsPage() {
           break;
         }
       }
-      
+
       if (indexToReplace >= 0) {
         // Replace the existing shorter location with the longer one
         consolidated[indexToReplace] = location;
@@ -132,25 +150,27 @@ export default function JobsPage() {
         consolidated.push(location);
       }
     }
-    
+
     return consolidated.sort();
   })();
 
   const uniqueDepartments = (() => {
     if (!jobs?.length) return [];
-    
+
     // Create a map to track department variations
     const departmentMap = new Map();
-    
-    jobs.forEach(job => {
+
+    jobs.forEach((job) => {
       if (!job.department) return;
-      
-      const cleanDepartment = job.department.trim().replace(/\s+/g, ' ');
+
+      const cleanDepartment = job.department.trim().replace(/\s+/g, " ");
       if (!cleanDepartment) return;
-      
+
       // Create a normalized key for comparison (lowercase, no punctuation)
-      const normalizedKey = cleanDepartment.toLowerCase().replace(/[.,\s]/g, '');
-      
+      const normalizedKey = cleanDepartment
+        .toLowerCase()
+        .replace(/[.,\s]/g, "");
+
       // If this normalized key doesn't exist, add it
       if (!departmentMap.has(normalizedKey)) {
         departmentMap.set(normalizedKey, cleanDepartment);
@@ -162,11 +182,11 @@ export default function JobsPage() {
         }
       }
     });
-    
+
     // Return sorted array of unique departments
     return Array.from(departmentMap.values()).sort();
   })();
- 
+
   const filteredJobs = jobs?.filter((job) => {
     const matchesSearch =
       job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -174,28 +194,28 @@ export default function JobsPage() {
         searchTerm.toLowerCase()
       ) ||
       job.location.toLowerCase().includes(searchTerm.toLowerCase());
- 
+
     const matchesLocation =
       !selectedLocation || job.location === selectedLocation;
     const matchesDepartment =
       !selectedDepartment || job.department === selectedDepartment;
- 
+
     return matchesSearch && matchesLocation && matchesDepartment;
   });
- 
+
   const handleApply = (_id: string) => {
     if (!isSignedIn) {
       sessionStorage.setItem("pendingJobApplication", _id);
       router.push("/login?redirect=/dashboard/apply");
       return;
     }
- 
+
     router.push(`/dashboard/apply/${_id}`);
   };
- 
+
   if (isLoading) return <Loader />;
   if (error) return <div>Failed to load jobs</div>;
- 
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white -mt-[80px]">
       {/* Enhanced Hero Section */}
@@ -225,12 +245,12 @@ export default function JobsPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
           >
-            Join a team where innovation meets impact and shape the
-            future of technology!
+            Join a team where innovation meets impact and shape the future of
+            technology!
           </motion.p>
         </motion.div>
       </div>
- 
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* Enhanced Search Section */}
         <motion.div
@@ -254,10 +274,13 @@ export default function JobsPage() {
               Search
             </Button>
           </div>
- 
+
           {/* Enhanced Filters */}
           <div className="flex flex-wrap gap-3 sm:gap-4">
-            <div className="relative flex-1 sm:flex-none" ref={locationDropdownRef}>
+            <div
+              className="relative flex-1 sm:flex-none"
+              ref={locationDropdownRef}
+            >
               <button
                 onClick={() => setIsLocationOpen(!isLocationOpen)}
                 className="w-full px-6 py-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
@@ -283,8 +306,11 @@ export default function JobsPage() {
                 </div>
               )}
             </div>
- 
-            <div className="relative flex-1 sm:flex-none" ref={departmentDropdownRef}>
+
+            <div
+              className="relative flex-1 sm:flex-none"
+              ref={departmentDropdownRef}
+            >
               <button
                 onClick={() => setIsDepartmentOpen(!isDepartmentOpen)}
                 className="w-full px-6 py-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
@@ -309,7 +335,7 @@ export default function JobsPage() {
                 </div>
               )}
             </div>
- 
+
             {(selectedLocation || selectedDepartment) && (
               <button
                 onClick={() => {
@@ -324,7 +350,7 @@ export default function JobsPage() {
             )}
           </div>
         </motion.div>
- 
+
         {/* Enhanced Main Content Area */}
         <div className="flex flex-col lg:flex-row gap-8 relative">
           {/* Left Side - Job Listings */}
@@ -338,7 +364,7 @@ export default function JobsPage() {
                 {filteredJobs?.length || 0} Jobs Found
               </h2>
             </div>
- 
+
             <div className="space-y-4">
               {filteredJobs?.map((job) => (
                 <motion.div
@@ -356,15 +382,19 @@ export default function JobsPage() {
                       <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
                         {job.title}
                       </h3>
-                      {new Date(job.postedDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
+                      {new Date(job.postedDate) >
+                        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
                         <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
                           New
                         </span>
                       )}
                     </div>
-                    
+
                     <div className="text-gray-600 text-sm mb-3 line-clamp-2">
-                      {job.description?.replace(/<[^>]*>/g, '').slice(0, 120).trim() + (job.description?.length > 120 ? '...' : '')}
+                      {job.description
+                        ?.replace(/<[^>]*>/g, "")
+                        .slice(0, 120)
+                        .trim() + (job.description?.length > 120 ? "..." : "")}
                     </div>
 
                     <div className="flex flex-wrap gap-3">
@@ -378,17 +408,20 @@ export default function JobsPage() {
                       </div>
                       <div className="flex items-center gap-1.5 text-sm text-gray-500 bg-gray-50 px-3 py-1 rounded-full">
                         <Calendar className="w-4 h-4 text-blue-500" />
-                        {new Date(job.postedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {new Date(job.postedDate).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
                       </div>
                     </div>
 
                     <div className="mt-3 flex items-center justify-between">
                       <span className="text-sm font-medium text-blue-600">
-                        {job.department || 'General'}
+                        {job.department || "General"}
                       </span>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         className="text-blue-600 hover:bg-blue-50 group-hover:underline"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -403,7 +436,7 @@ export default function JobsPage() {
               ))}
             </div>
           </div>
- 
+
           {/* Right Side - Job Details */}
           <AnimatePresence mode="wait">
             {selectedJob && (
@@ -430,25 +463,41 @@ export default function JobsPage() {
                       </button>
                     </div>
                   </div>
- 
+
                   <div className="p-6 sm:p-8 flex-1 overflow-y-auto">
                     <div className="space-y-8">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         {[
-                          { label: "Department", value: selectedJob.department },
+                          {
+                            label: "Department",
+                            value: selectedJob.department,
+                          },
                           { label: "Location", value: selectedJob.location },
-                          { label: "Position Type", value: "Full time" },
-                          { label: "Posted Date", value: new Date(selectedJob.postedDate).toLocaleDateString() }
+                          {
+                            label: "Position Type",
+                            value: selectedJob.employmentType,
+                          },
+                          {
+                            label: "Posted Date",
+                            value: new Date(
+                              selectedJob.postedDate
+                            ).toLocaleDateString(),
+                          },
                         ].map((item) => (
-                          <div key={item.label} className="bg-gray-50 p-4 rounded-xl">
+                          <div
+                            key={item.label}
+                            className="bg-gray-50 p-4 rounded-xl"
+                          >
                             <h3 className="text-sm font-medium text-gray-500 mb-1">
                               {item.label}
                             </h3>
-                            <p className="text-gray-900 font-medium">{item.value}</p>
+                            <p className="text-gray-900 font-medium">
+                              {item.value}
+                            </p>
                           </div>
                         ))}
                       </div>
- 
+
                       <div className="prose max-w-none">
                         <SafeHtml html={selectedJob.description} />
                       </div>
@@ -475,5 +524,3 @@ export default function JobsPage() {
     </div>
   );
 }
- 
- 

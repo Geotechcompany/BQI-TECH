@@ -9,8 +9,10 @@ type BackendHealthResponse = {
   message?: string
 }
 
+import { BACKEND_URL } from "@/lib/config";
+
 export function useBackendHealth({ refetchIntervalMs = 15000 } = {}) {
-  const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:10000"
+  const baseUrl = BACKEND_URL
 
   const query = useQuery({
     queryKey: ["backend-health"],

@@ -24,8 +24,7 @@ interface SessionData {
   refreshToken: string;
 }
 
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:10000";
+import { BACKEND_URL } from "./config";
 
 // Token storage utilities
 const TOKEN_KEY = "auth_token";

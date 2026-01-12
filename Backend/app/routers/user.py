@@ -546,7 +546,7 @@ async def get_hiring_progress(
                 "count": {"$sum": 1},
                 "applications": {"$push": {
                     "id": {"$toString": "$_id"},
-                    "jobId": "$jobId",
+                    "jobId": {"$toString": "$jobId"},
                     "status": "$status",
                     "appliedDate": {"$dateToString": {"format": "%Y-%m-%dT%H:%M:%S.%LZ", "date": "$appliedDate"}}
                 }}

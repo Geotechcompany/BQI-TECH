@@ -160,9 +160,10 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   target.src = '/images/placeholder.jpg'
 }
 
+import { BACKEND_URL } from "@/lib/config";
+
 const fetcher = async (url: string) => {
-  const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:10000'
-  const response = await fetch(`${baseUrl}/api${url}`)
+  const response = await fetch(`${BACKEND_URL}/api${url}`)
   if (!response.ok) {
     throw new Error('Failed to fetch posts')
   }

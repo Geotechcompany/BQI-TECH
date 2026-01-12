@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { BACKEND_URL } from "@/lib/config";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Loader2, CheckCircle2, XCircle, Zap } from "lucide-react";
@@ -218,7 +219,7 @@ function EmailVerificationContent() {
       setStatus("loading");
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/auth/verify-email`,
+          `${BACKEND_URL}/api/auth/verify-email`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -344,7 +345,7 @@ function EmailVerificationContent() {
         setStatus("loading");
 
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/auth/send-verification-code`,
+          `${BACKEND_URL}/api/auth/send-verification-code`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
