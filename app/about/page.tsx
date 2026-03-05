@@ -134,6 +134,22 @@ const team = [
       linkedin: "https://www.linkedin.com/in/nigelwatunu",
     },
   },
+  {
+    name: "Brian Mwangi",
+    role: "Junior Salesforce Developer",
+    image: "/Teams/Brian.jpg",
+    social: {
+      linkedin: "#",
+    },
+  },
+  {
+    name: "Joy Mbuvi",
+    role: "Trainee",
+    image: "/Teams/Joy.jpg",
+    social: {
+      linkedin: "https://www.linkedin.com/in/joy-mbuvi-0835891b7/",
+    },
+  },
 ];
 
 export default function AboutPage() {
@@ -314,13 +330,7 @@ export default function AboutPage() {
             {team.map((member, index) => (
               <motion.div
                 key={member.name}
-                className={`group relative w-full max-w-[280px] ${
-                  member.name === "Felix Rono"
-                    ? "lg:col-start-2" // Centered on large screens
-                    : member.name === "Nigel Watunu"
-                    ? "lg:col-start-3" // Next to Felix, also centered
-                    : ""
-                }`}
+                className="group relative w-full max-w-[280px]"
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
