@@ -296,10 +296,10 @@ function Footer() {
               >
                 <Mail className="mr-3 h-5 w-5 text-purple-400 flex-shrink-0" />
                 <Link 
-                  href="mailto:info@bqitech.com"
+                  href="mailto:hr@bqitech.com"
                   className="text-gray-300 group-hover:text-white transition-colors"
                 >
-                  info@bqitech.com
+                  hr@bqitech.com
                 </Link>
               </motion.div>
             </div>

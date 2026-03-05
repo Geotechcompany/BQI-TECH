@@ -102,8 +102,8 @@ export default function ContactUsPage() {
             </p>
             <p className="flex items-center">
               <Mail className="mr-2 text-teal-500" />
-              <a href="mailto:info@bqitech.com" className="hover:text-teal-500 transition-colors">
-                info@bqitech.com
+              <a href="mailto:hr@bqitech.com" className="hover:text-teal-500 transition-colors">
+                hr@bqitech.com
               </a>
             </p>
           </div>
