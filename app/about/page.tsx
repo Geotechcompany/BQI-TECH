@@ -79,14 +79,6 @@ const team = [
     },
   },
   {
-    name: "Lovell Oduor",
-    role: "Configuration Analyst",
-    image: "/Teams/Lovell.jpg",
-    social: {
-      linkedin: "https://www.linkedin.com/in/lovelloduor/",
-    },
-  },
-  {
     name: "Geoffrey Audia",
     role: "Configuration Analyst",
     image: "/Teams/Geo1.jpg",
@@ -94,6 +86,15 @@ const team = [
       linkedin: "https://www.linkedin.com/in/geoffrey-audia-28a839307",
     },
   },
+  {
+    name: "Lovell Oduor",
+    role: "Configuration Analyst",
+    image: "/Teams/Lovell.jpg",
+    social: {
+      linkedin: "https://www.linkedin.com/in/lovelloduor/",
+    },
+  },
+ 
   {
     name: "Ian Mosonik",
     role: "Junior Configuration Analyst",
@@ -139,7 +140,7 @@ const team = [
     role: "Junior Salesforce Developer",
     image: "/Teams/Brian.jpg",
     social: {
-      linkedin: "#",
+      linkedin: "https://www.linkedin.com/in/brian-mwangi-bkm17/",
     },
   },
   {
