@@ -286,7 +286,7 @@ function Footer() {
                   href="tel:+254702326065"
                   className="text-gray-300 group-hover:text-white transition-colors"
                 >
-                  +254 702 326 065
+                  +254 715 582 558
                 </Link>
               </motion.div>
 
