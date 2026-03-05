@@ -80,7 +80,7 @@ const team = [
   },
   {
     name: "Lovell Oduor",
-    role: "Junior Configuration Analyst",
+    role: "Configuration Analyst",
     image: "/Teams/Lovell.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/lovelloduor/",
@@ -88,7 +88,7 @@ const team = [
   },
   {
     name: "Geoffrey Audia",
-    role: "Junior Configuration Analyst",
+    role: "Configuration Analyst",
     image: "/Teams/Geo1.jpg",
     social: {
       linkedin: "https://www.linkedin.com/in/geoffrey-audia-28a839307",
