@@ -123,7 +123,6 @@ const nextConfig = {
             destination: '/api/sitemap',
         }, ]
     },
-    output: 'standalone',
 };
 
 module.exports = nextConfig;

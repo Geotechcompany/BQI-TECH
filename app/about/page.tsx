@@ -186,7 +186,7 @@ export default function AboutPage() {
         <div className="absolute inset-0 z-0 overflow-hidden">
           <div className="absolute inset-0 clip-path-blob animate-float">
             <Image
-              src="/images/about-hero-bg.jpg"
+              src="https://images.unsplash.com/photo-1557804506-669a67965ba0?w=1920&q=80"
               alt=""
               fill
               className="object-cover"

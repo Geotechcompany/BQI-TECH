@@ -30,8 +30,7 @@ const nextConfig = {
         minimumCacheTTL: 60,
         dangerouslyAllowSVG: true,
         contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
-        remotePatterns: [
-            {
+        remotePatterns: [{
                 protocol: 'https',
                 hostname: '**.dropboxusercontent.com',
                 port: '',
@@ -90,7 +89,7 @@ const nextConfig = {
 
         // Force case-sensitive module resolution (like Linux)
         config.resolve.plugins = config.resolve.plugins || [];
-        
+
         config.module.rules.push({
             test: /\.(mpwebm)$/,
             use: {
@@ -106,8 +105,7 @@ const nextConfig = {
         return config;
     },
     async redirects() {
-        return [
-            {
+        return [{
                 source: '/admin',
                 destination: '/admin/overview',
                 permanent: true,
@@ -121,14 +119,11 @@ const nextConfig = {
     },
     transpilePackages: ['@uiw/react-md-editor', 'react-beautiful-dnd'],
     async rewrites() {
-        return [
-            {
-                source: '/sitemap.xml',
-                destination: '/api/sitemap',
-            },
-        ]
+        return [{
+            source: '/sitemap.xml',
+            destination: '/api/sitemap',
+        }, ]
     },
-    output: 'standalone',
 };
 
 export default nextConfig;

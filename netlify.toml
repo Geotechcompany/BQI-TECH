@@ -11,16 +11,6 @@
   NODE_ENV = "production"
   NETLIFY_SKIP_BUILD_CACHE = "true"
 
-[[redirects]]
-  from = "/_next/*"
-  to = "/_next/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
 [context.production.environment]
   NODE_ENV = "production"
 
