@@ -71,7 +71,7 @@ function ThankYouPage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.7 }}
       >
-        <p>Have any questions? Contact us at <a href="mailto:hr@bqitech.com" className="text-blue-500 hover:underline">hr@bqitech.com</a></p>
+        <p>Have any questions? Contact us at <a href="mailto:info@bqitech.com" className="text-blue-500 hover:underline">info@bqitech.com</a></p>
       </motion.div>
     </motion.div>
   );

@@ -109,10 +109,10 @@ export default function TermsPage() {
             <p className="text-white/90 text-lg">
               For questions about these Terms and Conditions, please contact us at{" "}
               <a 
-                href="mailto:hr@bqitech.com" 
+                href="mailto:info@bqitech.com" 
                 className="text-white underline decoration-2 decoration-white/30 hover:decoration-white/100 transition-all font-medium"
               >
-                hr@bqitech.com
+                info@bqitech.com
               </a>
             </p>
           </motion.section>

@@ -30,7 +30,7 @@ export function JsonLd({
       "@type": "ContactPoint",
       telephone: "+254-11-229-5287",
       contactType: "customer service",
-      email: "hr@bqitech.com",
+      email: "info@bqitech.com",
       areaServed: "KE",
       availableLanguage: ["en"],
     },

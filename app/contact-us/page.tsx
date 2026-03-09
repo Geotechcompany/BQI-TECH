@@ -240,7 +240,7 @@ export default function ContactUsPage() {
                   {
                     icon: Mail,
                     title: "Email us",
-                    content: "hr@bqitech.com",
+                    content: "info@bqitech.com",
                     isLink: true,
                   },
                 ].map((item, index) => (

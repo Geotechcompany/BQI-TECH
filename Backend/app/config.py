@@ -59,10 +59,10 @@ class Settings(BaseModel):
     # Email Configuration (Office 365 SMTP)
     smtp_host: str = os.getenv("SMTP_HOST", "smtp.office365.com")
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
-    smtp_user: str = os.getenv("SMTP_USER", "hr@bqitech.com")
+    smtp_user: str = os.getenv("SMTP_USER", "info@bqitech.com")
     smtp_pass: str = os.getenv("SMTP_PASS", "")
-    from_email: str = os.getenv("FROM_EMAIL", "hr@bqitech.com")
-    hr_email: str = os.getenv("HR_EMAIL", "hr@bqitech.com")
+    from_email: str = os.getenv("FROM_EMAIL", "info@bqitech.com")
+    hr_email: str = os.getenv("HR_EMAIL", "info@bqitech.com")
     
     # Cloudinary Configuration
     cloudinary_cloud_name: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")

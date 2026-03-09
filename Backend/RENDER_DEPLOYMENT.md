@@ -63,7 +63,7 @@ This guide will walk you through deploying the Python FastAPI backend to Render.
    DEBUG=False
 
    # HR Email
-   HR_EMAIL=hr@bqitech.com
+   HR_EMAIL=info@bqitech.com
 
    # File Upload Configuration
    MAX_FILE_SIZE=10485760
