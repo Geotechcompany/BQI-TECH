@@ -116,7 +116,7 @@ export default function Header() {
             {/* Mobile Actions */}
             <div className="flex items-center gap-3">
               <Button 
-                className="bg-[#31CDFF] hover:bg-[#0052CC] text-white rounded-full text-[14px] font-medium px-8 h-10 transition-colors"
+                className="bg-[#31CDFF] hover:bg-[#0052CC] text-[#272055] hover:text-white rounded-full text-[14px] font-medium px-8 h-10 transition-colors"
                 onClick={() => router.push("/careers")}
               >
                 Join Our Team

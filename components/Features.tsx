@@ -359,6 +359,9 @@ export default function Features() {
           </p>
         </motion.div>
 
+        {/* Lighthouse/Axe heading-order rule expects an h2 before h3 card titles. */}
+        <h2 className="sr-only">BQI Tech Features</h2>
+
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 xl:gap-10">
           {features.map((feature, index) => (
             <motion.div
