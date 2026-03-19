@@ -214,8 +214,8 @@ export default function CareersPage() {
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
             <Button
-              className="bg-cyan-500 hover:bg-cyan-600 text-white px-6 py-3 rounded-full font-semibold 
-                         transition-colors duration-300 mr-4 shadow-lg shadow-cyan-500/20"
+              className="bg-cyan-800 hover:bg-cyan-900 text-white px-6 py-3 rounded-full font-semibold 
+                         transition-colors duration-300 mr-4 shadow-lg shadow-cyan-900/25"
               onClick={() => (window.location.href = "/careers/jobs")}
             >
               View Current Vacancies
@@ -240,7 +240,7 @@ export default function CareersPage() {
         <div className="max-w-6xl mx-auto px-4 relative">
           <div className="text-center mb-16">
             <motion.span
-              className="inline-block text-sm font-semibold text-cyan-600 mb-4 bg-cyan-50 px-4 py-1 rounded-full"
+              className="inline-block text-sm font-semibold text-cyan-950 mb-4 bg-cyan-100 px-4 py-1 rounded-full"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}

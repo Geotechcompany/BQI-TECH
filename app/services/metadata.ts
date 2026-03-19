@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     creator: '@BQITech',
   },
   alternates: {
-    canonical: '<link rel= "canonical" href= "https://bqitech.com/services" />',
+    canonical: 'https://bqitech.com/services',
   },
   robots: {
     index: true,

@@ -320,7 +320,7 @@ export default function AboutPage() {
             <h2 className="text-4xl font-bold mb-4 bg-gradient-to-r from-[#31CDFF] to-purple-600 bg-clip-text text-transparent">
               Meet Our Team
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg text-gray-700 dark:text-gray-700 max-w-2xl mx-auto leading-relaxed">
               Our diverse team of experts brings together years of experience in
               technology, innovation, and client success.
             </p>
@@ -360,16 +360,18 @@ export default function AboutPage() {
                     {/* Social Links Overlay */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-4 group-hover:translate-y-0">
                       <div className="flex gap-3">
-                        {member.social.linkedin && (
+                      {member.social.linkedin?.startsWith("http") && (
                           <motion.a
-                            href={member.social.linkedin}
+                          href={member.social.linkedin}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="p-3 bg-white/20 backdrop-blur-md rounded-full hover:bg-[#31CDFF] transition-all duration-300 hover:scale-110"
+                          aria-label={`LinkedIn profile for ${member.name}`}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.95 }}
                           >
                             <Linkedin className="w-5 h-5 text-white" />
+                          <span className="sr-only">{`LinkedIn profile - ${member.name}`}</span>
                           </motion.a>
                         )}
                       </div>
@@ -451,7 +453,7 @@ export default function AboutPage() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="bg-teal-500 text-white px-6 py-3 rounded-full font-semibold hover:bg-teal-600 transition-colors duration-300"
+                className="bg-teal-800 text-white px-6 py-3 rounded-full font-semibold hover:bg-teal-900 transition-colors duration-300"
                 onClick={() =>
                   router.push(
                     "https://www.linkedin.com/company/bqi-technologies"
@@ -502,7 +504,7 @@ export default function AboutPage() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="bg-white text-teal-600 px-6 py-3 rounded-full font-semibold hover:bg-gray-100 transition-colors duration-300"
+            className="bg-white text-teal-900 px-6 py-3 rounded-full font-semibold hover:bg-gray-100 transition-colors duration-300"
             onClick={() => router.push("/services")}
           >
             Learn More About Our Services
