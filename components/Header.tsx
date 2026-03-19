@@ -47,7 +47,7 @@ export default function Header() {
             : 'text-gray-700 hover:text-[#0052CC]')
         : (isActive 
             ? 'text-[#0052CC] font-semibold' 
-            : 'text-[#31CDFF] hover:text-[#0052CC]')
+            : 'text-[#0052CC] hover:text-[#272055]')
     }`;
   }
 
@@ -129,7 +129,7 @@ export default function Header() {
               >
                 <Menu 
                   className={`w-6 h-6 transition-colors duration-200 ${
-                    isScrolled ? 'text-gray-700' : 'text-[#31CDFF]'
+                    isScrolled ? 'text-gray-700' : 'text-[#0052CC]'
                   }`}
                 />
               </motion.button>
