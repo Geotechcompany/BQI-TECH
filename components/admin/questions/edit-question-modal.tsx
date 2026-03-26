@@ -25,7 +25,7 @@ import { adminApi } from "@/lib/api-backend";
 const questionSchema = z.object({
   jobIds: z.array(z.string()).min(1, "At least one job must be selected"),
   question: z.string().min(1, "Question is required"),
-  type: z.enum(["text", "select", "radio", "boolean", "file"]),
+  type: z.enum(["text", "select", "radio", "boolean", "file", "date"]),
   options: z.array(z.string()).optional(),
   required: z.boolean().default(true),
   order: z.number().default(0),
@@ -34,7 +34,7 @@ const questionSchema = z.object({
 interface QuestionFormValues {
   jobIds: string[];
   question: string;
-  type: "text" | "select" | "radio" | "boolean" | "file";
+  type: "text" | "select" | "radio" | "boolean" | "file" | "date";
   options?: string[];
   required: boolean;
   order: number;
@@ -67,7 +67,7 @@ export function EditQuestionModal({
   optionInput: string;
   handleAddOption: (isEdit: boolean) => void;
   handleRemoveOption: (index: number, isEdit: boolean) => void;
-  handleTypeChange: (type: "text" | "select" | "radio" | "boolean" | "file") => void;
+  handleTypeChange: (type: "text" | "select" | "radio" | "boolean" | "file" | "date") => void;
   setEditOptionInput: (value: string) => void;
   setEditOptions: (options: string[]) => void;
 }) {
@@ -133,7 +133,7 @@ export function EditQuestionModal({
     onSubmit(finalValues);
   };
 
-  const handleLocalTypeChange = (type: "text" | "select" | "radio" | "boolean" | "file") => {
+  const handleLocalTypeChange = (type: "text" | "select" | "radio" | "boolean" | "file" | "date") => {
     handleTypeChange(type);
     
     if (type === 'boolean') {
@@ -218,7 +218,7 @@ export function EditQuestionModal({
                     <FormLabel>Question Type</FormLabel>
                     <Select
                       value={field.value}
-                      onValueChange={(value: "text" | "select" | "radio" | "boolean" | "file") => {
+                      onValueChange={(value: "text" | "select" | "radio" | "boolean" | "file" | "date") => {
                         field.onChange(value);
                         handleLocalTypeChange(value);
                       }}
@@ -234,6 +234,7 @@ export function EditQuestionModal({
                         <SelectItem value="radio">Multiple Choice</SelectItem>
                         <SelectItem value="boolean">Yes/No</SelectItem>
                         <SelectItem value="file">File Upload</SelectItem>
+                        <SelectItem value="date">Date</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

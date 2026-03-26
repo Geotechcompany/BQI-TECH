@@ -146,6 +146,14 @@ function ApplicationForm() {
             message: `Please upload a file for ${question.question.toLowerCase()}`,
           });
           break;
+        case "date":
+          schema = z
+            .string()
+            .min(1, { message: `${question.question} is required` })
+            .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+              message: "Please enter a valid date",
+            });
+          break;
         default:
           schema = z
             .string()
@@ -767,6 +775,23 @@ function ApplicationForm() {
           </div>
         );
 
+      case "date":
+        return (
+          <div key={fieldName} className="space-y-2">
+            {renderLabel()}
+            <div className="relative">
+              <input
+                {...register(fieldName)}
+                className={inputClasses}
+                type="date"
+              />
+            </div>
+            {getFieldError(fieldName) && (
+              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
+            )}
+          </div>
+        );
+
       default:
         return null;
     }
@@ -968,6 +993,9 @@ function getDefaultValues(
         acc[fieldName] = "";
         break;
       case "file":
+        acc[fieldName] = "";
+        break;
+      case "date":
         acc[fieldName] = "";
         break;
       default:

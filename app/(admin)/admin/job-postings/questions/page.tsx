@@ -69,7 +69,7 @@ interface Question {
 const questionSchema = z.object({
   jobIds: z.array(z.string()).min(1, "At least one job must be selected"),
   question: z.string().min(1, "Question is required"),
-  type: z.enum(["text", "select", "radio", "boolean", "file"]),
+  type: z.enum(["text", "select", "radio", "boolean", "file", "date"]),
   options: z.array(z.string()).superRefine((val, ctx) => {
     const formValues = ctx as unknown as { type: string }; // Type assertion
     if ((formValues.type === "select" || formValues.type === "radio") && val.length === 0) {
@@ -89,7 +89,7 @@ const questionSchema = z.object({
 type QuestionFormValues = z.infer<typeof questionSchema>;
 
 // Define a type for question types
-type QuestionType = "text" | "select" | "radio" | "boolean" | "file";
+type QuestionType = "text" | "select" | "radio" | "boolean" | "file" | "date";
 
 // Define options type
 interface OptionType {
@@ -103,7 +103,8 @@ const questionTypeOptions = [
   { value: 'select', label: 'Dropdown' },
   { value: 'radio', label: 'Radio' },
   { value: 'boolean', label: 'Yes/No' },
-  { value: 'file', label: 'File Upload' }
+  { value: 'file', label: 'File Upload' },
+  { value: 'date', label: 'Date' }
 ];
 
 const fetchQuestions = async (searchTerm?: string) => {
@@ -256,7 +257,7 @@ export default function QuestionsManagementPage() {
       editForm.reset({
         jobIds: selectedJobs,
         question: question.question,
-        type: question.type as "text" | "select" | "radio" | "boolean" | "file",
+        type: question.type as "text" | "select" | "radio" | "boolean" | "file" | "date",
         required: question.required,
         options: question.options || [],
         order: question.order,
@@ -472,7 +473,7 @@ export default function QuestionsManagementPage() {
       ...question,
       jobIds: question.jobIds,
       options: question.options || [],
-      type: question.type as "text" | "select" | "radio" | "boolean" | "file"
+      type: question.type as "text" | "select" | "radio" | "boolean" | "file" | "date"
     });
     setEditOptions(question.options || []);
     setIsEditOpen(true);

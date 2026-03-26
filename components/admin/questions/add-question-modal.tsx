@@ -60,7 +60,7 @@ interface AddQuestionModalProps {
 interface QuestionFormValues {
   jobIds: string[];
   question: string;
-  type: "text" | "select" | "radio" | "boolean" | "file";
+  type: "text" | "select" | "radio" | "boolean" | "file" | "date";
   required: boolean;
   options: string[];
   order: number;
@@ -236,6 +236,7 @@ export function AddQuestionModal({
                                 <SelectItem value="radio">Multiple Choice</SelectItem>
                                 <SelectItem value="boolean">Yes/No Toggle</SelectItem>
                                 <SelectItem value="file">File Upload</SelectItem>
+                                <SelectItem value="date">Date</SelectItem>
                               </SelectContent>
                             </Select>
                             <FormMessage />
