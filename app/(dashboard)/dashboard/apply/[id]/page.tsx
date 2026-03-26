@@ -95,7 +95,7 @@ function ApplicationForm() {
   const buildFormSchema = () => {
     const schemaMap = questions.reduce((acc, question) => {
       const fieldName = question._id || question.id;
-      let schema: z.ZodString | z.ZodOptional<z.ZodString>;
+      let schema: z.ZodTypeAny;
 
       // Add type-specific validation with custom error messages
       switch (question.type) {
@@ -169,7 +169,7 @@ function ApplicationForm() {
         ...acc,
         [fieldName]: schema,
       };
-    }, {} as Record<string, z.ZodString | z.ZodOptional<z.ZodString>>);
+    }, {} as Record<string, z.ZodTypeAny>);
 
     return z.object(schemaMap);
   };
