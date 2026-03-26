@@ -391,10 +391,16 @@ export default function JobsPage() {
                     </div>
 
                     <div className="mt-1 text-gray-600 text-sm leading-relaxed mb-3 line-clamp-2">
-                      {job.description
-                        ?.replace(/<[^>]*>/g, "")
-                        .slice(0, 120)
-                        .trim() + (job.description?.length > 120 ? "..." : "")}
+                      {(() => {
+                        const plainDescription = (job.description || "")
+                          .replace(/<[^>]*>/g, " ")
+                          .replace(/\s+/g, " ")
+                          .trim();
+
+                        return `${plainDescription.slice(0, 120)}${
+                          plainDescription.length > 120 ? "..." : ""
+                        }`;
+                      })()}
                     </div>
 
                     <div className="flex flex-wrap gap-3">
