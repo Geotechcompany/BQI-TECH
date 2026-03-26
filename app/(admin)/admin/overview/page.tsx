@@ -678,6 +678,7 @@ export default function OverviewPage() {
         application={viewApplication}
         isOpen={!!viewApplication}
         onClose={() => setViewApplication(null)}
+        jobTitles={jobTitles}
       />
     </AdminPageLayout>
   );
