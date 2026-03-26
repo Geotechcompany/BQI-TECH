@@ -27,6 +27,7 @@ import { adminApi } from '@/lib/api-backend';
 import { toast } from 'react-hot-toast';
 import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
 import { Application } from "@/types/application";
+import { getPositionDisplay } from "@/components/admin/utils/table-utils";
 
 ChartJS.register(
   CategoryScale,
@@ -180,6 +181,7 @@ export default function OverviewPage() {
   const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [applicationsByJob, setApplicationsByJob] = useState<ApplicationsByJob | null>(null);
   const [recentApplications, setRecentApplications] = useState<Application[]>([]);
+  const [jobTitles, setJobTitles] = useState<Record<string, string>>({});
   const [trendData, setTrendData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,11 +197,12 @@ export default function OverviewPage() {
       setError(null);
 
       // Load all data in parallel
-      const [overviewResponse, recentAppsResponse, trendsResponse, jobApplicationsResponse] = await Promise.allSettled([
+      const [overviewResponse, recentAppsResponse, trendsResponse, jobApplicationsResponse, jobsResponse] = await Promise.allSettled([
         adminApi.getOverview(),
         adminApi.getApplications({ limit: 10 }),
         adminApi.getTrends(30),
-        adminApi.getApplicationsByJob()
+        adminApi.getApplicationsByJob(),
+        adminApi.getJobPostings()
       ]);
 
       // Handle overview data
@@ -221,6 +224,21 @@ export default function OverviewPage() {
       // Handle applications by job data
       if (jobApplicationsResponse.status === 'fulfilled') {
         setApplicationsByJob(jobApplicationsResponse.value);
+      }
+
+      // Build a job title lookup for robust position rendering
+      if (jobsResponse.status === 'fulfilled') {
+        const jobs = Array.isArray(jobsResponse.value)
+          ? jobsResponse.value
+          : jobsResponse.value?.jobPostings || [];
+        const jobTitlesMap: Record<string, string> = {};
+        jobs.forEach((job: any) => {
+          const jobId = job?.id || (job?._id ? String(job._id) : null);
+          if (jobId && job?.title) {
+            jobTitlesMap[String(jobId)] = String(job.title);
+          }
+        });
+        setJobTitles(jobTitlesMap);
       }
 
     } catch (err) {
@@ -610,7 +628,7 @@ export default function OverviewPage() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h2 className="text-xl font-semibold text-foreground line-clamp-1">
-                              {app.position}
+                              {getPositionDisplay(app, jobTitles)}
                             </h2>
                             <p className="text-sm text-muted-foreground mt-1">
                               {firstName}
