@@ -112,19 +112,11 @@ export function useAdminApplicationPage({
       setError(null);
       
       const skip = (currentPage - 1) * pageSize;
-      // Try to resolve a jobId from the selected title for more reliable filtering
-      let selectedJobId: string | undefined = undefined;
-      if (selectedPosition && selectedPosition !== 'all') {
-        const entry = Object.entries(jobTitles).find(([, title]) => title === selectedPosition);
-        if (entry) selectedJobId = entry[0];
-      }
-
       const filters: ApplicationFilters = {
         skip,
         limit: pageSize,
         search: debouncedSearchTerm || undefined,
         position: selectedPosition !== 'all' ? selectedPosition : undefined,
-        jobId: selectedJobId,
       };
       
       let response;
@@ -212,8 +204,11 @@ export function useAdminApplicationPage({
       // Use the dedicated positions endpoint for better performance
       const response = await adminApplicationsApi.getApplicationPositions(statusType) as any;
       const positions = response.positions || [];
-      
-      const positionOptions = positions.map((pos: any) => pos.value || pos.label);
+
+      // Only show positions that currently have applications in this view
+      const positionOptions = positions
+        .filter((pos: any) => Number(pos?.count ?? 0) > 0)
+        .map((pos: any) => pos.value || pos.label);
       setPositionFilterOptions(positionOptions.sort((a: string, b: string) => a.localeCompare(b)));
     } catch (error) {
       console.error('Failed to load position options:', error);
