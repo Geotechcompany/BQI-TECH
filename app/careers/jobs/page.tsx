@@ -378,8 +378,8 @@ export default function JobsPage() {
                   onClick={() => setSelectedJob(job)}
                 >
                   <div className="flex flex-col gap-3">
-                    <div className="flex items-start justify-between">
-                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-lg sm:text-xl font-bold leading-snug mb-1 text-gray-900 group-hover:text-blue-600 transition-colors break-words">
                         {job.title}
                       </h3>
                       {new Date(job.postedDate) >
@@ -390,7 +390,7 @@ export default function JobsPage() {
                       )}
                     </div>
 
-                    <div className="text-gray-600 text-sm mb-3 line-clamp-2">
+                    <div className="mt-1 text-gray-600 text-sm leading-relaxed mb-3 line-clamp-2">
                       {job.description
                         ?.replace(/<[^>]*>/g, "")
                         .slice(0, 120)
