@@ -181,6 +181,9 @@ const StatusCard = ({
 export default function OverviewPage() {
   const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [allApplications, setAllApplications] = useState<Application[]>([]);
+  const [applicationsByJob, setApplicationsByJob] = useState<ApplicationsByJob | null>(null);
+  const [recentApplications, setRecentApplications] = useState<Application[]>([]);
+  const [trendData, setTrendData] = useState<any>(null);
   const [jobTitles, setJobTitles] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,9 +199,12 @@ export default function OverviewPage() {
       setError(null);
 
       // Load all data in parallel
-      const [overviewResponse, appsResponse, jobsResponse] = await Promise.allSettled([
+      const [overviewResponse, appsResponse, recentAppsResponse, trendsResponse, jobApplicationsResponse, jobsResponse] = await Promise.allSettled([
         adminApi.getOverview(),
-        adminApplicationsApi.getAllApplications({ limit: 2000 }),
+        adminApplicationsApi.getAllApplications({ limit: 100 }),
+        adminApi.getApplications({ limit: 10 }),
+        adminApi.getTrends(30),
+        adminApi.getApplicationsByJob(),
         adminApi.getJobPostings()
       ]);
 
@@ -211,6 +217,22 @@ export default function OverviewPage() {
       if (appsResponse.status === 'fulfilled') {
         const apps = appsResponse.value?.applications || [];
         setAllApplications(apps);
+      }
+
+      // Handle recent applications
+      if (recentAppsResponse.status === 'fulfilled') {
+        const apps = recentAppsResponse.value?.applications || [];
+        setRecentApplications(apps.slice(0, 8));
+      }
+
+      // Handle trends data
+      if (trendsResponse.status === 'fulfilled') {
+        setTrendData(trendsResponse.value);
+      }
+
+      // Handle applications by job data
+      if (jobApplicationsResponse.status === 'fulfilled') {
+        setApplicationsByJob(jobApplicationsResponse.value);
       }
 
       // Build a job title lookup for robust position rendering
@@ -313,11 +335,15 @@ export default function OverviewPage() {
 
   // Chart configurations
   const trendChartData = {
-    labels: computedStats.trendLabels,
+    labels:
+      trendData?.trends?.map((t: any) => {
+        const date = new Date(t._id);
+        return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      }) || computedStats.trendLabels,
     datasets: [
       {
         label: 'Applications',
-        data: computedStats.trendCounts,
+        data: trendData?.trends?.map((t: any) => t.count) || computedStats.trendCounts,
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         fill: true,
@@ -330,14 +356,19 @@ export default function OverviewPage() {
     ],
   };
 
+  const pieByJobData =
+    applicationsByJob?.applicationsByJob && applicationsByJob.applicationsByJob.length > 0
+      ? applicationsByJob.applicationsByJob
+      : computedStats.applicationsByJobData;
+
   const pieChartData = {
-    labels: computedStats.applicationsByJobData.map(item => {
+    labels: pieByJobData.map(item => {
       const position = item.position || 'Unknown Position';
       return position.length > 20 ? `${position.substring(0, 20)}...` : position;
     }) || [],
     datasets: [
       {
-        data: computedStats.applicationsByJobData.map(item => item.totalApplications || 0) || [],
+        data: pieByJobData.map(item => item.totalApplications || 0) || [],
         backgroundColor: [
           'rgba(59, 130, 246, 0.8)',
           'rgba(16, 185, 129, 0.8)',
@@ -480,7 +511,12 @@ export default function OverviewPage() {
 
   if (!overviewData) return null;
 
-  const totalApplications = computedStats.stats.total || 1;
+  const effectiveStats =
+    allApplications.length > 0
+      ? computedStats.stats
+      : (overviewData?.applications || computedStats.stats);
+
+  const totalApplications = effectiveStats.total || 1;
 
   return (
     <AdminPageLayout
@@ -509,7 +545,7 @@ export default function OverviewPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <MetricCard
               title="Total Applications"
-              value={computedStats.stats.total}
+              value={effectiveStats.total}
               icon={FileText}
               color="bg-blue-100 text-blue-600"
               path="/admin/applications"
@@ -527,7 +563,7 @@ export default function OverviewPage() {
             />
             <MetricCard
               title="Recent Applications"
-              value={computedStats.stats.recent}
+              value={effectiveStats.recent}
               icon={Activity}
               color="bg-purple-100 text-purple-600"
               path="/admin/applications"
@@ -549,48 +585,48 @@ export default function OverviewPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <StatusCard
               title="New"
-              count={computedStats.stats.new}
-              percentage={(computedStats.stats.new / totalApplications) * 100}
+              count={effectiveStats.new}
+              percentage={(effectiveStats.new / totalApplications) * 100}
               icon={FileText}
               color="bg-blue-100 text-blue-600"
               path="/admin/applications?status=new"
             />
             <StatusCard
               title="Shortlisted"
-              count={computedStats.stats.shortlisted}
-              percentage={(computedStats.stats.shortlisted / totalApplications) * 100}
+              count={effectiveStats.shortlisted}
+              percentage={(effectiveStats.shortlisted / totalApplications) * 100}
               icon={UserCheck}
               color="bg-green-100 text-green-600"
               path="/admin/shortlisted"
             />
             <StatusCard
               title="Interviewing"
-              count={computedStats.stats.interviewing}
-              percentage={(computedStats.stats.interviewing / totalApplications) * 100}
+              count={effectiveStats.interviewing}
+              percentage={(effectiveStats.interviewing / totalApplications) * 100}
               icon={MessageSquare}
               color="bg-purple-100 text-purple-600"
               path="/admin/interviewing"
             />
             <StatusCard
               title="Technical"
-              count={computedStats.stats.technical_assessment}
-              percentage={(computedStats.stats.technical_assessment / totalApplications) * 100}
+              count={effectiveStats.technical_assessment}
+              percentage={(effectiveStats.technical_assessment / totalApplications) * 100}
               icon={Code}
               color="bg-yellow-100 text-yellow-600"
               path="/admin/technical-assessment"
             />
             <StatusCard
               title="Hired"
-              count={computedStats.stats.hired}
-              percentage={(computedStats.stats.hired / totalApplications) * 100}
+              count={effectiveStats.hired}
+              percentage={(effectiveStats.hired / totalApplications) * 100}
               icon={CheckCircle}
               color="bg-emerald-100 text-emerald-600"
               path="/admin/hired"
             />
             <StatusCard
               title="Disqualified"
-              count={computedStats.stats.disqualified}
-              percentage={(computedStats.stats.disqualified / totalApplications) * 100}
+              count={effectiveStats.disqualified}
+              percentage={(effectiveStats.disqualified / totalApplications) * 100}
               icon={XCircle}
               color="bg-red-100 text-red-600"
               path="/admin/disqualified"
@@ -611,7 +647,7 @@ export default function OverviewPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                {computedStats.trendCounts.length > 0 ? (
+                {(trendData?.trends?.length || computedStats.trendCounts.length) > 0 ? (
                   <div className="h-80">
                     <Line data={trendChartData} options={chartOptions} />
                   </div>
@@ -637,7 +673,7 @@ export default function OverviewPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                {computedStats.applicationsByJobData.length > 0 ? (
+                {pieByJobData.length > 0 ? (
                   <div className="h-80">
                     <Doughnut data={pieChartData} options={pieChartOptions} />
                   </div>
@@ -669,9 +705,9 @@ export default function OverviewPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              {computedStats.recentApplications.length > 0 ? (
+              {(recentApplications.length > 0 || computedStats.recentApplications.length > 0) ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {computedStats.recentApplications.map((app) => {
+                  {(recentApplications.length > 0 ? recentApplications : computedStats.recentApplications).map((app) => {
                     const firstName = app.answers?.find(a => 
                       a.questionText === "First Name"
                     )?.answer || "Unknown";
