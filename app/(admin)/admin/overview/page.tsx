@@ -24,6 +24,7 @@ import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from 'next/link';
 import { adminApi } from '@/lib/api-backend';
+import { adminApplicationsApi } from '@/lib/admin-applications-api';
 import { toast } from 'react-hot-toast';
 import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
 import { Application } from "@/types/application";
@@ -205,7 +206,7 @@ export default function OverviewPage() {
       // Load all data in parallel
       const [overviewResponse, appsResponse, jobsResponse] = await Promise.allSettled([
         adminApi.getOverview(),
-        adminApi.getApplications({ limit: 2000 }),
+        adminApplicationsApi.getAllApplications({ limit: 2000 }),
         adminApi.getJobPostings()
       ]);
 
