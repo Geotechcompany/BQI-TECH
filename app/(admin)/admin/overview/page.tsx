@@ -71,12 +71,6 @@ interface ApplicationsByJob {
   }>;
 }
 
-interface JobOption {
-  id: string;
-  title: string;
-  isActive: boolean;
-}
-
 const statusColors = {
   New: 'bg-blue-100 text-blue-800',
   Shortlisted: 'bg-green-100 text-green-800',
@@ -187,12 +181,10 @@ const StatusCard = ({
 export default function OverviewPage() {
   const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [allApplications, setAllApplications] = useState<Application[]>([]);
-  const [jobs, setJobs] = useState<JobOption[]>([]);
   const [jobTitles, setJobTitles] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewApplication, setViewApplication] = useState<Application | null>(null);
-  const [overviewFilter, setOverviewFilter] = useState<string>("all");
 
   useEffect(() => {
     loadDashboardData();
@@ -227,19 +219,12 @@ export default function OverviewPage() {
           ? jobsResponse.value
           : jobsResponse.value?.jobPostings || [];
         const jobTitlesMap: Record<string, string> = {};
-        const normalizedJobs: JobOption[] = [];
         jobs.forEach((job: any) => {
           const jobId = job?.id || (job?._id ? String(job._id) : null);
           if (jobId && job?.title) {
             jobTitlesMap[String(jobId)] = String(job.title);
-            normalizedJobs.push({
-              id: String(jobId),
-              title: String(job.title),
-              isActive: Boolean(job?.isActive),
-            });
           }
         });
-        setJobs(normalizedJobs);
         setJobTitles(jobTitlesMap);
       }
 
@@ -252,48 +237,13 @@ export default function OverviewPage() {
     }
   };
 
-  const extractJobId = (application: any): string | undefined => {
-    const rawJobId = application?.jobId;
-    if (typeof rawJobId === "string" && rawJobId.trim()) return rawJobId.trim();
-    if (rawJobId && typeof rawJobId === "object") {
-      const objectId = rawJobId._id || rawJobId.id;
-      if (objectId) return String(objectId);
-    }
-    const detailsId = application?.jobDetails?._id || application?.jobDetails?.id;
-    return detailsId ? String(detailsId) : undefined;
-  };
-
-  const filteredApplications = useMemo(() => {
-    if (overviewFilter === "all") return allApplications;
-
-    if (overviewFilter === "active") {
-      const activeJobIds = new Set(
-        jobs.filter((job) => job.isActive).map((job) => job.id)
-      );
-
-      return allApplications.filter((application) => {
-        const jobId = extractJobId(application);
-        return jobId ? activeJobIds.has(jobId) : false;
-      });
-    }
-
-    if (overviewFilter.startsWith("job:")) {
-      const selectedJobId = overviewFilter.replace("job:", "");
-      return allApplications.filter(
-        (application) => extractJobId(application) === selectedJobId
-      );
-    }
-
-    return allApplications;
-  }, [allApplications, jobs, overviewFilter]);
-
   const computedStats = useMemo(() => {
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
     const stats = {
-      total: filteredApplications.length,
+      total: allApplications.length,
       new: 0,
       shortlisted: 0,
       interviewing: 0,
@@ -307,7 +257,7 @@ export default function OverviewPage() {
     const trendMap = new Map<string, number>();
     const byJobMap = new Map<string, number>();
 
-    filteredApplications.forEach((application) => {
+    allApplications.forEach((application) => {
       const status = String(application.status || "").toLowerCase();
       if (status === "new") stats.new += 1;
       else if (status === "shortlisted") stats.shortlisted += 1;
@@ -352,14 +302,14 @@ export default function OverviewPage() {
       trendLabels,
       trendCounts,
       applicationsByJobData,
-      recentApplications: [...filteredApplications]
+      recentApplications: [...allApplications]
         .sort(
           (a, b) =>
             new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
         )
         .slice(0, 8),
     };
-  }, [filteredApplications, jobTitles]);
+  }, [allApplications, jobTitles]);
 
   // Chart configurations
   const trendChartData = {
@@ -555,36 +505,6 @@ export default function OverviewPage() {
     >
       <div className="min-h-screen bg-background">
         <div className="space-y-8 p-4 md:p-6 w-full max-w-none">
-          <Card className="border-border shadow-sm">
-            <CardContent className="pt-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <h3 className="font-semibold text-foreground">Overview Filter</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Filter dashboard stats by active jobs or a selected job posting.
-                  </p>
-                </div>
-                <select
-                  value={overviewFilter}
-                  onChange={(e) => setOverviewFilter(e.target.value)}
-                  className="w-full sm:w-[320px] h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="all">All Jobs</option>
-                  <option value="active">Active Jobs Only</option>
-                  {jobs
-                    .slice()
-                    .sort((a, b) => a.title.localeCompare(b.title))
-                    .map((job) => (
-                      <option key={job.id} value={`job:${job.id}`}>
-                        {job.title}
-                        {job.isActive ? " (Active)" : " (Inactive)"}
-                      </option>
-                    ))}
-                </select>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <MetricCard
@@ -593,7 +513,7 @@ export default function OverviewPage() {
               icon={FileText}
               color="bg-blue-100 text-blue-600"
               path="/admin/applications"
-              subtitle={overviewFilter === "all" ? "All time applications" : "Filtered applications"}
+              subtitle="All time applications"
               trend={12}
             />
             <MetricCard
