@@ -351,6 +351,8 @@ export const adminApi = {
   },
 
   updateSettings: (data: any) => backendApi.put("/api/admin/settings", data),
+  syncDatabases: (collections?: string[]) =>
+    backendApi.post("/api/admin/settings/sync-databases", { collections }),
 
   // Get notifications
   async getNotifications() {

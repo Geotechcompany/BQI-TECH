@@ -6,6 +6,7 @@ import {
   Layout, 
   Bell, 
   Shield,
+  RefreshCw,
 } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,7 @@ function SettingsPageContent() {
   const { user, updateUserAvatar } = useAuth();
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncingDatabases, setIsSyncingDatabases] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { setTheme } = useTheme();
   const { updateTheme, updateSettings } = useSettings();
@@ -113,6 +115,19 @@ function SettingsPageContent() {
       toast.error(error.message || 'Failed to save settings');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleManualDatabaseSync = async () => {
+    if (isSyncingDatabases) return;
+    setIsSyncingDatabases(true);
+    try {
+      await adminApi.syncDatabases();
+      toast.success("Database sync completed");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to sync databases");
+    } finally {
+      setIsSyncingDatabases(false);
     }
   };
 
@@ -397,6 +412,25 @@ function SettingsPageContent() {
 
         {/* Save Button */}
         <div className="flex justify-end pt-6">
+          <Button
+            onClick={handleManualDatabaseSync}
+            disabled={isSyncingDatabases}
+            variant="outline"
+            size="lg"
+            className="mr-3 min-w-[170px]"
+          >
+            {isSyncingDatabases ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Sync Databases
+              </>
+            )}
+          </Button>
           <Button 
             onClick={handleSave} 
             disabled={isSaving}

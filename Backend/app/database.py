@@ -14,23 +14,42 @@ _client = None
 _database = None
 _reconnect_task = None
 _reconnect_stop_event = None
+_backup_client = None
+_backup_database = None
+_sync_task = None
+_sync_stop_event = None
 
-async def connect_to_database():
-	"""Connect to MongoDB database"""
+_DEFAULT_SYNC_COLLECTIONS = [
+	"users",
+	"applications",
+	"jobpostings",
+	"jobquestions",
+	"verification_codes",
+	"pending_registrations",
+	"email_campaigns",
+	"email_logs",
+	"notifications",
+	"user_notifications",
+	"settings",
+]
+
+
+def _build_mongo_candidates() -> list[str]:
+	"""Build ordered MongoDB URI candidates (primary first, backup second)."""
+	primary_uri = settings.MONGODB_URI or os.getenv("MONGODB_URI") or settings.DATABASE_URL
+	backup_uri = settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL")
+
+	candidates: list[str] = []
+	for candidate in [primary_uri, backup_uri]:
+		if candidate and candidate not in candidates:
+			candidates.append(candidate)
+	return candidates
+
+
+async def _try_connect(database_url: str, database_name: str) -> bool:
+	"""Try connecting to one MongoDB URI candidate."""
 	global _client, _database
-	
 	try:
-		# Try MONGODB_URI first, then DATABASE_URL from settings, then fallback
-		database_url = settings.MONGODB_URI or os.getenv("MONGODB_URI") or settings.DATABASE_URL
-		database_name = os.getenv("DATABASE_NAME", "BQITECH")
-		
-		logger.info(f"Connecting to MongoDB: {database_url[:30]}...")
-		
-		# Configure DNS resolver
-		dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
-		dns.resolver.default_resolver.nameservers = ['8.8.8.8', '8.8.4.4']  # Google DNS
-		
-		# Set a longer server selection timeout and other options
 		_client = AsyncIOMotorClient(
 			database_url,
 			serverSelectionTimeoutMS=30000,  # 30 seconds
@@ -41,19 +60,133 @@ async def connect_to_database():
 			w="majority"
 		)
 		_database = _client[database_name]
-		
-		# Test the connection with timeout
-		await _client.admin.command('ping', serverSelectionTimeoutMS=30000)
-		logger.info(f"Connected to MongoDB: {database_name}")
-		
-		# Initialize database indexes
-		await initialize_database_indexes()
-		
+		await _client.admin.command("ping", serverSelectionTimeoutMS=30000)
+		return True
 	except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-		logger.error(f"Failed to connect to MongoDB: {e}")
+		logger.error(f"Failed to connect to MongoDB candidate: {e}")
+		if _client is not None:
+			_client.close()
 		_client = None
 		_database = None
-		logger.warning("Continuing startup without database connection")
+		return False
+
+
+async def _get_backup_database():
+	"""Get or initialize backup database connection."""
+	global _backup_client, _backup_database
+	backup_uri = settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL")
+	if not backup_uri:
+		return None
+
+	if _backup_client is not None and _backup_database is not None:
+		try:
+			await _backup_client.admin.command("ping", serverSelectionTimeoutMS=5000)
+			return _backup_database
+		except Exception:
+			try:
+				_backup_client.close()
+			except Exception:
+				pass
+			_backup_client = None
+			_backup_database = None
+
+	database_name = os.getenv("DATABASE_NAME", "BQITECH")
+	try:
+		_backup_client = AsyncIOMotorClient(
+			backup_uri,
+			serverSelectionTimeoutMS=10000,
+			connectTimeoutMS=10000,
+			socketTimeoutMS=10000,
+			waitQueueTimeoutMS=10000,
+			retryWrites=True,
+			w="majority"
+		)
+		_backup_database = _backup_client[database_name]
+		await _backup_client.admin.command("ping", serverSelectionTimeoutMS=10000)
+		return _backup_database
+	except Exception as e:
+		logger.error(f"Failed to connect to backup MongoDB: {e}")
+		if _backup_client is not None:
+			_backup_client.close()
+		_backup_client = None
+		_backup_database = None
+		return None
+
+
+async def sync_databases_now(collections: list[str] | None = None) -> dict:
+	"""Sync primary database collections to backup database."""
+	if not is_connected():
+		return {"success": False, "message": "Primary database not connected"}
+
+	backup_db = await _get_backup_database()
+	if backup_db is None:
+		return {"success": False, "message": "Backup database not available"}
+
+	source_db = get_database()
+	collection_names = collections or _DEFAULT_SYNC_COLLECTIONS
+	result = {
+		"success": True,
+		"collections": {},
+		"syncedAt": asyncio.get_event_loop().time(),
+	}
+
+	for collection_name in collection_names:
+		try:
+			source_collection = source_db[collection_name]
+			target_collection = backup_db[collection_name]
+			synced_count = 0
+
+			async for document in source_collection.find({}):
+				document_id = document.get("_id")
+				if document_id is None:
+					continue
+				await target_collection.replace_one({"_id": document_id}, document, upsert=True)
+				synced_count += 1
+
+			result["collections"][collection_name] = {
+				"success": True,
+				"syncedCount": synced_count,
+			}
+		except Exception as e:
+			result["success"] = False
+			result["collections"][collection_name] = {
+				"success": False,
+				"error": str(e),
+			}
+
+	return result
+
+async def connect_to_database():
+	"""Connect to MongoDB database"""
+	global _client, _database
+	
+	try:
+		# Try primary URI first, then backup URI
+		candidates = _build_mongo_candidates()
+		database_name = os.getenv("DATABASE_NAME", "BQITECH")
+
+		if not candidates:
+			logger.error("No MongoDB URI configured (MONGODB_URI/BACKUP_MONGO_URL)")
+			_client = None
+			_database = None
+			return
+		
+		# Configure DNS resolver
+		dns.resolver.default_resolver = dns.resolver.Resolver(configure=False)
+		dns.resolver.default_resolver.nameservers = ['8.8.8.8', '8.8.4.4']  # Google DNS
+
+		connected = False
+		for index, candidate in enumerate(candidates):
+			label = "primary" if index == 0 else f"backup-{index}"
+			logger.info(f"Connecting to MongoDB using {label} URI...")
+			connected = await _try_connect(candidate, database_name)
+			if connected:
+				logger.info(f"Connected to MongoDB ({label}): {database_name}")
+				await initialize_database_indexes()
+				break
+
+		if not connected:
+			logger.warning("Continuing startup without database connection")
 	except Exception as e:
 		logger.error(f"Unexpected error connecting to MongoDB: {e}")
 		_client = None
@@ -62,12 +195,17 @@ async def connect_to_database():
 
 async def close_database_connection():
 	"""Close database connection"""
-	global _client, _database
+	global _client, _database, _backup_client, _backup_database
 	if _client is not None:
 		_client.close()
 		_client = None
 		_database = None
 		logger.info("Disconnected from MongoDB")
+	if _backup_client is not None:
+		_backup_client.close()
+		_backup_client = None
+		_backup_database = None
+		logger.info("Disconnected from backup MongoDB")
 
 
 async def _reconnect_loop():
@@ -93,30 +231,67 @@ async def _reconnect_loop():
 		backoff_seconds = min(backoff_seconds * 2, max_backoff_seconds)
 
 
+async def _sync_loop():
+	"""Background loop that keeps backup database in sync."""
+	global _sync_stop_event
+	interval_seconds = int(os.getenv("DB_SYNC_INTERVAL_SECONDS", "300"))
+
+	while _sync_stop_event and not _sync_stop_event.is_set():
+		if is_connected():
+			try:
+				sync_result = await sync_databases_now()
+				if sync_result.get("success"):
+					logger.info("Database sync completed successfully")
+				else:
+					logger.warning(f"Database sync completed with warnings: {sync_result.get('message', 'partial failures')}")
+			except Exception as e:
+				logger.error(f"Automatic database sync failed: {e}")
+
+		try:
+			await asyncio.wait_for(_sync_stop_event.wait(), timeout=interval_seconds)
+			break
+		except asyncio.TimeoutError:
+			pass
+
+
 def start_reconnect_task():
 	"""Start database reconnect background task if not running."""
-	global _reconnect_task, _reconnect_stop_event
+	global _reconnect_task, _reconnect_stop_event, _sync_task, _sync_stop_event
 	if _reconnect_task and not _reconnect_task.done():
-		return
+		pass
+	else:
+		_reconnect_stop_event = asyncio.Event()
+		_reconnect_task = asyncio.create_task(_reconnect_loop())
 
-	_reconnect_stop_event = asyncio.Event()
-	_reconnect_task = asyncio.create_task(_reconnect_loop())
+	backup_uri = settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL")
+	if backup_uri and (_sync_task is None or _sync_task.done()):
+		_sync_stop_event = asyncio.Event()
+		_sync_task = asyncio.create_task(_sync_loop())
 
 
 async def stop_reconnect_task():
 	"""Stop database reconnect background task."""
-	global _reconnect_task, _reconnect_stop_event
+	global _reconnect_task, _reconnect_stop_event, _sync_task, _sync_stop_event
 	if _reconnect_stop_event:
 		_reconnect_stop_event.set()
+	if _sync_stop_event:
+		_sync_stop_event.set()
 
 	if _reconnect_task:
 		try:
 			await _reconnect_task
 		except Exception as e:
 			logger.warning(f"Reconnect task stopped with error: {e}")
+	if _sync_task:
+		try:
+			await _sync_task
+		except Exception as e:
+			logger.warning(f"Sync task stopped with error: {e}")
 
 	_reconnect_task = None
 	_reconnect_stop_event = None
+	_sync_task = None
+	_sync_stop_event = None
 
 async def disconnect_from_database():
 	"""Alias for close_database_connection for compatibility"""

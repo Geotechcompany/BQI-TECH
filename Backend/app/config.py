@@ -15,6 +15,7 @@ class Settings(BaseModel):
     # Database
     DATABASE_URL: str = Field(default=os.getenv("MONGODB_URI"))
     MONGODB_URI: Optional[str] = Field(default=os.getenv("MONGODB_URI"))
+    BACKUP_MONGO_URL: Optional[str] = Field(default=os.getenv("BACKUP_MONGO_URL"))
     mongodb_uri: Optional[str] = os.getenv("MONGODB_URI")
     
     # API

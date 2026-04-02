@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body, UploadFile, 
 from typing import List, Optional, Dict, Any
 from app.auth import get_current_admin_user, get_current_user
 from app.models import User, Application, Job, BlogPost, Question
-from app.database import get_database
+from app.database import get_database, sync_databases_now
 from bson import ObjectId
 from bson.errors import InvalidId
 from datetime import datetime, timedelta
@@ -2445,6 +2445,32 @@ async def update_admin_settings(
         logger.error(f"Error in update_admin_settings: {str(e)}")
         logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/settings/sync-databases")
+async def sync_databases_manual(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Manual trigger: sync primary database data to backup database."""
+    try:
+        collections = payload.get("collections")
+        if collections is not None and not isinstance(collections, list):
+            raise HTTPException(status_code=400, detail="collections must be an array of collection names")
+
+        result = await sync_databases_now(collections=collections)
+        if not result.get("success"):
+            message = result.get("message", "Database sync failed")
+            status_code = 503 if "not" in message.lower() else 500
+            raise HTTPException(status_code=status_code, detail=message)
+
+        return {"message": "Database sync completed", "result": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in sync_databases_manual: {str(e)}")
+        logger.exception("Full traceback:")
+        raise HTTPException(status_code=500, detail="Failed to sync databases")
 
 @router.get("/notifications")
 async def get_admin_notifications(
