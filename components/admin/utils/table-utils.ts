@@ -136,12 +136,34 @@ export const extractDataFromAnswers = (answers: any[], type: 'name' | 'email' | 
 
 // Enhanced position extraction that handles jobId references
 export const getPositionDisplay = (row: Application, jobTitles: Record<string, string>): string => {
+  // Highest priority: resolved title from joined job details
+  const joinedJobTitle = (row as any)?.jobDetails?.title;
+  if (typeof joinedJobTitle === "string" && joinedJobTitle.trim() !== "") {
+    return joinedJobTitle.trim();
+  }
+
   // First priority: Use jobId reference system
   if (row.jobId) {
-    const jobIdStr = String(row.jobId);
-    const jobTitle = jobTitles[jobIdStr];
-    if (jobTitle) {
-      return jobTitle.trim();
+    // Support string jobId and object-shaped jobId payloads
+    if (typeof row.jobId === "string") {
+      const jobTitle = jobTitles[row.jobId];
+      if (jobTitle) {
+        return jobTitle.trim();
+      }
+    } else if (typeof row.jobId === "object") {
+      const objectJobId = (row.jobId as any)?._id;
+      const objectJobTitle = (row.jobId as any)?.title;
+
+      if (typeof objectJobTitle === "string" && objectJobTitle.trim() !== "") {
+        return objectJobTitle.trim();
+      }
+
+      if (typeof objectJobId === "string") {
+        const jobTitle = jobTitles[objectJobId];
+        if (jobTitle) {
+          return jobTitle.trim();
+        }
+      }
     }
   }
   

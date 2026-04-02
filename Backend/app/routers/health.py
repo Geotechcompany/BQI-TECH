@@ -14,6 +14,8 @@ async def health_check():
             raise HTTPException(status_code=503, detail="Database not connected")
             
         # Try to ping the database
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not connected")
         await db.command("ping")
         
         return {
@@ -21,13 +23,16 @@ async def health_check():
             "database": "connected",
             "message": "API and database are running"
         }
+    except HTTPException:
+        raise
     except ConnectionFailure as e:
         raise HTTPException(
             status_code=503,
             detail=f"Database connection failed: {str(e)}"
         )
     except Exception as e:
+        error_message = str(e) or e.__class__.__name__
         raise HTTPException(
-            status_code=500,
-            detail=f"Health check failed: {str(e)}"
+            status_code=503,
+            detail=f"Health check failed: {error_message}"
         ) 

@@ -43,6 +43,23 @@ class ResetPasswordRequest(BaseModel):
     token: str
     password: str
 
+
+def _extract_email_from_body(payload: Any) -> str:
+    """Accept raw string or JSON object {email} payloads."""
+    if isinstance(payload, str):
+        email = payload.strip()
+    elif isinstance(payload, dict):
+        email = str(payload.get("email", "")).strip()
+    else:
+        email = ""
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Email is required"
+        )
+    return email.lower()
+
 @router.post("/login")
 @limiter.limit("5/minute")
 async def login(
@@ -184,6 +201,12 @@ async def signup(
         from app.lib.email import send_verification_code
         
         db = get_database()
+        if db is None:
+            logger.error("Database not connected during signup attempt")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database not connected"
+            )
         
         # Normalize email to lowercase
         email = email.lower()
@@ -250,9 +273,10 @@ async def signup(
     except Exception as e:
         logger.error(f"Signup error: {str(e)}")
         logger.exception("Full traceback:")
+        error_message = str(e) or e.__class__.__name__
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail=f"Signup failed: {error_message}"
         )
 
 @router.get("/me")
@@ -720,14 +744,22 @@ async def reset_password(data: ResetPasswordRequest):
 @limiter.limit("5/minute")
 async def send_verification_code_endpoint(
     request: Request,
-    email: str = Body(...)
+    payload: Any = Body(...)
 ):
     """Send verification code to email"""
     try:
         from app.lib.email import send_verification_code
         
         db = get_database()
+        if db is None:
+            logger.error("Database not connected during send verification code request")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database not connected"
+            )
         
+        email = _extract_email_from_body(payload)
+
         # Try to find user in main collection first
         user = await db.users.find_one({"email": email})
         pending_registration = None

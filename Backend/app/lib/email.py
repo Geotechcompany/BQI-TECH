@@ -42,6 +42,9 @@ async def store_verification_code(email: str, code: str, expires_in_minutes: int
     """Store verification code in database with expiration"""
     try:
         db = get_database()
+        if db is None:
+            logger.error("Database not connected while storing verification code")
+            return False
         
         # Calculate expiration time
         expires_at = datetime.utcnow() + timedelta(minutes=expires_in_minutes)

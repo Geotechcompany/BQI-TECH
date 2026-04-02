@@ -21,6 +21,18 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
+def _normalize_description(raw_description: Any) -> str:
+    """Normalize description text by removing HTML entities and extra spaces."""
+    if not isinstance(raw_description, str):
+        return ""
+    return (
+        raw_description
+        .replace("&nbsp;", " ")
+        .replace("\\s+", " ")
+        .strip()
+    )
+
 @router.get("/{job_id}", include_in_schema=True)
 async def get_job_by_id(
     request: Request,
@@ -35,6 +47,8 @@ async def get_job_by_id(
             raise HTTPException(status_code=503, detail="Database not available")
             
         db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         try:
             job = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
@@ -50,12 +64,7 @@ async def get_job_by_id(
         
         # Clean up HTML entities in description
         if "description" in job:
-            job["description"] = (
-                job["description"]
-                .replace("&nbsp;", " ")  # Replace &nbsp; with regular space
-                .replace("\\s+", " ")    # Normalize multiple spaces
-                .strip()                 # Trim extra spaces
-            )
+            job["description"] = _normalize_description(job["description"])
         
         if "createdAt" in job:
             job["createdAt"] = job["createdAt"].isoformat()
@@ -74,6 +83,8 @@ async def get_job_by_id(
                 "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in get_job_by_id: {str(e)}")
         logger.exception("Full traceback:")
@@ -93,6 +104,8 @@ async def get_job_questions(
             raise HTTPException(status_code=503, detail="Database not available")
             
         db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         # First check if the job exists
         try:
@@ -143,6 +156,8 @@ async def get_job_questions(
                 "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in get_job_questions: {str(e)}")
         logger.exception("Full traceback:")
@@ -164,6 +179,8 @@ async def get_jobs(
             raise HTTPException(status_code=503, detail="Database not available")
             
         db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
         
         filter_query = {"isActive": True}  # Only return active jobs
         if status:
@@ -179,12 +196,7 @@ async def get_jobs(
             
             # Clean up HTML entities in description
             if "description" in job:
-                job["description"] = (
-                    job["description"]
-                    .replace("&nbsp;", " ")  # Replace &nbsp; with regular space
-                    .replace("\\s+", " ")    # Normalize multiple spaces
-                    .strip()                 # Trim extra spaces
-                )
+                job["description"] = _normalize_description(job["description"])
             
             # Format dates if they exist
             if "createdAt" in job:
@@ -211,6 +223,8 @@ async def get_jobs(
                 "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in get_jobs: {str(e)}")
         logger.exception("Full traceback:")

@@ -201,7 +201,7 @@ async def options_resend_verification(request: Request):
 @router.post("/resend-verification")
 async def resend_verification_email(
     request: Request,
-    email: str = Body(...),
+    payload: Any = Body(...),
     current_user: dict = Depends(get_current_user)
 ):
     """Resend email verification code"""
@@ -209,6 +209,18 @@ async def resend_verification_email(
         from app.lib.email import send_verification_code
         
         db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not connected")
+
+        if isinstance(payload, str):
+            email = payload.strip().lower()
+        elif isinstance(payload, dict):
+            email = str(payload.get("email", "")).strip().lower()
+        else:
+            email = ""
+
+        if not email:
+            raise HTTPException(status_code=422, detail="Email is required")
         
         # Check if user exists in main users collection
         user = await db.users.find_one({"_id": ObjectId(current_user["_id"])})
@@ -264,6 +276,8 @@ async def resend_verification_email(
                 "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-User-Session"
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error resending verification email: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

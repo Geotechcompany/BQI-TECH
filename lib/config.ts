@@ -4,8 +4,8 @@
  */
 
 export const API_CONFIG = {
-  BACKEND_URL: "https://api.bqitech.com",
-  APP_URL: "https://bqitech.com",
+  BACKEND_URL: "http://localhost:10000",
+  APP_URL: "http://localhost:3000",
 } as const;
 
 // Export individual values for convenience

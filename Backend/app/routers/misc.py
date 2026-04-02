@@ -35,8 +35,10 @@ async def get_cookie_consent(request: Request):
         # Get user IP or session identifier
         client_id = get_real_client_ip(request) or "unknown"
         
-        # Try to find existing consent for this client
-        consent = await db.cookie_consents.find_one({"client_id": client_id})
+        # When database is unavailable, still return a safe default payload.
+        consent = None
+        if db is not None:
+            consent = await db.cookie_consents.find_one({"client_id": client_id})
         
         # Default cookie policy information
         cookie_policy = {
@@ -87,6 +89,8 @@ async def get_cookie_consent(request: Request):
                 "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept"
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Cookie consent error: {e}")
         logger.exception("Full traceback:")
@@ -119,12 +123,14 @@ async def set_cookie_consent(request: Request, preferences: Dict[str, Any]):
             "ipAddress": client_id
         }
         
-        # Save to database (upsert)
-        await db.cookie_consents.update_one(
-            {"client_id": client_id},
-            {"$set": consent_data},
-            upsert=True
-        )
+        # Save to database when available. We still return success response so
+        # consent cookies work during temporary database outages.
+        if db is not None:
+            await db.cookie_consents.update_one(
+                {"client_id": client_id},
+                {"$set": consent_data},
+                upsert=True
+            )
         
         # Create a response with the cookie consent preferences
         response_data = {
@@ -168,6 +174,8 @@ async def set_cookie_consent(request: Request, preferences: Dict[str, Any]):
             )
         
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error setting cookie consent: {str(e)}")
         logger.exception("Full traceback:")
