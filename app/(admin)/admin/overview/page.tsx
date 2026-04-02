@@ -478,7 +478,7 @@ export default function OverviewPage() {
   if (isLoading) return (
     <AdminPageLayout title="Dashboard Overview" showSearch={false}>
       <div className="min-h-screen">
-        <div className="space-y-8 p-4 md:p-6 w-full max-w-none">
+        <div className="space-y-8 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
           </div>
@@ -540,7 +540,7 @@ export default function OverviewPage() {
       }
     >
       <div className="min-h-screen bg-background">
-        <div className="space-y-8 p-4 md:p-6 w-full max-w-none">
+        <div className="space-y-8 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <MetricCard

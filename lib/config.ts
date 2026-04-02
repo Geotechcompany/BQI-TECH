@@ -4,7 +4,7 @@
  */
 
 export const API_CONFIG = {
-  BACKEND_URL: "http://localhost:10000",
+  BACKEND_URL: "http://localhost:9000",
   APP_URL: "http://localhost:3000",
 } as const;
 

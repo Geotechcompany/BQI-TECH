@@ -38,7 +38,7 @@ export function AdminPageLayout({
     >
       {/* Header Section */}
       <div className="flex-shrink-0">
-        <div className="h-16">
+        <div style={{ height: "calc(4rem + var(--admin-banner-offset, 0px))" }}>
           {/* This empty div accounts for the fixed header height */}
         </div>
         <AdminPageHeader title={title} showSearch={showSearch} onSearch={onSearch} />
