@@ -10,6 +10,7 @@ import { Pagination } from "@/components/Pagination";
 import { useAdminApplicationPage } from "@/hooks/useAdminApplicationPage";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { FailedStatusState } from "@/components/ui/failed-status-state";
 
 export default function ShortlistedPage() {
   const {
@@ -62,7 +63,7 @@ export default function ShortlistedPage() {
   if (error) {
     return (
       <AdminPageLayout title="Shortlisted Applications" showSearch={false}>
-        <div className="text-center text-red-600">Failed to load shortlisted applications</div>
+        <FailedStatusState message="Failed to load shortlisted applications" />
       </AdminPageLayout>
     );
   }

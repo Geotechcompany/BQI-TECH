@@ -9,6 +9,7 @@ import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
 import { EditApplicationModal } from "@/components/admin/EditApplicationModal";
 import { DeleteApplicationModal } from "@/components/admin/DeleteApplicationModal";
 import Loader from "../Loader";
+import { FailedStatusState } from "@/components/ui/failed-status-state";
 import { Application } from "@/types/application";
 import { useRouter } from "next/router";
 
@@ -116,7 +117,7 @@ export default function ApplicationsPage() {
     },
   ];
 
-  if (error) return <div>Failed to load applications</div>;
+  if (error) return <FailedStatusState message="Failed to load applications" />;
   if (!applications) return <Loader />;
 
   const filteredApplications = applications.filter(

@@ -6,6 +6,7 @@ import { BACKEND_URL } from "@/lib/config";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { FailedStatusState } from "@/components/ui/failed-status-state";
 import { adminApi } from "@/lib/api-backend";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
@@ -39,7 +40,7 @@ export default function SurveyAnalyticsPage() {
   }, [surveyId]);
 
   if (loading) return <div className="p-6">Loading analytics...</div>;
-  if (!data) return <div className="p-6">Failed to load analytics.</div>;
+  if (!data) return <FailedStatusState message="Failed to load analytics." className="p-6" />;
 
   const s = data.survey || {};
 

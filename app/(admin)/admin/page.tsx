@@ -10,6 +10,7 @@ import { Pagination } from "@/components/Pagination";
 import { useAdminApplicationPage } from "@/hooks/useAdminApplicationPage";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { FailedStatusState } from "@/components/ui/failed-status-state";
 
 export default function ApplicationsPage() {
   const {
@@ -61,7 +62,7 @@ export default function ApplicationsPage() {
   if (error) {
     return (
       <AdminPageLayout title="All Applications" showSearch={false}>
-        <div className="text-center text-red-600">Failed to load applications</div>
+        <FailedStatusState message="Failed to load applications" />
       </AdminPageLayout>
     );
   }

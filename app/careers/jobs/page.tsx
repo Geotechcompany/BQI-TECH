@@ -17,6 +17,7 @@ import {
 import { JobPosting } from "@/types/jobPosting";
 import Loader from "@/components/Loader";
 import { SafeHtml } from "@/components/ui/safe-html";
+import { FailedStatusState } from "@/components/ui/failed-status-state";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "react-hot-toast";
 import { BACKEND_URL } from "@/lib/config";
@@ -214,7 +215,7 @@ export default function JobsPage() {
   };
 
   if (isLoading) return <Loader />;
-  if (error) return <div>Failed to load jobs</div>;
+  if (error) return <FailedStatusState message="Failed to load jobs" />;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white -mt-[80px]">

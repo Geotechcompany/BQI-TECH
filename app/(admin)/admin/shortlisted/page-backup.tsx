@@ -16,6 +16,7 @@ import { adminApi } from "@/lib/api-backend";
 import { toast } from "react-hot-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { FailedStatusState } from "@/components/ui/failed-status-state";
 
 const fetcher = async (url: string) => {
   const session = authService.getSession();
@@ -181,7 +182,7 @@ export default function ShortlistedPage() {
     return null; // Router will handle the redirect
   }
 
-  if (error) return <div>Failed to load shortlisted applications</div>;
+  if (error) return <FailedStatusState message="Failed to load shortlisted applications" />;
 
   function handleView(id: string) {
     const application = applications.find((app) => app.id === id);

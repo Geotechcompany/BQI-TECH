@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Download, FileText, Sheet, ArrowUpDown } from "lucide-react";
+import { FailedStatusState } from "@/components/ui/failed-status-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,7 +77,7 @@ export default function ApplicationsPage() {
   if (error) {
     return (
       <AdminPageLayout title="Applications" showSearch={false}>
-        <div className="text-center text-red-600">Failed to load applications</div>
+        <FailedStatusState message="Failed to load applications" />
       </AdminPageLayout>
     );
   }
