@@ -11,7 +11,14 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.utils.ip_utils import get_real_client_ip
 
-from .database import connect_to_database, close_database_connection, get_database, is_connected
+from .database import (
+    connect_to_database,
+    close_database_connection,
+    get_database,
+    is_connected,
+    start_reconnect_task,
+    stop_reconnect_task,
+)
 from .config import settings
 
 # Import routers directly from modules
@@ -53,9 +60,11 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up...")
     await connect_to_database()
+    start_reconnect_task()
     yield
     # Shutdown
     logger.info("Shutting down...")
+    await stop_reconnect_task()
     await close_database_connection()
 
 # Create rate limiter with accurate IP detection

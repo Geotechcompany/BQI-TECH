@@ -1,4 +1,5 @@
 import os
+import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 import logging
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 # Global variable to store the database connection
 _client = None
 _database = None
+_reconnect_task = None
+_reconnect_stop_event = None
 
 async def connect_to_database():
 	"""Connect to MongoDB database"""
@@ -65,6 +68,55 @@ async def close_database_connection():
 		_client = None
 		_database = None
 		logger.info("Disconnected from MongoDB")
+
+
+async def _reconnect_loop():
+	"""Background reconnect loop for transient Mongo outages."""
+	global _reconnect_stop_event
+	backoff_seconds = 5
+	max_backoff_seconds = 60
+
+	while _reconnect_stop_event and not _reconnect_stop_event.is_set():
+		if is_connected():
+			backoff_seconds = 5
+			await asyncio.sleep(5)
+			continue
+
+		logger.warning(f"Database disconnected; retrying MongoDB connection in {backoff_seconds}s")
+		try:
+			await asyncio.wait_for(_reconnect_stop_event.wait(), timeout=backoff_seconds)
+			break
+		except asyncio.TimeoutError:
+			pass
+
+		await connect_to_database()
+		backoff_seconds = min(backoff_seconds * 2, max_backoff_seconds)
+
+
+def start_reconnect_task():
+	"""Start database reconnect background task if not running."""
+	global _reconnect_task, _reconnect_stop_event
+	if _reconnect_task and not _reconnect_task.done():
+		return
+
+	_reconnect_stop_event = asyncio.Event()
+	_reconnect_task = asyncio.create_task(_reconnect_loop())
+
+
+async def stop_reconnect_task():
+	"""Stop database reconnect background task."""
+	global _reconnect_task, _reconnect_stop_event
+	if _reconnect_stop_event:
+		_reconnect_stop_event.set()
+
+	if _reconnect_task:
+		try:
+			await _reconnect_task
+		except Exception as e:
+			logger.warning(f"Reconnect task stopped with error: {e}")
+
+	_reconnect_task = None
+	_reconnect_stop_event = None
 
 async def disconnect_from_database():
 	"""Alias for close_database_connection for compatibility"""
