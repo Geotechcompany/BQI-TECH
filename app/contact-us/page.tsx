@@ -65,8 +65,9 @@ export default function ContactUsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFormEnabled, setIsFormEnabled] = useState(true);
   const [minMessageChars, setMinMessageChars] = useState(25);
-  const [isCaptchaEnabled, setIsCaptchaEnabled] = useState(true);
+  const [isCaptchaEnabled, setIsCaptchaEnabled] = useState(false);
   const recaptchaRef = useRef<ReCAPTCHA | null>(null);
+  const shouldUseRecaptcha = isCaptchaEnabled && !!recaptchaSiteKey;
 
   useEffect(() => {
     (async () => {
@@ -74,10 +75,12 @@ export default function ContactUsPage() {
         const status = await publicApi.getContactFormStatus();
         setIsFormEnabled(Boolean(status?.enabled ?? true));
         setMinMessageChars(Number(status?.minMessageChars ?? 25));
-        setIsCaptchaEnabled(Boolean(status?.captchaEnabled ?? true));
+        setIsCaptchaEnabled(Boolean(status?.captchaEnabled ?? false));
         setRecaptchaSiteKey(String(status?.recaptchaSiteKey || ''));
       } catch {
         setIsFormEnabled(true);
+        setIsCaptchaEnabled(false);
+        setRecaptchaSiteKey('');
       }
     })();
   }, []);
@@ -96,7 +99,7 @@ export default function ContactUsPage() {
       toast.error(`Message must be at least ${minMessageChars} characters.`);
       return;
     }
-    if (isCaptchaEnabled && !recaptchaSiteKey) {
+    if (shouldUseRecaptcha && !recaptchaSiteKey) {
       toast.error('reCAPTCHA site key is missing. Please contact support.');
       return;
     }
@@ -116,7 +119,7 @@ export default function ContactUsPage() {
         position: 'top-center'
       });
     } finally {
-      if (isCaptchaEnabled) {
+      if (shouldUseRecaptcha) {
         recaptchaRef.current?.reset();
         setFormData((prev) => ({ ...prev, recaptchaToken: '' }));
       }
@@ -247,7 +250,7 @@ export default function ContactUsPage() {
                 ></textarea>
               </div>
 
-              {isCaptchaEnabled && (
+              {shouldUseRecaptcha && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
                     Security Check
@@ -276,7 +279,7 @@ export default function ContactUsPage() {
                 className="w-full bg-gradient-to-r from-teal-500 to-blue-500 text-white px-8 py-4 rounded-xl font-medium inline-flex items-center justify-center space-x-2 shadow-lg shadow-teal-500/25 hover:shadow-xl hover:shadow-teal-500/40 transition-all duration-300"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
-                disabled={isLoading || !isFormEnabled || (isCaptchaEnabled && !formData.recaptchaToken)}
+                disabled={isLoading || !isFormEnabled || (shouldUseRecaptcha && !formData.recaptchaToken)}
               >
                 <span>{isLoading ? 'Sending...' : 'Send Message'}</span>
                 <Send className="w-5 h-5" />
