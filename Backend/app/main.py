@@ -162,7 +162,7 @@ async def add_security_headers(request: Request, call_next):
                 "style-src 'self' 'unsafe-inline'; "
                 "frame-src 'self' https://www.google.com/ https://www.google.com/recaptcha/ https://app.thinkstack.ai; "
                 "img-src 'self' data: https:; "
-                "connect-src 'self' https://api.bqitech.com;"
+                "connect-src 'self' https://api.bqitech.com https://www.google.com https://www.google.com/recaptcha/ https://www.gstatic.com https://www.gstatic.com/recaptcha/;"
             )
     
     return response
