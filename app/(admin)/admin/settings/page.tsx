@@ -150,7 +150,10 @@ function SettingsPageContent() {
 
   const loadRecaptchaSettings = async () => {
     try {
-      const response = await adminApi.getRecaptchaSettings();
+      const getRecaptchaSettingsApi = (adminApi as any).getRecaptchaSettings;
+      const response = getRecaptchaSettingsApi
+        ? await getRecaptchaSettingsApi()
+        : {};
       setRecaptchaSiteKey(String((response as any)?.siteKey || ""));
       setHasRecaptchaSecret(Boolean((response as any)?.hasSecretKey));
     } catch (error) {
@@ -179,10 +182,13 @@ function SettingsPageContent() {
       await adminApi.updateSettings(payload);
       // Save reCAPTCHA settings if provided
       if (recaptchaSiteKey.trim() || recaptchaSecretKey.trim()) {
-        await adminApi.updateRecaptchaSettings({
-          siteKey: recaptchaSiteKey.trim() || undefined,
-          secretKey: recaptchaSecretKey.trim() || undefined,
-        });
+        const updateRecaptchaSettingsApi = (adminApi as any).updateRecaptchaSettings;
+        if (updateRecaptchaSettingsApi) {
+          await updateRecaptchaSettingsApi({
+            siteKey: recaptchaSiteKey.trim() || undefined,
+            secretKey: recaptchaSecretKey.trim() || undefined,
+          });
+        }
       }
       // Reload from server to confirm persistence
       await loadSettings();
