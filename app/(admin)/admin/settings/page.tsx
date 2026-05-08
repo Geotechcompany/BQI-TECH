@@ -131,7 +131,10 @@ function SettingsPageContent() {
   const loadContactAnalytics = async () => {
     try {
       setIsLoadingAnalytics(true);
-      const response = await adminApi.getContactProtectionAnalytics({ days: 7, limit: 20 });
+      const analyticsApi = (adminApi as any).getContactProtectionAnalytics;
+      const response = analyticsApi
+        ? await analyticsApi({ days: 7, limit: 20 })
+        : { events: [] };
       setContactSpamEvents((response as any)?.events ?? []);
     } catch (error) {
       console.error('Failed to load contact spam analytics:', error);
