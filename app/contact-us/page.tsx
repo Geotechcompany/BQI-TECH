@@ -65,6 +65,7 @@ export default function ContactUsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isFormEnabled, setIsFormEnabled] = useState(true);
   const [minMessageChars, setMinMessageChars] = useState(25);
+  const [maxMessageChars, setMaxMessageChars] = useState(2000);
   const [isCaptchaEnabled, setIsCaptchaEnabled] = useState(false);
   const recaptchaRef = useRef<ReCAPTCHA | null>(null);
   const shouldUseRecaptcha = isCaptchaEnabled && !!recaptchaSiteKey;
@@ -75,6 +76,7 @@ export default function ContactUsPage() {
         const status = await publicApi.getContactFormStatus();
         setIsFormEnabled(Boolean(status?.enabled ?? true));
         setMinMessageChars(Number(status?.minMessageChars ?? 25));
+        setMaxMessageChars(Number(status?.maxMessageChars ?? 2000));
         setIsCaptchaEnabled(Boolean(status?.captchaEnabled ?? false));
         setRecaptchaSiteKey(String(status?.recaptchaSiteKey || ''));
       } catch {
@@ -97,6 +99,10 @@ export default function ContactUsPage() {
     }
     if (formData.message.trim().length < minMessageChars) {
       toast.error(`Message must be at least ${minMessageChars} characters.`);
+      return;
+    }
+    if (formData.message.trim().length > maxMessageChars) {
+      toast.error(`Message must be at most ${maxMessageChars} characters.`);
       return;
     }
     if (shouldUseRecaptcha && !recaptchaSiteKey) {
@@ -262,6 +268,7 @@ export default function ContactUsPage() {
                   className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200"
                   required
                   minLength={minMessageChars}
+                  maxLength={maxMessageChars}
                   onChange={handleChange}
                   value={formData.message}
                 ></textarea>

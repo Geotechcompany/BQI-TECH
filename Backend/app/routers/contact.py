@@ -7,6 +7,8 @@ import re
 import random
 import httpx
 import asyncio
+import os
+import json
 from datetime import datetime, timedelta
 from app.lib.email import send_contact_form_email, send_contact_confirmation_email
 from app.database import get_database
@@ -156,6 +158,65 @@ def _compute_message_quality(message: str) -> Dict[str, Any]:
         "score": max(0, score),
         "reasons": reasons,
     }
+
+
+async def _ai_detect_gibberish(message: str) -> Dict[str, Any]:
+    """
+    Optional AI classifier for borderline gibberish.
+    Returns {"is_gibberish": bool, "confidence": float, "source": "ai|fallback"}.
+    """
+    base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
+    api_key = os.getenv("NVIDIA_API_KEY")
+    model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
+
+    if not api_key:
+        return {"is_gibberish": False, "confidence": 0.0, "source": "fallback-no-api-key"}
+
+    prompt = (
+        "Classify whether this message is gibberish/nonsensical English for a business contact form.\n"
+        "Respond STRICTLY as JSON with keys: is_gibberish (boolean), confidence (0..1), reason (short string).\n"
+        "Message:\n"
+        f"{message}"
+    )
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "You are a strict spam classifier. Output only JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.0,
+        "max_tokens": 120,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=3.5) as client:
+            resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=body)
+        if resp.status_code != 200:
+            return {"is_gibberish": False, "confidence": 0.0, "source": f"fallback-http-{resp.status_code}"}
+
+        data = resp.json()
+        text = (
+            ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
+            or "{}"
+        ).strip()
+        # Support models that wrap JSON in code fences
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
+        parsed = json.loads(cleaned)
+        is_gibberish = bool(parsed.get("is_gibberish", False))
+        confidence = float(parsed.get("confidence", 0.0) or 0.0)
+        return {
+            "is_gibberish": is_gibberish,
+            "confidence": max(0.0, min(1.0, confidence)),
+            "reason": str(parsed.get("reason", "")),
+            "source": "ai",
+        }
+    except Exception as ai_error:
+        logger.warning(f"AI gibberish check fallback due to error: {ai_error}")
+        return {"is_gibberish": False, "confidence": 0.0, "source": "fallback-exception"}
 
 
 async def _get_contact_form_enabled() -> bool:
@@ -475,6 +536,23 @@ async def submit_contact_form(
                 status_code=400,
                 detail="Your message appears invalid. Please provide a clear, meaningful message."
             )
+
+        # AI second-opinion for borderline suspicious content only
+        borderline_threshold = min(100, protection["captchaScoreThreshold"] + 15)
+        if quality_score <= borderline_threshold:
+            ai_result = await _ai_detect_gibberish(message)
+            if ai_result.get("is_gibberish") and float(ai_result.get("confidence", 0.0)) >= 0.70:
+                await _log_spam_event(
+                    request=request,
+                    event_type="ai_gibberish_blocked",
+                    reason=f"ai_gibberish_confidence_{ai_result.get('confidence')}",
+                    email=email,
+                    quality={**quality, "ai": ai_result},
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="Your message appears invalid. Please provide a clear, meaningful message."
+                )
 
         if recaptcha_enabled and quality_score <= protection["captchaScoreThreshold"]:
             await _log_spam_event(
