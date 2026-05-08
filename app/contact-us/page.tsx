@@ -50,7 +50,7 @@ const fadeInUp = {
 };
 
 export default function ContactUsPage() {
-  const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
   const [formData, setFormData] = useState<FormData>({
     name: '',
     role: '',
@@ -75,6 +75,7 @@ export default function ContactUsPage() {
         setIsFormEnabled(Boolean(status?.enabled ?? true));
         setMinMessageChars(Number(status?.minMessageChars ?? 25));
         setIsCaptchaEnabled(Boolean(status?.captchaEnabled ?? true));
+        setRecaptchaSiteKey(String(status?.recaptchaSiteKey || ''));
       } catch {
         setIsFormEnabled(true);
       }

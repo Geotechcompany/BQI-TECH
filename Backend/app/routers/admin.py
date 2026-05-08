@@ -2483,6 +2483,72 @@ async def sync_databases_manual(
         raise HTTPException(status_code=500, detail="Failed to sync databases")
 
 
+@router.get("/settings/recaptcha")
+async def get_recaptcha_settings(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get admin-managed reCAPTCHA settings (secret is never returned)."""
+    try:
+        db = get_database()
+        settings_doc = await db.settings.find_one({"type": "admin"}, {"contactRecaptcha": 1})
+        recaptcha = (settings_doc or {}).get("contactRecaptcha", {}) if settings_doc else {}
+        site_key = str(recaptcha.get("siteKey", "") or "")
+        secret_key = str(recaptcha.get("secretKey", "") or "")
+
+        return {
+            "siteKey": site_key,
+            "hasSecretKey": bool(secret_key),
+        }
+    except Exception as e:
+        logger.error(f"Error in get_recaptcha_settings: {str(e)}")
+        logger.exception("Full traceback:")
+        raise HTTPException(status_code=500, detail="Failed to load reCAPTCHA settings")
+
+
+@router.put("/settings/recaptcha")
+async def update_recaptcha_settings(
+    payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Update admin-managed reCAPTCHA keys."""
+    try:
+        db = get_database()
+        site_key = str(payload.get("siteKey", "") or "").strip()
+        secret_key = str(payload.get("secretKey", "") or "").strip()
+
+        update_fields: Dict[str, Any] = {
+            "updatedAt": datetime.utcnow(),
+            "type": "admin",
+        }
+        if site_key:
+            update_fields["contactRecaptcha.siteKey"] = site_key
+        if secret_key:
+            update_fields["contactRecaptcha.secretKey"] = secret_key
+
+        if not site_key and not secret_key:
+            raise HTTPException(status_code=400, detail="Provide siteKey and/or secretKey")
+
+        await db.settings.update_one(
+            {"type": "admin"},
+            {"$set": update_fields},
+            upsert=True
+        )
+
+        updated = await db.settings.find_one({"type": "admin"}, {"contactRecaptcha": 1})
+        recaptcha = (updated or {}).get("contactRecaptcha", {}) if updated else {}
+        return {
+            "message": "reCAPTCHA settings updated",
+            "siteKey": str(recaptcha.get("siteKey", "") or ""),
+            "hasSecretKey": bool(str(recaptcha.get("secretKey", "") or "")),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_recaptcha_settings: {str(e)}")
+        logger.exception("Full traceback:")
+        raise HTTPException(status_code=500, detail="Failed to update reCAPTCHA settings")
+
+
 @router.get("/contact-protection/analytics")
 async def get_contact_protection_analytics(
     current_user: dict = Depends(get_current_admin_user),

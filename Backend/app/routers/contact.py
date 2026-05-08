@@ -153,6 +153,15 @@ async def _get_contact_form_enabled() -> bool:
     return bool(settings.get("contactFormEnabled", True))
 
 
+async def _get_recaptcha_keys() -> Dict[str, str]:
+    db = get_database()
+    settings_doc = await db.settings.find_one({"type": "admin"}, {"contactRecaptcha": 1})
+    recaptcha = (settings_doc or {}).get("contactRecaptcha", {}) if settings_doc else {}
+    site_key = str(recaptcha.get("siteKey", "") or "").strip() or str(settings.recaptcha_site_key or "").strip()
+    secret_key = str(recaptcha.get("secretKey", "") or "").strip() or str(settings.recaptcha_secret_key or "").strip()
+    return {"siteKey": site_key, "secretKey": secret_key}
+
+
 async def _get_contact_protection_settings() -> Dict[str, Any]:
     db = get_database()
     settings = await db.settings.find_one({"type": "admin"}, {"contactProtection": 1})
@@ -283,7 +292,8 @@ async def _validate_math_captcha(request: Request, challenge_id: str, answer: st
 async def _verify_google_recaptcha(request: Request, token: str) -> Dict[str, Any]:
     if not token:
         return {"success": False, "error_codes": ["missing-input-response"]}
-    secret_key = settings.recaptcha_secret_key
+    recaptcha_keys = await _get_recaptcha_keys()
+    secret_key = recaptcha_keys.get("secretKey", "")
     if not secret_key:
         logger.error("Missing RECAPTCHA_SECRET_KEY in environment")
         return {"success": False, "error_codes": ["missing-input-secret"]}
@@ -329,11 +339,13 @@ async def _verify_google_recaptcha(request: Request, token: str) -> Dict[str, An
 @router.get("/status")
 async def get_contact_form_status():
     protection = await _get_contact_protection_settings()
+    recaptcha_keys = await _get_recaptcha_keys()
     enabled = await _get_contact_form_enabled()
     return {
         "enabled": enabled,
         "minMessageChars": protection["minMessageChars"],
         "captchaEnabled": protection["captchaEnabled"],
+        "recaptchaSiteKey": recaptcha_keys.get("siteKey", ""),
     }
 
 

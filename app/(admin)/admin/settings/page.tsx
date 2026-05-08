@@ -92,12 +92,16 @@ function SettingsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
   const [contactSpamEvents, setContactSpamEvents] = useState<ContactSpamEvent[]>([]);
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState("");
+  const [recaptchaSecretKey, setRecaptchaSecretKey] = useState("");
+  const [hasRecaptchaSecret, setHasRecaptchaSecret] = useState(false);
   const { setTheme } = useTheme();
   const { updateTheme, updateSettings } = useSettings();
 
   useEffect(() => {
     loadSettings();
     loadContactAnalytics();
+    loadRecaptchaSettings();
   }, []);
 
   const loadSettings = async () => {
@@ -144,6 +148,16 @@ function SettingsPageContent() {
     }
   };
 
+  const loadRecaptchaSettings = async () => {
+    try {
+      const response = await adminApi.getRecaptchaSettings();
+      setRecaptchaSiteKey(String((response as any)?.siteKey || ""));
+      setHasRecaptchaSecret(Boolean((response as any)?.hasSecretKey));
+    } catch (error) {
+      console.error("Failed to load reCAPTCHA settings:", error);
+    }
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -163,8 +177,17 @@ function SettingsPageContent() {
         avatar: settings.avatar,
       };
       await adminApi.updateSettings(payload);
+      // Save reCAPTCHA settings if provided
+      if (recaptchaSiteKey.trim() || recaptchaSecretKey.trim()) {
+        await adminApi.updateRecaptchaSettings({
+          siteKey: recaptchaSiteKey.trim() || undefined,
+          secretKey: recaptchaSecretKey.trim() || undefined,
+        });
+      }
       // Reload from server to confirm persistence
       await loadSettings();
+      await loadRecaptchaSettings();
+      setRecaptchaSecretKey("");
       toast.success('Settings saved successfully');
     } catch (error) {
       console.error('Save error:', error);
@@ -585,6 +608,31 @@ function SettingsPageContent() {
                     }
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-medium">Google reCAPTCHA Site Key</Label>
+                <Input
+                  type="text"
+                  value={recaptchaSiteKey}
+                  onChange={(e) => setRecaptchaSiteKey(e.target.value)}
+                  placeholder="Enter site key"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-medium">Google reCAPTCHA Secret Key</Label>
+                <Input
+                  type="password"
+                  value={recaptchaSecretKey}
+                  onChange={(e) => setRecaptchaSecretKey(e.target.value)}
+                  placeholder={hasRecaptchaSecret ? "Secret key already set (enter new to replace)" : "Enter secret key"}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {hasRecaptchaSecret
+                    ? "Secret key is currently configured. Enter a new value only if you want to rotate it."
+                    : "No secret key configured yet."}
+                </p>
               </div>
             </div>
           </SettingCard>
