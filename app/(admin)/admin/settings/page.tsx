@@ -221,23 +221,48 @@ function SettingsPageContent() {
     }
   };
 
+  const preserveScrollPosition = (updateFn: () => void) => {
+    if (typeof window === "undefined") {
+      updateFn();
+      return;
+    }
+
+    const container = (document.querySelector("main.overflow-y-auto") as HTMLElement | null)
+      || (document.scrollingElement as HTMLElement | null);
+    const previousScrollTop = container?.scrollTop ?? window.scrollY;
+
+    updateFn();
+
+    requestAnimationFrame(() => {
+      if (container) {
+        container.scrollTop = previousScrollTop;
+      } else {
+        window.scrollTo({ top: previousScrollTop });
+      }
+    });
+  };
+
   const updateSetting = <K extends keyof AdminSettings>(
     key: K, 
     value: AdminSettings[K]
   ) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    preserveScrollPosition(() => {
+      setSettings(prev => ({ ...prev, [key]: value }));
+    });
   };
 
   const updateContactProtection = (
     patch: Partial<AdminSettings["contactProtection"]>
   ) => {
-    setSettings((prev) => ({
-      ...prev,
-      contactProtection: {
-        ...prev.contactProtection,
-        ...patch,
-      },
-    }));
+    preserveScrollPosition(() => {
+      setSettings((prev) => ({
+        ...prev,
+        contactProtection: {
+          ...prev.contactProtection,
+          ...patch,
+        },
+      }));
+    });
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
