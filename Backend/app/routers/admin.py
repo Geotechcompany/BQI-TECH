@@ -2351,6 +2351,7 @@ async def get_admin_settings(
                 "sidebarCollapsed": False,
                 "theme": "light",
                 "language": "en",
+                "contactFormEnabled": True,
                 "jobSettings": {
                     "autoClose": True,
                     "autoCloseAfterDays": 30,

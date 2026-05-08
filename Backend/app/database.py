@@ -1,11 +1,11 @@
 import os
 import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 import logging
 from .config import settings
-from fastapi import HTTPException
 import dns.resolver
+
+# Lazy-import motor/pymongo inside connection helpers so importing this module
+# (pulled in by auth and routers) does not block on heavy pymongo startup on Windows.
 
 logger = logging.getLogger(__name__)
 
@@ -46,21 +46,29 @@ def _build_mongo_candidates() -> list[str]:
 	return candidates
 
 
+def _mongo_timeout_ms() -> int:
+	return int(os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "10000"))
+
+
 async def _try_connect(database_url: str, database_name: str) -> bool:
 	"""Try connecting to one MongoDB URI candidate."""
+	from motor.motor_asyncio import AsyncIOMotorClient
+	from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
+
 	global _client, _database
+	timeout_ms = _mongo_timeout_ms()
 	try:
 		_client = AsyncIOMotorClient(
 			database_url,
-			serverSelectionTimeoutMS=30000,  # 30 seconds
-			connectTimeoutMS=30000,
-			socketTimeoutMS=30000,
-			waitQueueTimeoutMS=30000,
+			serverSelectionTimeoutMS=timeout_ms,
+			connectTimeoutMS=timeout_ms,
+			socketTimeoutMS=timeout_ms,
+			waitQueueTimeoutMS=timeout_ms,
 			retryWrites=True,
 			w="majority"
 		)
 		_database = _client[database_name]
-		await _client.admin.command("ping", serverSelectionTimeoutMS=30000)
+		await _client.admin.command("ping", serverSelectionTimeoutMS=timeout_ms)
 		return True
 	except (ConnectionFailure, ServerSelectionTimeoutError) as e:
 		logger.error(f"Failed to connect to MongoDB candidate: {e}")
@@ -91,18 +99,21 @@ async def _get_backup_database():
 			_backup_database = None
 
 	database_name = os.getenv("DATABASE_NAME", "BQITECH")
+	from motor.motor_asyncio import AsyncIOMotorClient
+
+	timeout_ms = min(_mongo_timeout_ms(), 10000)
 	try:
 		_backup_client = AsyncIOMotorClient(
 			backup_uri,
-			serverSelectionTimeoutMS=10000,
-			connectTimeoutMS=10000,
-			socketTimeoutMS=10000,
-			waitQueueTimeoutMS=10000,
+			serverSelectionTimeoutMS=timeout_ms,
+			connectTimeoutMS=timeout_ms,
+			socketTimeoutMS=timeout_ms,
+			waitQueueTimeoutMS=timeout_ms,
 			retryWrites=True,
 			w="majority"
 		)
 		_backup_database = _backup_client[database_name]
-		await _backup_client.admin.command("ping", serverSelectionTimeoutMS=10000)
+		await _backup_client.admin.command("ping", serverSelectionTimeoutMS=timeout_ms)
 		return _backup_database
 	except Exception as e:
 		logger.error(f"Failed to connect to backup MongoDB: {e}")

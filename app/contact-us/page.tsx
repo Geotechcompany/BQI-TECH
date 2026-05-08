@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, ChevronRight, Send } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -57,6 +57,20 @@ export default function ContactUsPage() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isFormEnabled, setIsFormEnabled] = useState(true);
+  const [minMessageChars, setMinMessageChars] = useState(25);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const status = await publicApi.getContactFormStatus();
+        setIsFormEnabled(Boolean(status?.enabled ?? true));
+        setMinMessageChars(Number(status?.minMessageChars ?? 25));
+      } catch {
+        setIsFormEnabled(true);
+      }
+    })();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -64,6 +78,14 @@ export default function ContactUsPage() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!isFormEnabled) {
+      toast.error('Contact form is currently disabled. Please try again later.');
+      return;
+    }
+    if (formData.message.trim().length < minMessageChars) {
+      toast.error(`Message must be at least ${minMessageChars} characters.`);
+      return;
+    }
     setIsLoading(true);
     try {
       const result = await publicApi.submitContact(formData);
@@ -151,6 +173,7 @@ export default function ContactUsPage() {
                       placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
                       className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200"
                       required
+                      pattern={field === 'email' ? '^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$' : undefined}
                       onChange={handleChange}
                       value={formData[field as keyof FormData]}
                     />
@@ -198,17 +221,24 @@ export default function ContactUsPage() {
                   rows={4}
                   className="w-full p-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200"
                   required
+                  minLength={minMessageChars}
                   onChange={handleChange}
                   value={formData.message}
                 ></textarea>
               </div>
+
+              {!isFormEnabled && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">
+                  Contact form is temporarily disabled by the admin.
+                </p>
+              )}
 
               <motion.button
                 type="submit"
                 className="w-full bg-gradient-to-r from-teal-500 to-blue-500 text-white px-8 py-4 rounded-xl font-medium inline-flex items-center justify-center space-x-2 shadow-lg shadow-teal-500/25 hover:shadow-xl hover:shadow-teal-500/40 transition-all duration-300"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
-                disabled={isLoading}
+                disabled={isLoading || !isFormEnabled}
               >
                 <span>{isLoading ? 'Sending...' : 'Send Message'}</span>
                 <Send className="w-5 h-5" />

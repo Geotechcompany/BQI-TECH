@@ -598,6 +598,8 @@ export const publicApi = {
     fetch(`${BACKEND_URL}/api/blog-posts/${slug}`).then((r) => r.json()),
 
   // Contact
+  getContactFormStatus: () =>
+    fetch(`${BACKEND_URL}/api/contact/status`).then((r) => r.json()),
   submitContact: (data: any) =>
     fetch(`${BACKEND_URL}/api/contact/submit`, {
       method: "POST",

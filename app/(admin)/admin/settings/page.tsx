@@ -37,6 +37,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 interface AdminSettings {
   emailNotifications: boolean;
   pushNotifications: boolean;
+  contactFormEnabled: boolean;
   autoLogout: number;
   tableRowsPerPage: number;
   sidebarCollapsed: boolean;
@@ -48,6 +49,7 @@ interface AdminSettings {
 const defaultSettings: AdminSettings = {
   emailNotifications: true,
   pushNotifications: true,
+  contactFormEnabled: true,
   autoLogout: 30,
   tableRowsPerPage: 25,
   sidebarCollapsed: false,
@@ -99,6 +101,7 @@ function SettingsPageContent() {
       const payload = {
         emailNotifications: settings.emailNotifications,
         pushNotifications: settings.pushNotifications,
+        contactFormEnabled: settings.contactFormEnabled,
         autoLogout: settings.autoLogout,
         tableRowsPerPage: settings.tableRowsPerPage,
         sidebarCollapsed: settings.sidebarCollapsed,
@@ -405,6 +408,29 @@ function SettingsPageContent() {
                     <SelectItem value="0">Never</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </SettingCard>
+
+          <SettingCard
+            icon={Bell}
+            title="Public Contact Form"
+            description="Control whether website visitors can submit contact messages"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                <div>
+                  <Label className="font-medium">Enable Contact Form</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Disable this to temporarily block all contact form submissions
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.contactFormEnabled}
+                  onCheckedChange={(checked) =>
+                    updateSetting('contactFormEnabled', checked)
+                  }
+                />
               </div>
             </div>
           </SettingCard>
