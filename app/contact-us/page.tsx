@@ -106,12 +106,24 @@ export default function ContactUsPage() {
     setIsLoading(true);
     try {
       const result = await publicApi.submitContact(formData);
-      const hasExplicitError =
-        result?.ok === false ||
-        (result?.status && result?.status !== 'success') ||
-        (!!result?.detail && result?.status !== 'success');
+      const httpStatus = Number(result?.httpStatus ?? 0);
+      const hasHttpError = Number.isFinite(httpStatus) && httpStatus >= 400;
+      const hasDetailError = Boolean(result?.detail);
+      const hasNonSuccessStatus =
+        typeof result?.status === 'string' && result.status.toLowerCase() !== 'success';
+      const hasFailureMessage =
+        typeof result?.message === 'string' &&
+        /(failed|error|invalid|required|not allowed|denied)/i.test(result.message) &&
+        (typeof result?.status !== 'string' || result.status.toLowerCase() !== 'success');
 
-      if (hasExplicitError) {
+      const isExplicitSuccess =
+        (typeof result?.status === 'string' && result.status.toLowerCase() === 'success') ||
+        (typeof result?.message === 'string' &&
+          /(submitted successfully|success)/i.test(result.message) &&
+          !hasHttpError &&
+          !hasDetailError);
+
+      if (!isExplicitSuccess || hasHttpError || hasDetailError || hasNonSuccessStatus || hasFailureMessage) {
         throw new Error(
           (typeof result?.detail === 'string' ? result?.detail : result?.detail?.message) || result?.message || 'Failed to send message'
         );
