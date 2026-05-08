@@ -649,7 +649,9 @@ function SettingsPageContent() {
                 <Input
                   type="text"
                   value={recaptchaSiteKey}
-                  onChange={(e) => setRecaptchaSiteKey(e.target.value)}
+                  onChange={(e) =>
+                    preserveScrollPosition(() => setRecaptchaSiteKey(e.target.value))
+                  }
                   placeholder="Enter site key"
                 />
               </div>
@@ -659,7 +661,9 @@ function SettingsPageContent() {
                 <Input
                   type="password"
                   value={recaptchaSecretKey}
-                  onChange={(e) => setRecaptchaSecretKey(e.target.value)}
+                  onChange={(e) =>
+                    preserveScrollPosition(() => setRecaptchaSecretKey(e.target.value))
+                  }
                   placeholder={hasRecaptchaSecret ? "Secret key already set (enter new to replace)" : "Enter secret key"}
                 />
                 <p className="text-xs text-muted-foreground">
