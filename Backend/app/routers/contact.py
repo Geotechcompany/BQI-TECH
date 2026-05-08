@@ -308,13 +308,11 @@ async def _verify_google_recaptcha(request: Request, token: str) -> Dict[str, An
         success = bool(verification.get("success"))
         if not success:
             logger.warning(
-                "Google reCAPTCHA verification failed",
-                extra={
-                    "recaptcha_error_codes": verification.get("error-codes", []),
-                    "recaptcha_hostname": verification.get("hostname"),
-                    "recaptcha_action": verification.get("action"),
-                    "recaptcha_score": verification.get("score"),
-                },
+                "Google reCAPTCHA verification failed: "
+                f"errors={verification.get('error-codes', [])}, "
+                f"hostname={verification.get('hostname')}, "
+                f"action={verification.get('action')}, "
+                f"score={verification.get('score')}"
             )
         return {
             "success": success,
