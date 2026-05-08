@@ -267,6 +267,22 @@ function SettingsPageContent() {
     });
   };
 
+  const updateContactProtectionNumber = (
+    key: keyof AdminSettings["contactProtection"],
+    value: string,
+    min: number,
+    max?: number
+  ) => {
+    // Allow manual typing while avoiding NaN resets.
+    if (value.trim() === "") return;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return;
+    let normalized = Math.trunc(parsed);
+    if (normalized < min) normalized = min;
+    if (typeof max === "number" && normalized > max) normalized = max;
+    updateContactProtection({ [key]: normalized } as Partial<AdminSettings["contactProtection"]>);
+  };
+
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -563,9 +579,10 @@ function SettingsPageContent() {
                   <Input
                     type="number"
                     min={5}
+                    inputMode="numeric"
                     value={settings.contactProtection.minMessageChars}
                     onChange={(e) =>
-                      updateContactProtection({ minMessageChars: Number(e.target.value || 5) })
+                      updateContactProtectionNumber("minMessageChars", e.target.value, 5, 10000)
                     }
                   />
                 </div>
@@ -574,9 +591,10 @@ function SettingsPageContent() {
                   <Input
                     type="number"
                     min={10}
+                    inputMode="numeric"
                     value={settings.contactProtection.maxMessageChars}
                     onChange={(e) =>
-                      updateContactProtection({ maxMessageChars: Number(e.target.value || 10) })
+                      updateContactProtectionNumber("maxMessageChars", e.target.value, 10, 50000)
                     }
                   />
                 </div>
@@ -585,9 +603,10 @@ function SettingsPageContent() {
                   <Input
                     type="number"
                     min={1}
+                    inputMode="numeric"
                     value={settings.contactProtection.maxSubmissionsPerIp}
                     onChange={(e) =>
-                      updateContactProtection({ maxSubmissionsPerIp: Number(e.target.value || 1) })
+                      updateContactProtectionNumber("maxSubmissionsPerIp", e.target.value, 1, 100000)
                     }
                   />
                 </div>
@@ -596,9 +615,10 @@ function SettingsPageContent() {
                   <Input
                     type="number"
                     min={1}
+                    inputMode="numeric"
                     value={settings.contactProtection.ipWindowMinutes}
                     onChange={(e) =>
-                      updateContactProtection({ ipWindowMinutes: Number(e.target.value || 1) })
+                      updateContactProtectionNumber("ipWindowMinutes", e.target.value, 1, 10080)
                     }
                   />
                 </div>
@@ -607,9 +627,10 @@ function SettingsPageContent() {
                   <Input
                     type="number"
                     min={1}
+                    inputMode="numeric"
                     value={settings.contactProtection.blockWindowMinutes}
                     onChange={(e) =>
-                      updateContactProtection({ blockWindowMinutes: Number(e.target.value || 1) })
+                      updateContactProtectionNumber("blockWindowMinutes", e.target.value, 1, 10080)
                     }
                   />
                 </div>
@@ -637,9 +658,10 @@ function SettingsPageContent() {
                     type="number"
                     min={1}
                     max={100}
+                    inputMode="numeric"
                     value={settings.contactProtection.captchaScoreThreshold}
                     onChange={(e) =>
-                      updateContactProtection({ captchaScoreThreshold: Number(e.target.value || 55) })
+                      updateContactProtectionNumber("captchaScoreThreshold", e.target.value, 1, 100)
                     }
                   />
                 </div>
@@ -649,9 +671,10 @@ function SettingsPageContent() {
                     type="number"
                     min={0}
                     max={99}
+                    inputMode="numeric"
                     value={settings.contactProtection.blockScoreThreshold}
                     onChange={(e) =>
-                      updateContactProtection({ blockScoreThreshold: Number(e.target.value || 35) })
+                      updateContactProtectionNumber("blockScoreThreshold", e.target.value, 0, 99)
                     }
                   />
                 </div>
