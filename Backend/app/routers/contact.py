@@ -537,22 +537,20 @@ async def submit_contact_form(
                 detail="Your message appears invalid. Please provide a clear, meaningful message."
             )
 
-        # AI second-opinion for borderline suspicious content only
-        borderline_threshold = min(100, protection["captchaScoreThreshold"] + 15)
-        if quality_score <= borderline_threshold:
-            ai_result = await _ai_detect_gibberish(message)
-            if ai_result.get("is_gibberish") and float(ai_result.get("confidence", 0.0)) >= 0.70:
-                await _log_spam_event(
-                    request=request,
-                    event_type="ai_gibberish_blocked",
-                    reason=f"ai_gibberish_confidence_{ai_result.get('confidence')}",
-                    email=email,
-                    quality={**quality, "ai": ai_result},
-                )
-                raise HTTPException(
-                    status_code=400,
-                    detail="Your message appears invalid. Please provide a clear, meaningful message."
-                )
+        # AI validation on every submission
+        ai_result = await _ai_detect_gibberish(message)
+        if ai_result.get("is_gibberish") and float(ai_result.get("confidence", 0.0)) >= 0.70:
+            await _log_spam_event(
+                request=request,
+                event_type="ai_gibberish_blocked",
+                reason=f"ai_gibberish_confidence_{ai_result.get('confidence')}",
+                email=email,
+                quality={**quality, "ai": ai_result},
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Your message appears invalid. Please provide a clear, meaningful message."
+            )
 
         if recaptcha_enabled and quality_score <= protection["captchaScoreThreshold"]:
             await _log_spam_event(

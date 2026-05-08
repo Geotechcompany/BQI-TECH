@@ -353,6 +353,11 @@ export const adminApi = {
   updateSettings: (data: any) => backendApi.put("/api/admin/settings", data),
   syncDatabases: (collections?: string[]) =>
     backendApi.post("/api/admin/settings/sync-databases", { collections }),
+  getContactProtectionAnalytics: (params?: { days?: number; limit?: number }) =>
+    backendApi.get("/api/admin/contact-protection/analytics", params),
+  getRecaptchaSettings: () => backendApi.get("/api/admin/settings/recaptcha"),
+  updateRecaptchaSettings: (data: { siteKey?: string; secretKey?: string }) =>
+    backendApi.put("/api/admin/settings/recaptcha", data),
 
   // Get notifications
   async getNotifications() {
@@ -600,12 +605,17 @@ export const publicApi = {
   // Contact
   getContactFormStatus: () =>
     fetch(`${BACKEND_URL}/api/contact/status`).then((r) => r.json()),
-  submitContact: (data: any) =>
-    fetch(`${BACKEND_URL}/api/contact/submit`, {
+  getContactCaptchaChallenge: () =>
+    fetch(`${BACKEND_URL}/api/contact/captcha-challenge`).then((r) => r.json()),
+  submitContact: async (data: any) => {
+    const response = await fetch(`${BACKEND_URL}/api/contact/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
-    }).then((r) => r.json()),
+    });
+    const json = await response.json().catch(() => ({}));
+    return { ...json, httpStatus: response.status, ok: response.ok };
+  },
 };
 
 export default backendApi;
