@@ -162,6 +162,10 @@ async def _get_recaptcha_keys() -> Dict[str, str]:
     return {"siteKey": site_key, "secretKey": secret_key}
 
 
+def _is_recaptcha_configured(recaptcha_keys: Dict[str, str]) -> bool:
+    return bool(recaptcha_keys.get("siteKey")) and bool(recaptcha_keys.get("secretKey"))
+
+
 async def _get_contact_protection_settings() -> Dict[str, Any]:
     db = get_database()
     settings = await db.settings.find_one({"type": "admin"}, {"contactProtection": 1})
@@ -340,11 +344,13 @@ async def _verify_google_recaptcha(request: Request, token: str) -> Dict[str, An
 async def get_contact_form_status():
     protection = await _get_contact_protection_settings()
     recaptcha_keys = await _get_recaptcha_keys()
+    recaptcha_configured = _is_recaptcha_configured(recaptcha_keys)
     enabled = await _get_contact_form_enabled()
     return {
         "enabled": enabled,
         "minMessageChars": protection["minMessageChars"],
-        "captchaEnabled": protection["captchaEnabled"],
+        "captchaEnabled": protection["captchaEnabled"] and recaptcha_configured,
+        "recaptchaConfigured": recaptcha_configured,
         "recaptchaSiteKey": recaptcha_keys.get("siteKey", ""),
     }
 
@@ -365,6 +371,8 @@ async def submit_contact_form(
     """
     try:
         protection = await _get_contact_protection_settings()
+        recaptcha_keys = await _get_recaptcha_keys()
+        recaptcha_enabled = protection["captchaEnabled"] and _is_recaptcha_configured(recaptcha_keys)
 
         if not await _get_contact_form_enabled():
             raise HTTPException(status_code=503, detail="Contact form is currently disabled.")
@@ -404,7 +412,7 @@ async def submit_contact_form(
             await _log_spam_event(request=request, event_type="min_chars_failed", reason="message_too_short", email=email)
             raise HTTPException(status_code=400, detail=f"Message must be at least {protection['minMessageChars']} characters.")
 
-        if protection["captchaEnabled"]:
+        if recaptcha_enabled:
             recaptcha_result = await _verify_google_recaptcha(request, recaptcha_token)
             if not recaptcha_result.get("success"):
                 await _log_spam_event(
@@ -434,7 +442,7 @@ async def submit_contact_form(
                 detail="Your message appears invalid. Please provide a clear, meaningful message."
             )
 
-        if quality_score <= protection["captchaScoreThreshold"]:
+        if recaptcha_enabled and quality_score <= protection["captchaScoreThreshold"]:
             await _log_spam_event(
                 request=request,
                 event_type="captcha_suspicious_score",
