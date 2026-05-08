@@ -17,6 +17,20 @@ router = APIRouter(tags=["contact"])
 
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$")
 URL_REGEX = re.compile(r"(https?://|www\.)", re.IGNORECASE)
+DOMAIN_LABEL_REGEX = re.compile(r"^[A-Za-z0-9-]+$")
+DISPOSABLE_EMAIL_DOMAINS = {
+    "mailinator.com",
+    "guerrillamail.com",
+    "10minutemail.com",
+    "tempmail.com",
+    "yopmail.com",
+    "trashmail.com",
+    "throwawaymail.com",
+    "maildrop.cc",
+    "fakeinbox.com",
+    "temp-mail.org",
+    "dispostable.com",
+}
 
 DEFAULT_CONTACT_PROTECTION = {
     "minMessageChars": 25,
@@ -42,7 +56,28 @@ def _is_valid_email(email: str) -> bool:
     local, _, domain = normalized.rpartition("@")
     if not local or not domain:
         return False
-    return "." in domain and not domain.startswith("-") and not domain.endswith("-")
+    if "." not in domain or domain.startswith("-") or domain.endswith("-"):
+        return False
+    domain_parts = domain.split(".")
+    if any((not part) or (not DOMAIN_LABEL_REGEX.match(part)) for part in domain_parts):
+        return False
+    tld = domain_parts[-1]
+    if len(tld) < 2 or not tld.isalpha():
+        return False
+    if len(local) < 2:
+        return False
+    return True
+
+
+def _is_disposable_email_domain(email: str) -> bool:
+    normalized = (email or "").strip().lower()
+    if "@" not in normalized:
+        return False
+    domain = normalized.split("@", 1)[1]
+    if domain in DISPOSABLE_EMAIL_DOMAINS:
+        return True
+    # Catch subdomains such as inbox.mailinator.com
+    return any(domain.endswith(f".{base}") for base in DISPOSABLE_EMAIL_DOMAINS)
 
 
 def _compute_message_quality(message: str) -> Dict[str, Any]:
@@ -59,6 +94,11 @@ def _compute_message_quality(message: str) -> Dict[str, Any]:
     repeated_chars = bool(re.search(r"(.)\1{5,}", lowered))
     repeated_word_spam = bool(re.search(r"\b(\w+)\b(?:\s+\1\b){3,}", lowered))
     has_vowels = bool(re.search(r"[aeiou]", lowered))
+    has_single_long_token = len(words) == 1 and len(words[0]) >= 10
+    consonant_clusters = re.findall(r"(?i)[^aeiou\W]{5,}", trimmed)
+    has_heavy_consonant_clusters = len(consonant_clusters) >= 1
+    token_lengths = [len(w) for w in words]
+    avg_token_length = (sum(token_lengths) / len(token_lengths)) if token_lengths else 0
 
     score = 100
     reasons = []
@@ -66,6 +106,9 @@ def _compute_message_quality(message: str) -> Dict[str, Any]:
     if len(words) < 5:
         score -= 25
         reasons.append("too_few_words")
+    if len(words) <= 2:
+        score -= 15
+        reasons.append("too_few_tokens")
     if alpha_ratio < 0.6:
         score -= 20
         reasons.append("low_alpha_ratio")
@@ -84,6 +127,15 @@ def _compute_message_quality(message: str) -> Dict[str, Any]:
     if len(words) >= 6 and not has_vowels:
         score -= 25
         reasons.append("vowel_free_text")
+    if has_single_long_token:
+        score -= 40
+        reasons.append("single_long_token")
+    if has_heavy_consonant_clusters:
+        score -= 30
+        reasons.append("heavy_consonant_clusters")
+    if avg_token_length > 12:
+        score -= 15
+        reasons.append("abnormally_long_tokens")
 
     return {
         "score": max(0, score),
@@ -280,6 +332,12 @@ async def submit_contact_form(
         if not _is_valid_email(email):
             await _log_spam_event(request=request, event_type="invalid_email", reason="email_validation_failed", email=email)
             raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+        if _is_disposable_email_domain(email):
+            await _log_spam_event(request=request, event_type="temp_email_blocked", reason="disposable_email_domain", email=email)
+            raise HTTPException(
+                status_code=400,
+                detail="Temporary/disposable email addresses are not allowed."
+            )
 
         if len(message) < protection["minMessageChars"]:
             await _log_spam_event(request=request, event_type="min_chars_failed", reason="message_too_short", email=email)
