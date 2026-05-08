@@ -293,8 +293,7 @@ function SettingsPageContent() {
     children: React.ReactNode 
   }) => (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={false}
       className="bg-background p-6 rounded-xl shadow-sm border border-muted/50 hover:border-primary/20 transition-all"
     >
       <div className="flex items-start gap-4">
@@ -329,8 +328,7 @@ function SettingsPageContent() {
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Profile Header */}
         <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={false}
           className="p-6 rounded-2xl shadow-sm border border-border bg-card"
         >
           <div className="flex flex-col md:flex-row items-center gap-6">
