@@ -5,10 +5,12 @@ import logging
 import traceback
 import re
 import random
+import httpx
 from datetime import datetime, timedelta
 from app.lib.email import send_contact_form_email, send_contact_confirmation_email
 from app.database import get_database
 from app.utils.ip_utils import get_real_client_ip
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -278,6 +280,37 @@ async def _validate_math_captcha(request: Request, challenge_id: str, answer: st
     return is_valid
 
 
+async def _verify_google_recaptcha(request: Request, token: str) -> bool:
+    if not token:
+        return False
+    secret_key = settings.recaptcha_secret_key
+    if not secret_key:
+        logger.error("Missing RECAPTCHA_SECRET_KEY in environment")
+        return False
+
+    remote_ip = get_real_client_ip(request) or (request.client.host if request.client else "")
+    payload = {
+        "secret": secret_key,
+        "response": token,
+        "remoteip": remote_ip,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.post(
+                "https://www.google.com/recaptcha/api/siteverify",
+                data=payload,
+            )
+        if response.status_code != 200:
+            logger.warning(f"Google reCAPTCHA verification returned HTTP {response.status_code}")
+            return False
+        verification = response.json()
+        return bool(verification.get("success"))
+    except Exception as recaptcha_error:
+        logger.warning(f"Google reCAPTCHA verification exception: {recaptcha_error}")
+        return False
+
+
 @router.get("/status")
 async def get_contact_form_status():
     protection = await _get_contact_protection_settings()
@@ -325,6 +358,7 @@ async def submit_contact_form(
         email = str(form_data.get("email", "")).strip().lower()
         message = str(form_data.get("message", "")).strip()
         name = str(form_data.get("name", "")).strip()
+        recaptcha_token = str(form_data.get("recaptchaToken", "")).strip()
 
         if len(name) < 2:
             raise HTTPException(status_code=400, detail="Name is too short.")
@@ -343,11 +377,22 @@ async def submit_contact_form(
             await _log_spam_event(request=request, event_type="min_chars_failed", reason="message_too_short", email=email)
             raise HTTPException(status_code=400, detail=f"Message must be at least {protection['minMessageChars']} characters.")
 
+        if protection["captchaEnabled"]:
+            recaptcha_ok = await _verify_google_recaptcha(request, recaptcha_token)
+            if not recaptcha_ok:
+                await _log_spam_event(
+                    request=request,
+                    event_type="google_recaptcha_failed",
+                    reason="google_recaptcha_verification_failed",
+                    email=email,
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="Google reCAPTCHA verification failed."
+                )
+
         quality = _compute_message_quality(message)
         quality_score = int(quality.get("score", 0))
-        captcha_id = str(form_data.get("captchaChallengeId", "")).strip()
-        captcha_answer = str(form_data.get("captchaAnswer", "")).strip()
-
         if quality_score <= protection["blockScoreThreshold"]:
             await _log_spam_event(
                 request=request,
@@ -362,26 +407,14 @@ async def submit_contact_form(
                 detail="Your message appears invalid. Please provide a clear, meaningful message."
             )
 
-        if protection["captchaEnabled"] and quality_score <= protection["captchaScoreThreshold"]:
-            captcha_valid = await _validate_math_captcha(request, captcha_id, captcha_answer)
-            if not captcha_valid:
-                challenge = await _create_math_captcha(request)
-                await _log_spam_event(
-                    request=request,
-                    event_type="captcha_required",
-                    reason="quality_requires_captcha",
-                    email=email,
-                    quality=quality
-                )
-                raise HTTPException(
-                    status_code=428,
-                    detail={
-                        "message": "Captcha verification required.",
-                        "code": "captcha_required",
-                        "challengeId": challenge["challengeId"],
-                        "question": challenge["question"],
-                    },
-                )
+        if quality_score <= protection["captchaScoreThreshold"]:
+            await _log_spam_event(
+                request=request,
+                event_type="captcha_suspicious_score",
+                reason="quality_below_captcha_threshold",
+                email=email,
+                quality=quality
+            )
 
         email_sent = await send_contact_form_email(
             name=name,

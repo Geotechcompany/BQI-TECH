@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, ChevronRight, Send } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { publicApi } from '@/lib/api-backend';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import ReCAPTCHA from "react-google-recaptcha";
 
 // Define an interface for the form data
 interface FormData {
@@ -17,8 +18,7 @@ interface FormData {
   service: string
   email: string
   message: string
-  captchaChallengeId: string
-  captchaAnswer: string
+  recaptchaToken: string
 }
 
 function Breadcrumb() {
@@ -50,6 +50,7 @@ const fadeInUp = {
 };
 
 export default function ContactUsPage() {
+  const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
   const [formData, setFormData] = useState<FormData>({
     name: '',
     role: '',
@@ -58,15 +59,14 @@ export default function ContactUsPage() {
     service: '',
     email: '',
     message: '',
-    captchaChallengeId: '',
-    captchaAnswer: ''
+    recaptchaToken: ''
   });
 
   const [isLoading, setIsLoading] = useState(false);
   const [isFormEnabled, setIsFormEnabled] = useState(true);
   const [minMessageChars, setMinMessageChars] = useState(25);
   const [isCaptchaEnabled, setIsCaptchaEnabled] = useState(true);
-  const [captchaQuestion, setCaptchaQuestion] = useState('');
+  const recaptchaRef = useRef<ReCAPTCHA | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -95,23 +95,16 @@ export default function ContactUsPage() {
       toast.error(`Message must be at least ${minMessageChars} characters.`);
       return;
     }
+    if (isCaptchaEnabled && !recaptchaSiteKey) {
+      toast.error('reCAPTCHA site key is missing. Please contact support.');
+      return;
+    }
     setIsLoading(true);
     try {
       const result = await publicApi.submitContact(formData);
       if (!result?.ok || result?.status !== 'success') {
-        const detail = result?.detail;
-        if (result?.httpStatus === 428 && detail?.code === 'captcha_required') {
-          setCaptchaQuestion(String(detail?.question || 'Please solve the captcha challenge.'));
-          setFormData((prev) => ({
-            ...prev,
-            captchaChallengeId: String(detail?.challengeId || ''),
-            captchaAnswer: '',
-          }));
-          toast.error('Please complete the captcha challenge to continue.');
-          return;
-        }
         throw new Error(
-          (typeof detail === 'string' ? detail : detail?.message) || result?.message || 'Failed to send message'
+          (typeof result?.detail === 'string' ? result?.detail : result?.detail?.message) || result?.message || 'Failed to send message'
         );
       }
       window.location.href = '/contact-us/confirmation';
@@ -122,6 +115,10 @@ export default function ContactUsPage() {
         position: 'top-center'
       });
     } finally {
+      if (isCaptchaEnabled) {
+        recaptchaRef.current?.reset();
+        setFormData((prev) => ({ ...prev, recaptchaToken: '' }));
+      }
       setIsLoading(false);
     }
   };
@@ -249,18 +246,20 @@ export default function ContactUsPage() {
                 ></textarea>
               </div>
 
-              {isCaptchaEnabled && captchaQuestion && (
+              {isCaptchaEnabled && (
                 <div className="space-y-2">
-                  <Label htmlFor="captchaAnswer" className="text-sm font-medium">
-                    Security Check: {captchaQuestion}
+                  <Label className="text-sm font-medium">
+                    Security Check
                   </Label>
-                  <Input
-                    id="captchaAnswer"
-                    name="captchaAnswer"
-                    placeholder="Enter your answer"
-                    required
-                    value={formData.captchaAnswer}
-                    onChange={handleChange}
+                  <ReCAPTCHA
+                    ref={recaptchaRef}
+                    sitekey={recaptchaSiteKey}
+                    onChange={(token) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        recaptchaToken: token || "",
+                      }))
+                    }
                   />
                 </div>
               )}
@@ -276,7 +275,7 @@ export default function ContactUsPage() {
                 className="w-full bg-gradient-to-r from-teal-500 to-blue-500 text-white px-8 py-4 rounded-xl font-medium inline-flex items-center justify-center space-x-2 shadow-lg shadow-teal-500/25 hover:shadow-xl hover:shadow-teal-500/40 transition-all duration-300"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
-                disabled={isLoading || !isFormEnabled}
+                disabled={isLoading || !isFormEnabled || (isCaptchaEnabled && !formData.recaptchaToken)}
               >
                 <span>{isLoading ? 'Sending...' : 'Send Message'}</span>
                 <Send className="w-5 h-5" />
