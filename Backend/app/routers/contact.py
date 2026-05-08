@@ -37,6 +37,7 @@ DISPOSABLE_EMAIL_DOMAINS = {
 
 DEFAULT_CONTACT_PROTECTION = {
     "minMessageChars": 25,
+    "maxMessageChars": 2000,
     "maxSubmissionsPerIp": 5,
     "ipWindowMinutes": 15,
     "blockWindowMinutes": 60,
@@ -184,6 +185,10 @@ async def _get_contact_protection_settings() -> Dict[str, Any]:
     configured = settings.get("contactProtection", {}) if settings else {}
     merged = {**DEFAULT_CONTACT_PROTECTION, **(configured if isinstance(configured, dict) else {})}
     merged["minMessageChars"] = max(5, int(merged.get("minMessageChars", DEFAULT_CONTACT_PROTECTION["minMessageChars"])))
+    merged["maxMessageChars"] = max(
+        merged["minMessageChars"] + 1,
+        int(merged.get("maxMessageChars", DEFAULT_CONTACT_PROTECTION["maxMessageChars"]))
+    )
     merged["maxSubmissionsPerIp"] = max(1, int(merged.get("maxSubmissionsPerIp", DEFAULT_CONTACT_PROTECTION["maxSubmissionsPerIp"])))
     merged["ipWindowMinutes"] = max(1, int(merged.get("ipWindowMinutes", DEFAULT_CONTACT_PROTECTION["ipWindowMinutes"])))
     merged["blockWindowMinutes"] = max(1, int(merged.get("blockWindowMinutes", DEFAULT_CONTACT_PROTECTION["blockWindowMinutes"])))
@@ -367,6 +372,7 @@ async def get_contact_form_status():
     return {
         "enabled": enabled,
         "minMessageChars": protection["minMessageChars"],
+        "maxMessageChars": protection["maxMessageChars"],
         "captchaEnabled": protection["captchaEnabled"] and recaptcha_configured,
         "recaptchaConfigured": recaptcha_configured,
         "recaptchaSiteKey": recaptcha_keys.get("siteKey", ""),
@@ -436,6 +442,9 @@ async def submit_contact_form(
         if len(message) < protection["minMessageChars"]:
             await _log_spam_event(request=request, event_type="min_chars_failed", reason="message_too_short", email=email)
             raise HTTPException(status_code=400, detail=f"Message must be at least {protection['minMessageChars']} characters.")
+        if len(message) > protection["maxMessageChars"]:
+            await _log_spam_event(request=request, event_type="max_chars_failed", reason="message_too_long", email=email)
+            raise HTTPException(status_code=400, detail=f"Message must be at most {protection['maxMessageChars']} characters.")
 
         if recaptcha_enabled:
             recaptcha_result = await _verify_google_recaptcha(request, recaptcha_token)

@@ -2354,6 +2354,7 @@ async def get_admin_settings(
                 "contactFormEnabled": True,
                 "contactProtection": {
                     "minMessageChars": 25,
+                    "maxMessageChars": 2000,
                     "maxSubmissionsPerIp": 5,
                     "ipWindowMinutes": 15,
                     "blockWindowMinutes": 60,

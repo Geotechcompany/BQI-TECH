@@ -40,6 +40,7 @@ interface AdminSettings {
   contactFormEnabled: boolean;
   contactProtection: {
     minMessageChars: number;
+    maxMessageChars: number;
     maxSubmissionsPerIp: number;
     ipWindowMinutes: number;
     blockWindowMinutes: number;
@@ -69,6 +70,7 @@ const defaultSettings: AdminSettings = {
   contactFormEnabled: true,
   contactProtection: {
     minMessageChars: 25,
+    maxMessageChars: 2000,
     maxSubmissionsPerIp: 5,
     ipWindowMinutes: 15,
     blockWindowMinutes: 60,
@@ -564,6 +566,17 @@ function SettingsPageContent() {
                     value={settings.contactProtection.minMessageChars}
                     onChange={(e) =>
                       updateContactProtection({ minMessageChars: Number(e.target.value || 5) })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-medium">Maximum Message Characters</Label>
+                  <Input
+                    type="number"
+                    min={10}
+                    value={settings.contactProtection.maxMessageChars}
+                    onChange={(e) =>
+                      updateContactProtection({ maxMessageChars: Number(e.target.value || 10) })
                     }
                   />
                 </div>
