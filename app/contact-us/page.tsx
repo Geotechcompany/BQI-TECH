@@ -106,7 +106,12 @@ export default function ContactUsPage() {
     setIsLoading(true);
     try {
       const result = await publicApi.submitContact(formData);
-      if (!result?.ok || result?.status !== 'success') {
+      const hasExplicitError =
+        result?.ok === false ||
+        (result?.status && result?.status !== 'success') ||
+        (!!result?.detail && result?.status !== 'success');
+
+      if (hasExplicitError) {
         throw new Error(
           (typeof result?.detail === 'string' ? result?.detail : result?.detail?.message) || result?.message || 'Failed to send message'
         );
