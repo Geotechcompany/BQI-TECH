@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/lib/auth-backend";
 import { BACKEND_URL } from "@/lib/config";
 import { User } from "@/types/user";
@@ -47,6 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sessionWarningId, setSessionWarningId] =
     useState<NodeJS.Timeout | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
+
+  const isProtectedRoute = (path: string) =>
+    path.startsWith("/dashboard") ||
+    path.startsWith("/admin") ||
+    path.startsWith("/login");
 
   // Session timeout configuration (in minutes)
   const SESSION_TIMEOUT_MINUTES = 30; // 30 minutes
@@ -145,7 +151,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Only show session expired dialog if user was previously authenticated
     // Don't show it if user was never logged in or already logged out
-    if (isAuthError && authState.isAuthenticated && authState.user) {
+    const currentPath =
+      typeof window !== "undefined" ? window.location.pathname : pathname || "";
+    const shouldShowAuthDialogsOnPath = isProtectedRoute(currentPath);
+
+    if (
+      isAuthError &&
+      authState.isAuthenticated &&
+      authState.user &&
+      shouldShowAuthDialogsOnPath
+    ) {
       console.log(
         "Authentication error detected for authenticated user, showing session expired dialog"
       );
@@ -598,7 +613,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Start session timeout when user logs in
   useEffect(() => {
-    if (authState.isAuthenticated && !authState.authLoading) {
+    const currentPath =
+      typeof window !== "undefined" ? window.location.pathname : pathname || "";
+    const shouldRunSessionTimeout = isProtectedRoute(currentPath);
+
+    if (authState.isAuthenticated && !authState.authLoading && shouldRunSessionTimeout) {
       startSessionTimeout();
     } else {
       // Clear timeouts when not authenticated
@@ -613,7 +632,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
       if (sessionWarningId) clearTimeout(sessionWarningId);
     };
-  }, [authState.isAuthenticated, authState.authLoading]);
+  }, [authState.isAuthenticated, authState.authLoading, pathname]);
 
   // Periodic token refresh to prevent expiration
   useEffect(() => {
@@ -656,22 +675,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
 
-      {/* Session Expired Dialog */}
-      <SessionExpiredDialog
-        isOpen={showSessionExpired}
-        onClose={() => setShowSessionExpired(false)}
-        onRefresh={async () => {
-          try {
-            await refreshToken();
-            setShowSessionExpired(false);
-          } catch (error) {
-            console.error("Failed to refresh token:", error);
-            // If refresh fails, let the dialog handle logout
-            throw error;
-          }
-        }}
-        countdownDuration={30}
-      />
+      {isProtectedRoute(pathname || "") ? (
+        <SessionExpiredDialog
+          isOpen={showSessionExpired}
+          onClose={() => setShowSessionExpired(false)}
+          onRefresh={async () => {
+            try {
+              await refreshToken();
+              setShowSessionExpired(false);
+            } catch (error) {
+              console.error("Failed to refresh token:", error);
+              // If refresh fails, let the dialog handle logout
+              throw error;
+            }
+          }}
+          countdownDuration={30}
+        />
+      ) : null}
     </AuthContext.Provider>
   );
 }

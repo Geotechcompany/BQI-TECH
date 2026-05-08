@@ -280,13 +280,13 @@ async def _validate_math_captcha(request: Request, challenge_id: str, answer: st
     return is_valid
 
 
-async def _verify_google_recaptcha(request: Request, token: str) -> bool:
+async def _verify_google_recaptcha(request: Request, token: str) -> Dict[str, Any]:
     if not token:
-        return False
+        return {"success": False, "error_codes": ["missing-input-response"]}
     secret_key = settings.recaptcha_secret_key
     if not secret_key:
         logger.error("Missing RECAPTCHA_SECRET_KEY in environment")
-        return False
+        return {"success": False, "error_codes": ["missing-input-secret"]}
 
     remote_ip = get_real_client_ip(request) or (request.client.host if request.client else "")
     payload = {
@@ -303,12 +303,29 @@ async def _verify_google_recaptcha(request: Request, token: str) -> bool:
             )
         if response.status_code != 200:
             logger.warning(f"Google reCAPTCHA verification returned HTTP {response.status_code}")
-            return False
+            return {"success": False, "error_codes": [f"http-{response.status_code}"]}
         verification = response.json()
-        return bool(verification.get("success"))
+        success = bool(verification.get("success"))
+        if not success:
+            logger.warning(
+                "Google reCAPTCHA verification failed",
+                extra={
+                    "recaptcha_error_codes": verification.get("error-codes", []),
+                    "recaptcha_hostname": verification.get("hostname"),
+                    "recaptcha_action": verification.get("action"),
+                    "recaptcha_score": verification.get("score"),
+                },
+            )
+        return {
+            "success": success,
+            "error_codes": verification.get("error-codes", []),
+            "hostname": verification.get("hostname"),
+            "action": verification.get("action"),
+            "score": verification.get("score"),
+        }
     except Exception as recaptcha_error:
         logger.warning(f"Google reCAPTCHA verification exception: {recaptcha_error}")
-        return False
+        return {"success": False, "error_codes": ["verification-exception"]}
 
 
 @router.get("/status")
@@ -378,17 +395,17 @@ async def submit_contact_form(
             raise HTTPException(status_code=400, detail=f"Message must be at least {protection['minMessageChars']} characters.")
 
         if protection["captchaEnabled"]:
-            recaptcha_ok = await _verify_google_recaptcha(request, recaptcha_token)
-            if not recaptcha_ok:
+            recaptcha_result = await _verify_google_recaptcha(request, recaptcha_token)
+            if not recaptcha_result.get("success"):
                 await _log_spam_event(
                     request=request,
                     event_type="google_recaptcha_failed",
-                    reason="google_recaptcha_verification_failed",
+                    reason=f"google_recaptcha_verification_failed:{','.join(recaptcha_result.get('error_codes', [])) or 'unknown'}",
                     email=email,
                 )
                 raise HTTPException(
                     status_code=400,
-                    detail="Google reCAPTCHA verification failed."
+                    detail="Google reCAPTCHA verification failed. Please refresh and try again."
                 )
 
         quality = _compute_message_quality(message)
