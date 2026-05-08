@@ -213,21 +213,27 @@ async def _check_and_track_ip_submission(request: Request, protection: Dict[str,
     now = datetime.utcnow()
     window_start = now - timedelta(minutes=protection["ipWindowMinutes"])
 
+    recent_count = await db.contact_submissions.count_documents({
+        "ip": client_ip,
+        "createdAt": {"$gte": window_start}
+    })
+
     blocked_record = await db.contact_abuse.find_one(
         {"ip": client_ip, "blockedUntil": {"$gt": now}},
         {"blockedUntil": 1}
     )
     if blocked_record:
-        await _log_spam_event(request=request, event_type="ip_blocked", reason="existing_ip_block")
-        raise HTTPException(
-            status_code=429,
-            detail="Too many submissions from this IP. Please try again later."
-        )
+        # If limits were relaxed and this IP is now below the current threshold,
+        # clear the stale block so settings changes take effect immediately.
+        if recent_count < protection["maxSubmissionsPerIp"]:
+            await db.contact_abuse.delete_one({"ip": client_ip})
+        else:
+            await _log_spam_event(request=request, event_type="ip_blocked", reason="existing_ip_block")
+            raise HTTPException(
+                status_code=429,
+                detail="Too many submissions from this IP. Please try again later."
+            )
 
-    recent_count = await db.contact_submissions.count_documents({
-        "ip": client_ip,
-        "createdAt": {"$gte": window_start}
-    })
     if recent_count >= protection["maxSubmissionsPerIp"]:
         blocked_until = now + timedelta(minutes=protection["blockWindowMinutes"])
         await db.contact_abuse.update_one(
