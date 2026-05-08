@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Phone, MapPin, ChevronRight, Send } from 'lucide-react';
+import { Mail, Phone, MapPin, ChevronRight, Send, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { publicApi } from '@/lib/api-backend';
 import { Input } from "@/components/ui/input";
@@ -216,8 +216,25 @@ export default function ContactUsPage() {
               <h2 className="text-2xl font-bold text-white mb-2">Send us a message</h2>
               <p className="text-teal-50">Fill out the form below and we'll get back to you shortly.</p>
             </div>
-            
-            <form className="p-8 space-y-6" onSubmit={handleSubmit}>
+
+            <div className="relative">
+              {(isLoading || isRedirecting) && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/55 backdrop-blur-sm rounded-b-3xl">
+                  <div className="flex flex-col items-center gap-2 rounded-xl border bg-white/90 px-5 py-4 shadow-lg">
+                    <Loader2 className="h-5 w-5 animate-spin text-teal-600" />
+                    <p className="text-sm font-medium text-gray-700">
+                      {isRedirecting ? "Redirecting to confirmation..." : "Submitting your message..."}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <form
+                className={`p-8 space-y-6 transition-all duration-200 ${
+                  isLoading || isRedirecting ? "pointer-events-none select-none blur-[1px]" : ""
+                }`}
+                onSubmit={handleSubmit}
+              >
               <div className="grid md:grid-cols-2 gap-6">
                 {['name', 'email'].map((field) => (
                   <div key={field} className="relative">
@@ -317,7 +334,8 @@ export default function ContactUsPage() {
                 <span>{isRedirecting ? 'Redirecting...' : isLoading ? 'Sending...' : 'Send Message'}</span>
                 <Send className="w-5 h-5" />
               </motion.button>
-            </form>
+              </form>
+            </div>
           </motion.div>
 
           {/* Contact Info */}
