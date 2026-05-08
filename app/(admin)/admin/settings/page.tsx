@@ -26,7 +26,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { adminApi } from "@/lib/api-backend";
+import { adminApi, backendApi } from "@/lib/api-backend";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { authService } from "@/lib/auth-backend";
@@ -153,7 +153,7 @@ function SettingsPageContent() {
       const getRecaptchaSettingsApi = (adminApi as any).getRecaptchaSettings;
       const response = getRecaptchaSettingsApi
         ? await getRecaptchaSettingsApi()
-        : {};
+        : await backendApi.get("/api/admin/settings/recaptcha");
       setRecaptchaSiteKey(String((response as any)?.siteKey || ""));
       setHasRecaptchaSecret(Boolean((response as any)?.hasSecretKey));
     } catch (error) {
@@ -185,6 +185,11 @@ function SettingsPageContent() {
         const updateRecaptchaSettingsApi = (adminApi as any).updateRecaptchaSettings;
         if (updateRecaptchaSettingsApi) {
           await updateRecaptchaSettingsApi({
+            siteKey: recaptchaSiteKey.trim() || undefined,
+            secretKey: recaptchaSecretKey.trim() || undefined,
+          });
+        } else {
+          await backendApi.put("/api/admin/settings/recaptcha", {
             siteKey: recaptchaSiteKey.trim() || undefined,
             secretKey: recaptchaSecretKey.trim() || undefined,
           });
