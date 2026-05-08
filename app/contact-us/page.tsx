@@ -8,6 +8,7 @@ import { publicApi } from '@/lib/api-backend';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import ReCAPTCHA from "react-google-recaptcha";
+import { useRouter } from "next/navigation";
 
 // Define an interface for the form data
 interface FormData {
@@ -50,6 +51,7 @@ const fadeInUp = {
 };
 
 export default function ContactUsPage() {
+  const router = useRouter();
   const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -63,6 +65,7 @@ export default function ContactUsPage() {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [isFormEnabled, setIsFormEnabled] = useState(true);
   const [minMessageChars, setMinMessageChars] = useState(25);
   const [maxMessageChars, setMaxMessageChars] = useState(2000);
@@ -110,6 +113,7 @@ export default function ContactUsPage() {
       return;
     }
     setIsLoading(true);
+    let isSuccess = false;
     try {
       const result = await publicApi.submitContact(formData);
       const httpStatus = Number(result?.httpStatus ?? 0);
@@ -134,7 +138,10 @@ export default function ContactUsPage() {
           (typeof result?.detail === 'string' ? result?.detail : result?.detail?.message) || result?.message || 'Failed to send message'
         );
       }
-      window.location.href = '/contact-us/confirmation';
+      isSuccess = true;
+      setIsRedirecting(true);
+      router.push('/contact-us/confirmation');
+      return;
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to send message', {
@@ -142,11 +149,13 @@ export default function ContactUsPage() {
         position: 'top-center'
       });
     } finally {
-      if (shouldUseRecaptcha) {
+      if (!isSuccess && shouldUseRecaptcha) {
         recaptchaRef.current?.reset();
         setFormData((prev) => ({ ...prev, recaptchaToken: '' }));
       }
-      setIsLoading(false);
+      if (!isSuccess) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -303,9 +312,9 @@ export default function ContactUsPage() {
                 className="w-full bg-gradient-to-r from-teal-500 to-blue-500 text-white px-8 py-4 rounded-xl font-medium inline-flex items-center justify-center space-x-2 shadow-lg shadow-teal-500/25 hover:shadow-xl hover:shadow-teal-500/40 transition-all duration-300"
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
-                disabled={isLoading || !isFormEnabled || (shouldUseRecaptcha && !formData.recaptchaToken)}
+                disabled={isLoading || isRedirecting || !isFormEnabled || (shouldUseRecaptcha && !formData.recaptchaToken)}
               >
-                <span>{isLoading ? 'Sending...' : 'Send Message'}</span>
+                <span>{isRedirecting ? 'Redirecting...' : isLoading ? 'Sending...' : 'Send Message'}</span>
                 <Send className="w-5 h-5" />
               </motion.button>
             </form>
