@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { Mail, Phone, MapPin, ChevronRight, Send } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { publicApi } from '@/lib/api-backend';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // Define an interface for the form data
 interface FormData {
@@ -15,6 +17,8 @@ interface FormData {
   service: string
   email: string
   message: string
+  captchaChallengeId: string
+  captchaAnswer: string
 }
 
 function Breadcrumb() {
@@ -53,12 +57,16 @@ export default function ContactUsPage() {
     organization: '',
     service: '',
     email: '',
-    message: ''
+    message: '',
+    captchaChallengeId: '',
+    captchaAnswer: ''
   });
 
   const [isLoading, setIsLoading] = useState(false);
   const [isFormEnabled, setIsFormEnabled] = useState(true);
   const [minMessageChars, setMinMessageChars] = useState(25);
+  const [isCaptchaEnabled, setIsCaptchaEnabled] = useState(true);
+  const [captchaQuestion, setCaptchaQuestion] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -66,6 +74,7 @@ export default function ContactUsPage() {
         const status = await publicApi.getContactFormStatus();
         setIsFormEnabled(Boolean(status?.enabled ?? true));
         setMinMessageChars(Number(status?.minMessageChars ?? 25));
+        setIsCaptchaEnabled(Boolean(status?.captchaEnabled ?? true));
       } catch {
         setIsFormEnabled(true);
       }
@@ -89,8 +98,21 @@ export default function ContactUsPage() {
     setIsLoading(true);
     try {
       const result = await publicApi.submitContact(formData);
-      if (result?.status !== 'success') {
-        throw new Error(result?.detail || result?.message || 'Failed to send message');
+      if (!result?.ok || result?.status !== 'success') {
+        const detail = result?.detail;
+        if (result?.httpStatus === 428 && detail?.code === 'captcha_required') {
+          setCaptchaQuestion(String(detail?.question || 'Please solve the captcha challenge.'));
+          setFormData((prev) => ({
+            ...prev,
+            captchaChallengeId: String(detail?.challengeId || ''),
+            captchaAnswer: '',
+          }));
+          toast.error('Please complete the captcha challenge to continue.');
+          return;
+        }
+        throw new Error(
+          (typeof detail === 'string' ? detail : detail?.message) || result?.message || 'Failed to send message'
+        );
       }
       window.location.href = '/contact-us/confirmation';
     } catch (error) {
@@ -226,6 +248,22 @@ export default function ContactUsPage() {
                   value={formData.message}
                 ></textarea>
               </div>
+
+              {isCaptchaEnabled && captchaQuestion && (
+                <div className="space-y-2">
+                  <Label htmlFor="captchaAnswer" className="text-sm font-medium">
+                    Security Check: {captchaQuestion}
+                  </Label>
+                  <Input
+                    id="captchaAnswer"
+                    name="captchaAnswer"
+                    placeholder="Enter your answer"
+                    required
+                    value={formData.captchaAnswer}
+                    onChange={handleChange}
+                  />
+                </div>
+              )}
 
               {!isFormEnabled && (
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-3">

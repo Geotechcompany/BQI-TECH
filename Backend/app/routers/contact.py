@@ -4,22 +4,29 @@ from typing import Dict, Any
 import logging
 import traceback
 import re
+import random
 from datetime import datetime, timedelta
 from app.lib.email import send_contact_form_email, send_contact_confirmation_email
 from app.database import get_database
 from app.utils.ip_utils import get_real_client_ip
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Set to DEBUG to get more detailed logs
+logger.setLevel(logging.DEBUG)
 
 router = APIRouter(tags=["contact"])
 
-MIN_MESSAGE_CHARS = 25
-MAX_SUBMISSIONS_PER_IP = 5
-IP_WINDOW_MINUTES = 15
-BLOCK_WINDOW_MINUTES = 60
 EMAIL_REGEX = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$")
 URL_REGEX = re.compile(r"(https?://|www\.)", re.IGNORECASE)
+
+DEFAULT_CONTACT_PROTECTION = {
+    "minMessageChars": 25,
+    "maxSubmissionsPerIp": 5,
+    "ipWindowMinutes": 15,
+    "blockWindowMinutes": 60,
+    "captchaEnabled": True,
+    "captchaScoreThreshold": 55,
+    "blockScoreThreshold": 35,
+}
 
 
 def _is_valid_email(email: str) -> bool:
@@ -80,7 +87,6 @@ def _compute_message_quality(message: str) -> Dict[str, Any]:
 
     return {
         "score": max(0, score),
-        "is_suspicious": score < 55,
         "reasons": reasons,
     }
 
@@ -93,54 +99,149 @@ async def _get_contact_form_enabled() -> bool:
     return bool(settings.get("contactFormEnabled", True))
 
 
-async def _check_and_track_ip_submission(request: Request) -> None:
+async def _get_contact_protection_settings() -> Dict[str, Any]:
+    db = get_database()
+    settings = await db.settings.find_one({"type": "admin"}, {"contactProtection": 1})
+    configured = settings.get("contactProtection", {}) if settings else {}
+    merged = {**DEFAULT_CONTACT_PROTECTION, **(configured if isinstance(configured, dict) else {})}
+    merged["minMessageChars"] = max(5, int(merged.get("minMessageChars", DEFAULT_CONTACT_PROTECTION["minMessageChars"])))
+    merged["maxSubmissionsPerIp"] = max(1, int(merged.get("maxSubmissionsPerIp", DEFAULT_CONTACT_PROTECTION["maxSubmissionsPerIp"])))
+    merged["ipWindowMinutes"] = max(1, int(merged.get("ipWindowMinutes", DEFAULT_CONTACT_PROTECTION["ipWindowMinutes"])))
+    merged["blockWindowMinutes"] = max(1, int(merged.get("blockWindowMinutes", DEFAULT_CONTACT_PROTECTION["blockWindowMinutes"])))
+    merged["captchaScoreThreshold"] = max(1, min(100, int(merged.get("captchaScoreThreshold", DEFAULT_CONTACT_PROTECTION["captchaScoreThreshold"]))))
+    merged["blockScoreThreshold"] = max(0, min(100, int(merged.get("blockScoreThreshold", DEFAULT_CONTACT_PROTECTION["blockScoreThreshold"]))))
+    if merged["blockScoreThreshold"] >= merged["captchaScoreThreshold"]:
+        merged["blockScoreThreshold"] = max(0, merged["captchaScoreThreshold"] - 1)
+    merged["captchaEnabled"] = bool(merged.get("captchaEnabled", DEFAULT_CONTACT_PROTECTION["captchaEnabled"]))
+    return merged
+
+
+async def _log_spam_event(
+    *,
+    request: Request,
+    event_type: str,
+    reason: str,
+    email: str = "",
+    quality: Dict[str, Any] = None,
+) -> None:
+    try:
+        db = get_database()
+        client_ip = get_real_client_ip(request) or (request.client.host if request.client else "unknown")
+        now = datetime.utcnow()
+        await db.contact_spam_events.insert_one({
+            "ip": client_ip,
+            "email": email,
+            "eventType": event_type,
+            "reason": reason,
+            "quality": quality or {},
+            "createdAt": now,
+        })
+    except Exception as event_error:
+        logger.warning(f"Failed to log contact spam event: {event_error}")
+
+
+async def _check_and_track_ip_submission(request: Request, protection: Dict[str, Any]) -> None:
     db = get_database()
     client_ip = get_real_client_ip(request) or (request.client.host if request.client else "unknown")
     now = datetime.utcnow()
-    window_start = now - timedelta(minutes=IP_WINDOW_MINUTES)
+    window_start = now - timedelta(minutes=protection["ipWindowMinutes"])
 
-    # Check if the IP is actively blocked
     blocked_record = await db.contact_abuse.find_one(
         {"ip": client_ip, "blockedUntil": {"$gt": now}},
         {"blockedUntil": 1}
     )
     if blocked_record:
+        await _log_spam_event(request=request, event_type="ip_blocked", reason="existing_ip_block")
         raise HTTPException(
             status_code=429,
             detail="Too many submissions from this IP. Please try again later."
         )
 
-    # Count submissions in the rolling window
     recent_count = await db.contact_submissions.count_documents({
         "ip": client_ip,
         "createdAt": {"$gte": window_start}
     })
-    if recent_count >= MAX_SUBMISSIONS_PER_IP:
-        blocked_until = now + timedelta(minutes=BLOCK_WINDOW_MINUTES)
+    if recent_count >= protection["maxSubmissionsPerIp"]:
+        blocked_until = now + timedelta(minutes=protection["blockWindowMinutes"])
         await db.contact_abuse.update_one(
             {"ip": client_ip},
             {"$set": {"ip": client_ip, "blockedUntil": blocked_until, "updatedAt": now}, "$setOnInsert": {"createdAt": now}},
             upsert=True
+        )
+        await _log_spam_event(
+            request=request,
+            event_type="ip_rate_limit_block",
+            reason=f"rate_limit_exceeded_{protection['maxSubmissionsPerIp']}_in_{protection['ipWindowMinutes']}m"
         )
         raise HTTPException(
             status_code=429,
             detail="Too many submissions from this IP. Please try again in an hour."
         )
 
-    # Track this submission attempt early to throttle burst spam (before email sending)
     await db.contact_submissions.insert_one({
         "ip": client_ip,
         "createdAt": now,
     })
 
 
+async def _create_math_captcha(request: Request) -> Dict[str, str]:
+    db = get_database()
+    left = random.randint(2, 9)
+    right = random.randint(1, 9)
+    challenge_id = f"cc_{random.randint(100000, 999999)}_{int(datetime.utcnow().timestamp())}"
+    answer = str(left + right)
+    now = datetime.utcnow()
+    await db.contact_captcha_challenges.insert_one({
+        "challengeId": challenge_id,
+        "answer": answer,
+        "ip": get_real_client_ip(request) or (request.client.host if request.client else "unknown"),
+        "createdAt": now,
+        "expiresAt": now + timedelta(minutes=10),
+        "used": False,
+    })
+    return {"challengeId": challenge_id, "question": f"What is {left} + {right}?"}
+
+
+async def _validate_math_captcha(request: Request, challenge_id: str, answer: str) -> bool:
+    if not challenge_id or not answer:
+        return False
+    db = get_database()
+    now = datetime.utcnow()
+    ip = get_real_client_ip(request) or (request.client.host if request.client else "unknown")
+    challenge = await db.contact_captcha_challenges.find_one({
+        "challengeId": challenge_id,
+        "used": False,
+        "expiresAt": {"$gt": now},
+    })
+    if not challenge:
+        return False
+    if challenge.get("ip") and challenge.get("ip") != ip:
+        return False
+    is_valid = str(challenge.get("answer", "")).strip() == str(answer).strip()
+    if is_valid:
+        await db.contact_captcha_challenges.update_one(
+            {"_id": challenge["_id"]},
+            {"$set": {"used": True, "usedAt": now}}
+        )
+    return is_valid
+
+
 @router.get("/status")
 async def get_contact_form_status():
+    protection = await _get_contact_protection_settings()
     enabled = await _get_contact_form_enabled()
     return {
         "enabled": enabled,
-        "minMessageChars": MIN_MESSAGE_CHARS
+        "minMessageChars": protection["minMessageChars"],
+        "captchaEnabled": protection["captchaEnabled"],
     }
+
+
+@router.get("/captcha-challenge")
+async def get_contact_captcha_challenge(request: Request):
+    challenge = await _create_math_captcha(request)
+    return {"status": "success", **challenge}
+
 
 @router.post("/submit")
 async def submit_contact_form(
@@ -149,40 +250,25 @@ async def submit_contact_form(
 ):
     """
     Submit contact form and send email
-    
-    Expected payload:
-    {
-        "name": str,
-        "email": str,
-        "phone": str (optional),
-        "organization": str (optional),
-        "service": str (optional),
-        "message": str
-    }
     """
     try:
-        # Respect admin-level contact form toggle
+        protection = await _get_contact_protection_settings()
+
         if not await _get_contact_form_enabled():
             raise HTTPException(status_code=503, detail="Contact form is currently disabled.")
 
-        # Apply IP-based anti-spam protection
-        await _check_and_track_ip_submission(request)
+        await _check_and_track_ip_submission(request, protection)
 
-        # Log incoming request details for debugging
-        logger.debug(f"Received contact form submission request")
+        logger.debug("Received contact form submission request")
         logger.debug(f"Request method: {request.method}")
         logger.debug(f"Request headers: {dict(request.headers)}")
         logger.debug(f"Request body: {form_data}")
 
-        # Validate required fields
-        required_fields = ['name', 'email', 'message']
+        required_fields = ["name", "email", "message"]
         for field in required_fields:
             if not form_data.get(field):
                 logger.warning(f"Missing required field: {field}")
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Missing required field: {field}"
-                )
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
 
         email = str(form_data.get("email", "")).strip().lower()
         message = str(form_data.get("message", "")).strip()
@@ -192,53 +278,77 @@ async def submit_contact_form(
             raise HTTPException(status_code=400, detail="Name is too short.")
 
         if not _is_valid_email(email):
+            await _log_spam_event(request=request, event_type="invalid_email", reason="email_validation_failed", email=email)
             raise HTTPException(status_code=400, detail="Please enter a valid email address.")
 
-        if len(message) < MIN_MESSAGE_CHARS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Message must be at least {MIN_MESSAGE_CHARS} characters."
-            )
+        if len(message) < protection["minMessageChars"]:
+            await _log_spam_event(request=request, event_type="min_chars_failed", reason="message_too_short", email=email)
+            raise HTTPException(status_code=400, detail=f"Message must be at least {protection['minMessageChars']} characters.")
 
         quality = _compute_message_quality(message)
-        if quality["is_suspicious"]:
-            logger.warning(f"Blocked suspicious contact message from {email}: {quality}")
+        quality_score = int(quality.get("score", 0))
+        captcha_id = str(form_data.get("captchaChallengeId", "")).strip()
+        captcha_answer = str(form_data.get("captchaAnswer", "")).strip()
+
+        if quality_score <= protection["blockScoreThreshold"]:
+            await _log_spam_event(
+                request=request,
+                event_type="nonsense_blocked",
+                reason="quality_below_block_threshold",
+                email=email,
+                quality=quality
+            )
+            logger.warning(f"Blocked high-risk contact message from {email}: {quality}")
             raise HTTPException(
                 status_code=400,
                 detail="Your message appears invalid. Please provide a clear, meaningful message."
             )
-        
-        # Send email
+
+        if protection["captchaEnabled"] and quality_score <= protection["captchaScoreThreshold"]:
+            captcha_valid = await _validate_math_captcha(request, captcha_id, captcha_answer)
+            if not captcha_valid:
+                challenge = await _create_math_captcha(request)
+                await _log_spam_event(
+                    request=request,
+                    event_type="captcha_required",
+                    reason="quality_requires_captcha",
+                    email=email,
+                    quality=quality
+                )
+                raise HTTPException(
+                    status_code=428,
+                    detail={
+                        "message": "Captcha verification required.",
+                        "code": "captcha_required",
+                        "challengeId": challenge["challengeId"],
+                        "question": challenge["question"],
+                    },
+                )
+
         email_sent = await send_contact_form_email(
             name=name,
             email=email,
-            phone=form_data.get('phone', 'Not provided'),
-            organization=form_data.get('organization', 'Not provided'),
-            service=form_data.get('service', 'Not specified'),
+            phone=form_data.get("phone", "Not provided"),
+            organization=form_data.get("organization", "Not provided"),
+            service=form_data.get("service", "Not specified"),
             message=message
         )
-        
+
         if not email_sent:
             logger.error("Failed to send contact form email")
-            raise HTTPException(
-                status_code=500, 
-                detail="Failed to send contact form email"
-            )
-        
-        # Fire-and-forget confirmation to user (non-blocking)
+            raise HTTPException(status_code=500, detail="Failed to send contact form email")
+
         try:
             _ = await send_contact_confirmation_email(
                 name=name,
                 email=email,
-                service=form_data.get('service', 'Not specified'),
+                service=form_data.get("service", "Not specified"),
                 message=message
             )
-        except Exception as _e:
-            logger.warning(f"Contact confirmation email failed but will not block response: {_e}")
+        except Exception as confirmation_error:
+            logger.warning(f"Contact confirmation email failed but will not block response: {confirmation_error}")
 
-        # Log successful submission
         logger.info(f"Contact form submitted by {email}")
-        
         return JSONResponse(
             content={
                 "message": "Contact form submitted successfully",
@@ -246,13 +356,13 @@ async def submit_contact_form(
             },
             status_code=200
         )
-    
+
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Contact form submission error: {str(e)}")
-        logger.error(traceback.format_exc())  # Log full traceback
+    except Exception as error:
+        logger.error(f"Contact form submission error: {str(error)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail="Internal server error during contact form submission"
-        ) 
+        )

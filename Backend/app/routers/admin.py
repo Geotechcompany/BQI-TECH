@@ -2352,6 +2352,15 @@ async def get_admin_settings(
                 "theme": "light",
                 "language": "en",
                 "contactFormEnabled": True,
+                "contactProtection": {
+                    "minMessageChars": 25,
+                    "maxSubmissionsPerIp": 5,
+                    "ipWindowMinutes": 15,
+                    "blockWindowMinutes": 60,
+                    "captchaEnabled": True,
+                    "captchaScoreThreshold": 55,
+                    "blockScoreThreshold": 35
+                },
                 "jobSettings": {
                     "autoClose": True,
                     "autoCloseAfterDays": 30,
@@ -2472,6 +2481,59 @@ async def sync_databases_manual(
         logger.error(f"Error in sync_databases_manual: {str(e)}")
         logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail="Failed to sync databases")
+
+
+@router.get("/contact-protection/analytics")
+async def get_contact_protection_analytics(
+    current_user: dict = Depends(get_current_admin_user),
+    days: int = Query(7, ge=1, le=90),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Get contact protection analytics (blocked events by IP/reason/time)."""
+    try:
+        db = get_database()
+        since = datetime.utcnow() - timedelta(days=days)
+
+        events_cursor = db.contact_spam_events.find(
+            {"createdAt": {"$gte": since}}
+        ).sort("createdAt", -1).limit(limit)
+        events = await events_cursor.to_list(length=limit)
+        for event in events:
+            convert_objectids_to_strings(event)
+            event["id"] = str(event.get("_id")) if event.get("_id") else event.get("id")
+            if "_id" in event:
+                del event["_id"]
+
+        by_reason_pipeline = [
+            {"$match": {"createdAt": {"$gte": since}}},
+            {"$group": {"_id": "$reason", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+            {"$limit": 20},
+        ]
+        by_ip_pipeline = [
+            {"$match": {"createdAt": {"$gte": since}}},
+            {"$group": {"_id": "$ip", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+            {"$limit": 20},
+        ]
+
+        by_reason = await db.contact_spam_events.aggregate(by_reason_pipeline).to_list(length=20)
+        by_ip = await db.contact_spam_events.aggregate(by_ip_pipeline).to_list(length=20)
+        total_events = await db.contact_spam_events.count_documents({"createdAt": {"$gte": since}})
+
+        return {
+            "summary": {
+                "days": days,
+                "totalEvents": total_events,
+                "topReasons": [{"reason": item.get("_id") or "unknown", "count": item.get("count", 0)} for item in by_reason],
+                "topIps": [{"ip": item.get("_id") or "unknown", "count": item.get("count", 0)} for item in by_ip],
+            },
+            "events": events,
+        }
+    except Exception as e:
+        logger.error(f"Error in get_contact_protection_analytics: {str(e)}")
+        logger.exception("Full traceback:")
+        raise HTTPException(status_code=500, detail="Failed to load contact protection analytics")
 
 @router.get("/notifications")
 async def get_admin_notifications(

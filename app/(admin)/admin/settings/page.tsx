@@ -38,6 +38,15 @@ interface AdminSettings {
   emailNotifications: boolean;
   pushNotifications: boolean;
   contactFormEnabled: boolean;
+  contactProtection: {
+    minMessageChars: number;
+    maxSubmissionsPerIp: number;
+    ipWindowMinutes: number;
+    blockWindowMinutes: number;
+    captchaEnabled: boolean;
+    captchaScoreThreshold: number;
+    blockScoreThreshold: number;
+  };
   autoLogout: number;
   tableRowsPerPage: number;
   sidebarCollapsed: boolean;
@@ -46,10 +55,27 @@ interface AdminSettings {
   avatar: string;
 }
 
+interface ContactSpamEvent {
+  id?: string;
+  ip?: string;
+  reason?: string;
+  eventType?: string;
+  createdAt?: string;
+}
+
 const defaultSettings: AdminSettings = {
   emailNotifications: true,
   pushNotifications: true,
   contactFormEnabled: true,
+  contactProtection: {
+    minMessageChars: 25,
+    maxSubmissionsPerIp: 5,
+    ipWindowMinutes: 15,
+    blockWindowMinutes: 60,
+    captchaEnabled: true,
+    captchaScoreThreshold: 55,
+    blockScoreThreshold: 35,
+  },
   autoLogout: 30,
   tableRowsPerPage: 25,
   sidebarCollapsed: false,
@@ -64,11 +90,14 @@ function SettingsPageContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncingDatabases, setIsSyncingDatabases] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [contactSpamEvents, setContactSpamEvents] = useState<ContactSpamEvent[]>([]);
   const { setTheme } = useTheme();
   const { updateTheme, updateSettings } = useSettings();
 
   useEffect(() => {
     loadSettings();
+    loadContactAnalytics();
   }, []);
 
   const loadSettings = async () => {
@@ -80,7 +109,14 @@ function SettingsPageContent() {
       const response = await adminApi.getSettings();
       if (response) {
         const payload = (response as any).settings ?? response;
-        setSettings({ ...defaultSettings, ...payload });
+        setSettings({
+          ...defaultSettings,
+          ...payload,
+          contactProtection: {
+            ...defaultSettings.contactProtection,
+            ...(payload?.contactProtection ?? {}),
+          },
+        });
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -89,6 +125,19 @@ function SettingsPageContent() {
       setSettings(defaultSettings);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadContactAnalytics = async () => {
+    try {
+      setIsLoadingAnalytics(true);
+      const response = await adminApi.getContactProtectionAnalytics({ days: 7, limit: 20 });
+      setContactSpamEvents((response as any)?.events ?? []);
+    } catch (error) {
+      console.error('Failed to load contact spam analytics:', error);
+      setContactSpamEvents([]);
+    } finally {
+      setIsLoadingAnalytics(false);
     }
   };
 
@@ -102,6 +151,7 @@ function SettingsPageContent() {
         emailNotifications: settings.emailNotifications,
         pushNotifications: settings.pushNotifications,
         contactFormEnabled: settings.contactFormEnabled,
+        contactProtection: settings.contactProtection,
         autoLogout: settings.autoLogout,
         tableRowsPerPage: settings.tableRowsPerPage,
         sidebarCollapsed: settings.sidebarCollapsed,
@@ -139,6 +189,18 @@ function SettingsPageContent() {
     value: AdminSettings[K]
   ) => {
     setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const updateContactProtection = (
+    patch: Partial<AdminSettings["contactProtection"]>
+  ) => {
+    setSettings((prev) => ({
+      ...prev,
+      contactProtection: {
+        ...prev.contactProtection,
+        ...patch,
+      },
+    }));
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -431,6 +493,137 @@ function SettingsPageContent() {
                     updateSetting('contactFormEnabled', checked)
                   }
                 />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="font-medium">Minimum Message Characters</Label>
+                  <Input
+                    type="number"
+                    min={5}
+                    value={settings.contactProtection.minMessageChars}
+                    onChange={(e) =>
+                      updateContactProtection({ minMessageChars: Number(e.target.value || 5) })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-medium">Max Submissions Per IP</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={settings.contactProtection.maxSubmissionsPerIp}
+                    onChange={(e) =>
+                      updateContactProtection({ maxSubmissionsPerIp: Number(e.target.value || 1) })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-medium">IP Window (minutes)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={settings.contactProtection.ipWindowMinutes}
+                    onChange={(e) =>
+                      updateContactProtection({ ipWindowMinutes: Number(e.target.value || 1) })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-medium">Block Duration (minutes)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={settings.contactProtection.blockWindowMinutes}
+                    onChange={(e) =>
+                      updateContactProtection({ blockWindowMinutes: Number(e.target.value || 1) })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                <div>
+                  <Label className="font-medium">Enable Captcha Fallback</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Show captcha for borderline suspicious messages
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.contactProtection.captchaEnabled}
+                  onCheckedChange={(checked) =>
+                    updateContactProtection({ captchaEnabled: checked })
+                  }
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="font-medium">Captcha Score Threshold</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={settings.contactProtection.captchaScoreThreshold}
+                    onChange={(e) =>
+                      updateContactProtection({ captchaScoreThreshold: Number(e.target.value || 55) })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-medium">Block Score Threshold</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={99}
+                    value={settings.contactProtection.blockScoreThreshold}
+                    onChange={(e) =>
+                      updateContactProtection({ blockScoreThreshold: Number(e.target.value || 35) })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          </SettingCard>
+
+          <SettingCard
+            icon={Shield}
+            title="Contact Spam Analytics"
+            description="Recent blocked/challenged submissions by IP, reason, and time"
+          >
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-muted-foreground">
+                  Last 7 days, latest 20 events
+                </p>
+                <Button variant="outline" size="sm" onClick={loadContactAnalytics} disabled={isLoadingAnalytics}>
+                  {isLoadingAnalytics ? "Refreshing..." : "Refresh"}
+                </Button>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <div className="grid grid-cols-4 gap-2 px-3 py-2 text-xs font-semibold bg-muted/50">
+                  <span>IP</span>
+                  <span>Reason</span>
+                  <span>Event</span>
+                  <span>Time</span>
+                </div>
+                {contactSpamEvents.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-muted-foreground">
+                    No spam events recorded yet.
+                  </div>
+                ) : (
+                  contactSpamEvents.map((event, index) => (
+                    <div key={event.id || `${event.ip}-${index}`} className="grid grid-cols-4 gap-2 px-3 py-2 text-xs border-t">
+                      <span className="truncate">{event.ip || "unknown"}</span>
+                      <span className="truncate">{event.reason || "unknown"}</span>
+                      <span className="truncate">{event.eventType || "unknown"}</span>
+                      <span className="truncate">
+                        {event.createdAt ? new Date(event.createdAt).toLocaleString() : "-"}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </SettingCard>
