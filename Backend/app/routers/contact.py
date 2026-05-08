@@ -6,6 +6,7 @@ import traceback
 import re
 import random
 import httpx
+import asyncio
 from datetime import datetime, timedelta
 from app.lib.email import send_contact_form_email, send_contact_confirmation_email
 from app.database import get_database
@@ -101,6 +102,11 @@ def _compute_message_quality(message: str) -> Dict[str, Any]:
     has_heavy_consonant_clusters = len(consonant_clusters) >= 1
     token_lengths = [len(w) for w in words]
     avg_token_length = (sum(token_lengths) / len(token_lengths)) if token_lengths else 0
+    vowel_chars = re.findall(r"[aeiou]", lowered)
+    vowel_ratio = (len(vowel_chars) / len(alpha_chars)) if alpha_chars else 0.0
+    consonant_heavy_tokens = sum(
+        1 for token in words if re.search(r"(?i)[^aeiou]{4,}", token)
+    )
 
     score = 100
     reasons = []
@@ -135,6 +141,12 @@ def _compute_message_quality(message: str) -> Dict[str, Any]:
     if has_heavy_consonant_clusters:
         score -= 30
         reasons.append("heavy_consonant_clusters")
+    if consonant_heavy_tokens >= 3:
+        score -= 35
+        reasons.append("many_consonant_heavy_tokens")
+    if len(words) >= 4 and vowel_ratio < 0.30:
+        score -= 30
+        reasons.append("low_vowel_ratio")
     if avg_token_length > 12:
         score -= 15
         reasons.append("abnormally_long_tokens")
@@ -388,7 +400,14 @@ async def submit_contact_form(
         logger.debug("Received contact form submission request")
         logger.debug(f"Request method: {request.method}")
         logger.debug(f"Request headers: {dict(request.headers)}")
-        logger.debug(f"Request body: {form_data}")
+        logger.debug(
+            "Request payload summary: "
+            f"name={form_data.get('name')!r}, "
+            f"email={form_data.get('email')!r}, "
+            f"service={form_data.get('service')!r}, "
+            f"message_len={len(str(form_data.get('message', '')))}, "
+            f"has_recaptcha_token={bool(form_data.get('recaptchaToken'))}"
+        )
 
         required_fields = ["name", "email", "message"]
         for field in required_fields:
@@ -470,15 +489,20 @@ async def submit_contact_form(
             logger.error("Failed to send contact form email")
             raise HTTPException(status_code=500, detail="Failed to send contact form email")
 
-        try:
-            _ = await send_contact_confirmation_email(
-                name=name,
-                email=email,
-                service=form_data.get("service", "Not specified"),
-                message=message
-            )
-        except Exception as confirmation_error:
-            logger.warning(f"Contact confirmation email failed but will not block response: {confirmation_error}")
+        async def _send_confirmation_email_bg() -> None:
+            try:
+                await send_contact_confirmation_email(
+                    name=name,
+                    email=email,
+                    service=form_data.get("service", "Not specified"),
+                    message=message
+                )
+            except Exception as confirmation_error:
+                logger.warning(
+                    f"Contact confirmation email failed but will not block response: {confirmation_error}"
+                )
+
+        asyncio.create_task(_send_confirmation_email_bg())
 
         logger.info(f"Contact form submitted by {email}")
         return JSONResponse(
