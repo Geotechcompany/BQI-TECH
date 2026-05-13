@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { AdminBrandTitle } from "@/components/admin/AdminBrandTitle";
 import { useState } from "react";
 import {
   Tooltip as UiTooltip,
@@ -219,9 +220,7 @@ export default function DashboardSidebar({
               height={sidebarCollapsed ? 32 : 48}
               className="rounded-lg"
             />
-            {!sidebarCollapsed && (
-              <span className="font-bold text-lg">HR PORTAL</span>
-            )}
+            {!sidebarCollapsed && <AdminBrandTitle />}
           </motion.div>
 
           <div className="flex gap-2">

@@ -12,6 +12,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { toast } from "react-hot-toast";
 import WhatsNewFloat from "@/components/admin/WhatsNewFloat";
 import { SessionTimeoutModal } from "@/components/admin/SessionTimeoutModal";
+import { AdminBrandTitle } from "@/components/admin/AdminBrandTitle";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -98,7 +99,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           className="flex flex-col h-screen w-screen bg-gray-100 md:flex-row overflow-hidden"
         >
           <div className="md:hidden bg-white flex justify-between items-center h-16 px-4 flex-shrink-0 z-50">
-            <h1 className="text-xl font-bold text-gray-800">BQI Tech HR</h1>
+            <AdminBrandTitle
+              titleClassName="text-xl text-gray-800"
+              badgeVariant="slate"
+            />
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="text-gray-500"

@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { getLoginToastFromError } from "@/lib/auth-backend";
 import { motion } from "framer-motion";
 import { Zap, Loader2, Shield, Database, Cpu } from "lucide-react";
+import { Version2Badge } from "@/components/admin/AdminBrandTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,9 +151,15 @@ const TechLoadingScreen = ({ message = "Loading..." }) => {
               transition={{ delay: 0.3 }}
               className="space-y-4"
             >
-              <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                BQI TECH HR PORTAL
-              </h2>
+              <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
+                <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                  BQI HR
+                </h2>
+                <Version2Badge
+                  variant="cyanDark"
+                  className="px-2 py-1 text-xs [&_svg]:h-3.5 [&_svg]:w-3.5"
+                />
+              </div>
               <p className="text-slate-300 text-lg">{message}</p>
             </motion.div>
 
@@ -337,7 +344,10 @@ export default function AdminLoginPage() {
         <div className="relative h-full flex flex-col justify-between p-12 text-white">
           <Zap className="w-12 h-12" />
           <div className="space-y-4">
-            <h2 className="text-4xl font-bold">BQI Tech Portal</h2>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-4xl font-bold">BQI HR</h2>
+              <Version2Badge variant="light" className="px-2 py-1 text-xs" />
+            </div>
             <p className="text-lg opacity-90">
               Empowering innovation through secure access
             </p>
@@ -358,7 +368,10 @@ export default function AdminLoginPage() {
           className="w-full max-w-md space-y-8"
         >
           <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold">Admin Portal</h1>
+            <h1 className="flex items-center justify-center gap-2 text-3xl font-bold">
+              <span>BQI HR</span>
+              <Version2Badge className="text-xs" variant="primary" />
+            </h1>
             <p className="text-muted-foreground">
               Sign in to manage your organization
             </p>

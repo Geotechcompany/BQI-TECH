@@ -4,7 +4,8 @@ import { usePathname } from 'next/navigation';
 import { X, Bell } from 'lucide-react';
 import Image from 'next/image';
 import { signOut } from "next-auth/react";
-import { menuSections } from './DashboardSidebar';
+import { menuSections } from "./DashboardSidebar";
+import { AdminBrandTitle } from "@/components/admin/AdminBrandTitle";
 
 interface MobileDashboardSidebarProps {
   isOpen: boolean;
@@ -46,7 +47,7 @@ export default function MobileDashboardSidebar({ isOpen, onClose }: MobileDashbo
                   height={48}
                   className="rounded-lg"
                 />
-                <span className="font-bold text-lg">HR PORTAL</span>
+                <AdminBrandTitle badgeVariant="slate" />
               </div>
               
               <button
