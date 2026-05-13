@@ -10,6 +10,12 @@ from jose import jwt
 import logging
 import json
 import os
+from pymongo.errors import (
+    AutoReconnect,
+    ConnectionFailure,
+    NetworkTimeout,
+    ServerSelectionTimeoutError,
+)
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
@@ -165,7 +171,33 @@ async def login(
             detail = ""
         logger.warning(f"Login HTTP error: {detail}")
         raise http_exc
+    except (
+        ServerSelectionTimeoutError,
+        ConnectionFailure,
+        NetworkTimeout,
+        AutoReconnect,
+    ) as e:
+        logger.error("MongoDB unavailable during login: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The database is temporarily unavailable. Please try again in a few minutes.",
+        ) from e
     except Exception as e:
+        err_text = str(e).lower()
+        if any(
+            fragment in err_text
+            for fragment in (
+                "replicasetnoprimary",
+                "no replica set members",
+                "serverselectiontimeout",
+                "topology_type",
+            )
+        ):
+            logger.error("MongoDB cluster unavailable during login: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The database is temporarily unavailable. Please try again in a few minutes.",
+            ) from e
         logger.error(f"Login error: {str(e)}")
         logger.exception("Full traceback:")
         raise HTTPException(

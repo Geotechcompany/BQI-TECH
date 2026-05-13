@@ -26,6 +26,74 @@ interface SessionData {
 
 import { BACKEND_URL } from "./config";
 
+/** FastAPI may return `detail` as a string or validation error list */
+function formatFastApiDetail(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg: string }).msg);
+        }
+        return JSON.stringify(item);
+      })
+      .join("; ");
+  }
+  return "Login failed";
+}
+
+export type AuthRequestError = Error & { status: number };
+
+/** Maps login failures to user-facing toast copy (avoids labeling DB outages as wrong password). */
+export function getLoginToastFromError(error: unknown): {
+  title: string;
+  description: string;
+} {
+  const message =
+    error instanceof Error ? error.message : String(error ?? "");
+  const status =
+    error instanceof Error &&
+    "status" in error &&
+    typeof (error as AuthRequestError).status === "number"
+      ? (error as AuthRequestError).status
+      : undefined;
+
+  if (status === 503) {
+    return {
+      title: "Service temporarily unavailable",
+      description:
+        message ||
+        "The application could not reach the database. Please try again shortly.",
+    };
+  }
+
+  if (
+    /replicasetnoprimary|no replica set members|topology_type|serverselectiontimeout|mongodb|waiting for suitable server/i.test(
+      message
+    )
+  ) {
+    return {
+      title: "Service temporarily unavailable",
+      description:
+        "The application could not reach the database. Please try again shortly. If you manage the database, check MongoDB Atlas for cluster health.",
+    };
+  }
+
+  if (status === 500) {
+    return {
+      title: "Something went wrong",
+      description: message || "Please try again.",
+    };
+  }
+
+  return {
+    title: "Invalid credentials",
+    description: message || "Please check your email and password.",
+  };
+}
+
 // Token storage utilities
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "user_data";
@@ -145,9 +213,12 @@ class AuthService {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error("Login error response:", error);
-        throw new Error(error.detail || "Login failed");
+        const errorBody = await response.json();
+        console.error("Login error response:", errorBody);
+        const detail = formatFastApiDetail(errorBody.detail);
+        const err = new Error(detail || "Login failed") as AuthRequestError;
+        err.status = response.status;
+        throw err;
       }
 
       const rawData = await response.json();

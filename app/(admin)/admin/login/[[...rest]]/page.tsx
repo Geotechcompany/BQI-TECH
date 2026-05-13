@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { getLoginToastFromError } from "@/lib/auth-backend";
 import { motion } from "framer-motion";
 import { Zap, Loader2, Shield, Database, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -287,10 +288,9 @@ export default function AdminLoginPage() {
       }, 500);
       
     } catch (error) {
-      console.error('Login error:', error);
-      toast.error("Invalid credentials", {
-        description: error.message || "Please check your email and password",
-      });
+      console.error("Login error:", error);
+      const { title, description } = getLoginToastFromError(error);
+      toast.error(title, { description });
     } finally {
       setIsLoading(false);
     }
