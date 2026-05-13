@@ -12,10 +12,13 @@ class Settings(BaseModel):
     port: int = int(os.getenv("PORT", "9000"))
     debug: bool = False
     
-    # Database
-    DATABASE_URL: str = Field(default=os.getenv("MONGODB_URI"))
+    # Database — operational cluster is BACKUP_MONGO_URL (legacy primary MONGODB_URI unused by app)
+    DATABASE_URL: Optional[str] = Field(
+        default=os.getenv("BACKUP_MONGO_URL") or os.getenv("MONGODB_URI")
+    )
     MONGODB_URI: Optional[str] = Field(default=os.getenv("MONGODB_URI"))
     BACKUP_MONGO_URL: Optional[str] = Field(default=os.getenv("BACKUP_MONGO_URL"))
+    DB_SYNC_TARGET_URI: Optional[str] = Field(default=os.getenv("DB_SYNC_TARGET_URI"))
     mongodb_uri: Optional[str] = os.getenv("MONGODB_URI")
     
     # API

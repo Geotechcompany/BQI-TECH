@@ -34,16 +34,22 @@ _DEFAULT_SYNC_COLLECTIONS = [
 ]
 
 
-def _build_mongo_candidates() -> list[str]:
-	"""Build ordered MongoDB URI candidates (primary first, backup second)."""
-	primary_uri = settings.MONGODB_URI or os.getenv("MONGODB_URI") or settings.DATABASE_URL
-	backup_uri = settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL")
+def _operational_mongo_uri() -> str | None:
+	"""Main application database (formerly 'backup' cluster)."""
+	uri = (settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL") or "").strip()
+	return uri or None
 
-	candidates: list[str] = []
-	for candidate in [primary_uri, backup_uri]:
-		if candidate and candidate not in candidates:
-			candidates.append(candidate)
-	return candidates
+
+def _sync_target_mongo_uri() -> str | None:
+	"""Optional second cluster for periodic copy-sync only (not the app read/write DB)."""
+	uri = (settings.DB_SYNC_TARGET_URI or os.getenv("DB_SYNC_TARGET_URI") or "").strip()
+	return uri or None
+
+
+def _build_mongo_candidates() -> list[str]:
+	"""Single operational MongoDB URI (BACKUP_MONGO_URL only; legacy primary is not used)."""
+	uri = _operational_mongo_uri()
+	return [uri] if uri else []
 
 
 def _mongo_timeout_ms() -> int:
@@ -80,10 +86,10 @@ async def _try_connect(database_url: str, database_name: str) -> bool:
 
 
 async def _get_backup_database():
-	"""Get or initialize backup database connection."""
+	"""Get or initialize optional sync-target database (DB_SYNC_TARGET_URI), not the main app DB."""
 	global _backup_client, _backup_database
-	backup_uri = settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL")
-	if not backup_uri:
+	sync_uri = _sync_target_mongo_uri()
+	if not sync_uri:
 		return None
 
 	if _backup_client is not None and _backup_database is not None:
@@ -104,7 +110,7 @@ async def _get_backup_database():
 	timeout_ms = min(_mongo_timeout_ms(), 10000)
 	try:
 		_backup_client = AsyncIOMotorClient(
-			backup_uri,
+			sync_uri,
 			serverSelectionTimeoutMS=timeout_ms,
 			connectTimeoutMS=timeout_ms,
 			socketTimeoutMS=timeout_ms,
@@ -116,7 +122,7 @@ async def _get_backup_database():
 		await _backup_client.admin.command("ping", serverSelectionTimeoutMS=timeout_ms)
 		return _backup_database
 	except Exception as e:
-		logger.error(f"Failed to connect to backup MongoDB: {e}")
+		logger.error(f"Failed to connect to sync-target MongoDB: {e}")
 		if _backup_client is not None:
 			_backup_client.close()
 		_backup_client = None
@@ -125,13 +131,16 @@ async def _get_backup_database():
 
 
 async def sync_databases_now(collections: list[str] | None = None) -> dict:
-	"""Sync primary database collections to backup database."""
+	"""Copy collections from the operational database to DB_SYNC_TARGET_URI (optional)."""
 	if not is_connected():
-		return {"success": False, "message": "Primary database not connected"}
+		return {"success": False, "message": "Database not connected"}
 
 	backup_db = await _get_backup_database()
 	if backup_db is None:
-		return {"success": False, "message": "Backup database not available"}
+		return {
+			"success": False,
+			"message": "Sync target not configured (set DB_SYNC_TARGET_URI to enable replication)",
+		}
 
 	source_db = get_database()
 	collection_names = collections or _DEFAULT_SYNC_COLLECTIONS
@@ -172,12 +181,14 @@ async def connect_to_database():
 	global _client, _database
 	
 	try:
-		# Try primary URI first, then backup URI
+		# Operational cluster only (BACKUP_MONGO_URL)
 		candidates = _build_mongo_candidates()
 		database_name = os.getenv("DATABASE_NAME", "BQITECH")
 
 		if not candidates:
-			logger.error("No MongoDB URI configured (MONGODB_URI/BACKUP_MONGO_URL)")
+			logger.error(
+				"No MongoDB URI configured: set BACKUP_MONGO_URL to your operational cluster connection string"
+			)
 			_client = None
 			_database = None
 			return
@@ -187,12 +198,11 @@ async def connect_to_database():
 		dns.resolver.default_resolver.nameservers = ['8.8.8.8', '8.8.4.4']  # Google DNS
 
 		connected = False
-		for index, candidate in enumerate(candidates):
-			label = "primary" if index == 0 else f"backup-{index}"
-			logger.info(f"Connecting to MongoDB using {label} URI...")
+		for candidate in candidates:
+			logger.info("Connecting to MongoDB (BACKUP_MONGO_URL operational cluster)...")
 			connected = await _try_connect(candidate, database_name)
 			if connected:
-				logger.info(f"Connected to MongoDB ({label}): {database_name}")
+				logger.info(f"Connected to MongoDB: {database_name}")
 				await initialize_database_indexes()
 				break
 
@@ -216,7 +226,7 @@ async def close_database_connection():
 		_backup_client.close()
 		_backup_client = None
 		_backup_database = None
-		logger.info("Disconnected from backup MongoDB")
+		logger.info("Disconnected from sync-target MongoDB")
 
 
 async def _reconnect_loop():
@@ -243,7 +253,7 @@ async def _reconnect_loop():
 
 
 async def _sync_loop():
-	"""Background loop that keeps backup database in sync."""
+	"""Background loop that copies operational DB to DB_SYNC_TARGET_URI when configured."""
 	global _sync_stop_event
 	interval_seconds = int(os.getenv("DB_SYNC_INTERVAL_SECONDS", "300"))
 
@@ -274,8 +284,7 @@ def start_reconnect_task():
 		_reconnect_stop_event = asyncio.Event()
 		_reconnect_task = asyncio.create_task(_reconnect_loop())
 
-	backup_uri = settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL")
-	if backup_uri and (_sync_task is None or _sync_task.done()):
+	if _sync_target_mongo_uri() and (_sync_task is None or _sync_task.done()):
 		_sync_stop_event = asyncio.Event()
 		_sync_task = asyncio.create_task(_sync_loop())
 

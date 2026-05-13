@@ -2463,7 +2463,7 @@ async def sync_databases_manual(
     payload: Dict[str, Any] = Body(default={}),
     current_user: dict = Depends(get_current_admin_user)
 ):
-    """Manual trigger: sync primary database data to backup database."""
+    """Manual trigger: copy operational DB (BACKUP_MONGO_URL) to DB_SYNC_TARGET_URI when set."""
     try:
         collections = payload.get("collections")
         if collections is not None and not isinstance(collections, list):

@@ -6,7 +6,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import DashboardSidebar from "@/components/admin/DashboardSidebar";
 import MobileDashboardSidebar from "@/components/admin/MobileDashboardSidebar";
 import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
-import { Menu, X } from "lucide-react";
+import { Menu } from "lucide-react";
 import { AdminThemeProvider } from "@/contexts/AdminThemeContext";
 import { useRouter, usePathname } from "next/navigation";
 import { toast } from "react-hot-toast";
@@ -15,7 +15,6 @@ import { SessionTimeoutModal } from "@/components/admin/SessionTimeoutModal";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [showBackupBanner, setShowBackupBanner] = useState(true);
   const { sidebarCollapsed } = useSettings();
   const {
     user,
@@ -127,38 +126,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           transition-all duration-300 ease-in-out
           ${sidebarCollapsed ? "md:ml-20" : "md:ml-64"}
         `}
-            style={
-              {
-                "--admin-banner-offset": showBackupBanner ? "52px" : "0px",
-              } as React.CSSProperties
-            }
           >
-            {showBackupBanner ? (
-              <div className="sticky top-2 z-[80] mx-4 mt-3 mb-4 rounded-md border border-red-300 bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-md">
-                <div className="flex items-start justify-between gap-3">
-                  <p>
-                    Notice: You are currently using the backup database. The
-                    last backup was 7 months old and data will be synced once
-                    the primary database is back online.
-                  </p>
-                  <button
-                    type="button"
-                    aria-label="Hide backup database notice"
-                    onClick={() => {
-                      setShowBackupBanner(false);
-                    }}
-                    className="rounded p-1 text-white/90 transition hover:bg-red-700 hover:text-white"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <div
-              className={`h-full w-full transition-all duration-300 ${
-                showBackupBanner ? "pt-12" : "pt-0"
-              }`}
-            >
+            <div className="h-full w-full transition-all duration-300">
               {children}
             </div>
             <WhatsNewFloat
