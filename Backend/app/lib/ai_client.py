@@ -150,12 +150,19 @@ def _auth_error_detail(status_code: int, body: str, provider: str) -> str:
     return f"AI provider error ({status_code}): {detail or body[:200] or 'unknown error'}"
 
 
+def _request_timeout() -> httpx.Timeout:
+    seconds = int(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "120"))
+    seconds = max(30, min(seconds, 300))
+    return httpx.Timeout(connect=20.0, read=float(seconds), write=30.0, pool=20.0)
+
+
 async def chat_completion(
     user_prompt: str,
     *,
     system_prompt: str | None = None,
     max_tokens: int = 2000,
     temperature: float = 0.65,
+    timeout: httpx.Timeout | float | None = None,
 ) -> str:
     config = await get_ai_config()
 
@@ -185,21 +192,57 @@ async def chat_completion(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": user_prompt})
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{config.base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {config.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": config.model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            },
-            timeout=60.0,
-        )
+    request_timeout = timeout if timeout is not None else _request_timeout()
+    payload = {
+        "model": config.model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    headers = {
+        "Authorization": f"Bearer {config.api_key}",
+        "Content-Type": "application/json",
+    }
+    url = f"{config.base_url}/chat/completions"
+
+    last_timeout: Exception | None = None
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=request_timeout,
+                )
+            last_timeout = None
+            break
+        except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.WriteTimeout) as exc:
+            last_timeout = exc
+            if attempt == 0:
+                logger.warning(
+                    "AI request timed out (attempt %s), retrying: %s",
+                    attempt + 1,
+                    exc,
+                )
+                continue
+            read_s = getattr(request_timeout, "read", request_timeout)
+            raise HTTPException(
+                status_code=504,
+                detail=(
+                    "AI provider timed out. Try again, use a faster model, or shorten the "
+                    f"article content. (waited {read_s}s)"
+                ),
+            ) from exc
+        except httpx.TimeoutException as exc:
+            last_timeout = exc
+            raise HTTPException(
+                status_code=504,
+                detail="AI provider timed out. Try again or choose a faster model.",
+            ) from exc
+
+    if last_timeout is not None:
+        raise HTTPException(status_code=504, detail="AI provider timed out.")
 
     if response.status_code != 200:
         logger.error(

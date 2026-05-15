@@ -982,7 +982,6 @@ async def ai_generate_blog_content(
     author_title = (context.get("authorTitle") or "").strip()
     author_bio = (context.get("authorBio") or "").strip()
     content_html = (context.get("content") or "").strip()
-    plain_content = strip_html_tags(content_html, max_len=6000)
 
     valid_tasks = {
         "excerpt",
@@ -1000,15 +999,32 @@ async def ai_generate_blog_content(
         )
 
     brand = "BQI Technologies (BQI Tech) — GovTech and enterprise digital transformation"
-    base_context = f"""Blog title: {title or '(untitled)'}
-Category: {category or 'Technology'}
-Current excerpt: {excerpt or '(none)'}
-Author name: {author_name or '(not set)'}
-Author title: {author_title or '(not set)'}
-Extra instructions: {instructions or '(none)'}
 
-Article body (plain text excerpt):
-{plain_content or '(empty)'}"""
+    # Keep prompts small for fast field-generation tasks; use more context only when needed.
+    content_limits: dict[str, int] = {
+        "excerpt": 1200,
+        "meta_description": 1200,
+        "author_bio": 800,
+        "author_title": 600,
+        "suggest_tags": 1500,
+        "format_content": 8000,
+    }
+    plain_content = strip_html_tags(
+        content_html, max_len=content_limits.get(task, 1200)
+    )
+
+    def build_context(*, include_body: bool = True) -> str:
+        lines = [
+            f"Blog title: {title or '(untitled)'}",
+            f"Category: {category or 'Technology'}",
+            f"Current excerpt: {excerpt or '(none)'}",
+            f"Author name: {author_name or '(not set)'}",
+            f"Author title: {author_title or '(not set)'}",
+            f"Extra instructions: {instructions or '(none)'}",
+        ]
+        if include_body:
+            lines.append(f"\nArticle body (plain text excerpt):\n{plain_content or '(empty)'}")
+        return "\n".join(lines)
 
     try:
         if task == "excerpt":
@@ -1017,7 +1033,7 @@ Article body (plain text excerpt):
                 "Return ONLY valid JSON: {\"excerpt\": \"...\"}. "
                 "Max 280 characters. No markdown."
             )
-            user = f"{base_context}\n\nWrite a concise, engaging excerpt for this blog post."
+            user = f"{build_context()}\n\nWrite a concise, engaging excerpt for this blog post."
             raw = await chat_completion(user, system_prompt=system, max_tokens=256)
             parsed = extract_json_object(raw) or {}
             excerpt_text = (parsed.get("excerpt") or raw).strip()[:300]
@@ -1028,7 +1044,7 @@ Article body (plain text excerpt):
                 "You are an SEO specialist. Return ONLY valid JSON: "
                 '{"metaDescription": "..."}. Max 160 characters. Include primary keyword. No markdown.'
             )
-            user = f"{base_context}\n\nWrite an SEO meta description for search results."
+            user = f"{build_context()}\n\nWrite an SEO meta description for search results."
             raw = await chat_completion(user, system_prompt=system, max_tokens=200)
             parsed = extract_json_object(raw) or {}
             meta = (parsed.get("metaDescription") or parsed.get("meta_description") or raw).strip()[:160]
@@ -1040,7 +1056,11 @@ Article body (plain text excerpt):
                 'Return ONLY valid JSON: {"authorBio": "..."}. '
                 "Max 500 characters. Third person. Professional tone. No markdown."
             )
-            user = f"{base_context}\n\nWrite an author bio for {author_name or 'the author'}."
+            user = (
+                f"{build_context(include_body=False)}\n"
+                f"Existing author bio: {author_bio or '(none)'}\n\n"
+                f"Write an author bio for {author_name or 'the author'}."
+            )
             raw = await chat_completion(user, system_prompt=system, max_tokens=400)
             parsed = extract_json_object(raw) or {}
             bio = (parsed.get("authorBio") or parsed.get("author_bio") or raw).strip()[:500]
@@ -1051,7 +1071,7 @@ Article body (plain text excerpt):
                 'Return ONLY valid JSON: {"authorTitle": "..."}. '
                 "Max 100 characters. Job title or role at BQI Tech. No markdown."
             )
-            user = f"{base_context}\n\nSuggest a professional author title/role."
+            user = f"{build_context(include_body=False)}\n\nSuggest a professional author title/role."
             raw = await chat_completion(user, system_prompt=system, max_tokens=120)
             parsed = extract_json_object(raw) or {}
             atitle = (parsed.get("authorTitle") or parsed.get("author_title") or raw).strip()[:100]
@@ -1062,7 +1082,7 @@ Article body (plain text excerpt):
                 'Return ONLY valid JSON: {"tags": ["tag1", "tag2"]}. '
                 "3 to 8 lowercase tags, hyphenated where needed. No markdown."
             )
-            user = f"{base_context}\n\nSuggest relevant blog tags."
+            user = f"{build_context()}\n\nSuggest relevant blog tags."
             raw = await chat_completion(user, system_prompt=system, max_tokens=256)
             parsed = extract_json_object(raw) or {}
             tags = parsed.get("tags") or []
@@ -1090,7 +1110,11 @@ Article body (plain text excerpt):
                 f"Format this HTML content with clear sections:\n\n{content_html or plain_content}"
             )
             raw = await chat_completion(
-                user, system_prompt=system, max_tokens=4000, temperature=0.4
+                user,
+                system_prompt=system,
+                max_tokens=4000,
+                temperature=0.4,
+                timeout=180.0,
             )
             parsed = extract_json_object(raw) or {}
             formatted = parsed.get("content") or raw
@@ -1106,7 +1130,13 @@ Article body (plain text excerpt):
         raise
     except Exception as exc:
         logger.exception("Blog AI generation failed")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        detail = str(exc)
+        if "timeout" in detail.lower() or "timed out" in detail.lower():
+            raise HTTPException(
+                status_code=504,
+                detail="AI request timed out. Try again or use a shorter article.",
+            ) from exc
+        raise HTTPException(status_code=500, detail=detail) from exc
 
 
 @router.options("/blog-posts/{post_id}", include_in_schema=False)
