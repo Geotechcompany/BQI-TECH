@@ -296,20 +296,12 @@ async def ai_generate_survey(
     Request: { prompt: str, num_questions?: int }
     Response: { title, description, questions: [...] }
     """
-    import os
-    import httpx
+    from app.lib.ai_client import chat_completion, extract_json_object
 
     prompt = (payload.get("prompt") or "").strip()
     num_questions = int(payload.get("num_questions") or 5)
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
-
-    base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-    api_key = os.getenv("NVIDIA_API_KEY")
-    model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
-
-    if not api_key:
-        raise HTTPException(status_code=500, detail="NVIDIA API key not configured")
 
     system = (
         "You are a professional survey generator. Create surveys with: "
@@ -335,52 +327,17 @@ async def ai_generate_survey(
         f'{{"title": "Survey Title", "description": "Survey description", "questions": [{{"title": "Question text", "type": "question_type", "options": ["option1", "option2"]}}]}}'
     )
 
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_msg},
-        ],
-        "temperature": 0.6,
-        "max_tokens": 1200,
-    }
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        try:
-            resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=body)
-            resp.raise_for_status()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"NVIDIA API error: {e}")
-
-    data = resp.json()
-    content = (
-        data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    content = await chat_completion(
+        user_msg,
+        system_prompt=system,
+        max_tokens=1200,
+        temperature=0.6,
     )
-    
-    # Log the AI response for debugging
-    logger.info(f"AI Response: {content[:500]}...")  # Log first 500 chars
+    logger.info(f"AI Response: {content[:500]}...")
 
-    # Parse JSON response from AI
-    import json, re
-    
-    # Try to find JSON in the response
-    json_patterns = [
-        r'```json\s*(\{[\s\S]*?\})\s*```',  # JSON in code blocks
-        r'```\s*(\{[\s\S]*?\})\s*```',      # JSON in generic code blocks
-        r'(\{[\s\S]*?\})',                   # Any JSON object
-    ]
-    
-    for pattern in json_patterns:
-        match = re.search(pattern, content.strip(), re.DOTALL)
-        if match:
-            try:
-                parsed = json.loads(match.group(1))
-                # Validate the structure
-                if isinstance(parsed, dict) and 'questions' in parsed:
-                    return parsed
-            except (json.JSONDecodeError, KeyError):
-                continue
+    parsed = extract_json_object(content)
+    if isinstance(parsed, dict) and "questions" in parsed:
+        return parsed
 
     # fallback minimal structure with varied question types
     question_types = ["short_text", "long_text", "single_choice", "multiple_choice"]

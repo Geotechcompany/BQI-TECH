@@ -103,7 +103,21 @@ export class BackendApiClient {
       }
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        let message = `API request failed: ${response.status}`;
+        try {
+          const errBody = await response.json();
+          if (typeof errBody?.detail === "string") {
+            message = errBody.detail;
+          } else if (Array.isArray(errBody?.detail)) {
+            message = errBody.detail
+              .map((d: { msg?: string }) => d?.msg)
+              .filter(Boolean)
+              .join("; ");
+          }
+        } catch {
+          // ignore JSON parse errors
+        }
+        throw new Error(message);
       }
 
       return response.json();
@@ -300,6 +314,18 @@ export const adminApi = {
 
   createBlogPost: (data: any) => backendApi.post("/api/admin/blog-posts", data),
 
+  aiGenerateBlog: (data: {
+    task:
+      | "excerpt"
+      | "meta_description"
+      | "author_bio"
+      | "author_title"
+      | "format_content"
+      | "suggest_tags"
+      | "read_time";
+    context?: Record<string, string>;
+  }) => backendApi.post("/api/admin/blog-posts/ai/generate", data),
+
   getBlogPost: (id: string) => backendApi.get(`/api/admin/blog-posts/${id}`),
 
   updateBlogPost: (id: string, data: any) =>
@@ -358,6 +384,16 @@ export const adminApi = {
   getRecaptchaSettings: () => backendApi.get("/api/admin/settings/recaptcha"),
   updateRecaptchaSettings: (data: { siteKey?: string; secretKey?: string }) =>
     backendApi.put("/api/admin/settings/recaptcha", data),
+  getAiProviderSettings: () => backendApi.get("/api/admin/settings/ai"),
+  updateAiProviderSettings: (data: {
+    provider?: "nvidia" | "openai";
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+    enabled?: boolean;
+  }) => backendApi.put("/api/admin/settings/ai", data),
+  testAiProviderSettings: () =>
+    backendApi.post("/api/admin/settings/ai/test", {}),
 
   // Get notifications
   async getNotifications() {

@@ -7,6 +7,7 @@ import {
   Bell, 
   Shield,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -97,6 +98,15 @@ function SettingsPageContent() {
   const [recaptchaSiteKey, setRecaptchaSiteKey] = useState("");
   const [recaptchaSecretKey, setRecaptchaSecretKey] = useState("");
   const [hasRecaptchaSecret, setHasRecaptchaSecret] = useState(false);
+  const [aiProvider, setAiProvider] = useState<"nvidia" | "openai">("nvidia");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiBaseUrl, setAiBaseUrl] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [hasAiApiKey, setHasAiApiKey] = useState(false);
+  const [aiApiKeyHint, setAiApiKeyHint] = useState("");
+  const [isSavingAi, setIsSavingAi] = useState(false);
+  const [isTestingAi, setIsTestingAi] = useState(false);
   const { setTheme } = useTheme();
   const { updateTheme, updateSettings } = useSettings();
 
@@ -104,6 +114,7 @@ function SettingsPageContent() {
     loadSettings();
     loadContactAnalytics();
     loadRecaptchaSettings();
+    loadAiSettings();
   }, []);
 
   const loadSettings = async () => {
@@ -160,6 +171,68 @@ function SettingsPageContent() {
       setHasRecaptchaSecret(Boolean((response as any)?.hasSecretKey));
     } catch (error) {
       console.error("Failed to load reCAPTCHA settings:", error);
+    }
+  };
+
+  const loadAiSettings = async () => {
+    try {
+      const response = await adminApi.getAiProviderSettings();
+      const provider = (response as { provider?: string })?.provider;
+      setAiProvider(provider === "openai" ? "openai" : "nvidia");
+      setAiBaseUrl(String((response as { baseUrl?: string })?.baseUrl || ""));
+      setAiModel(String((response as { model?: string })?.model || ""));
+      setAiEnabled(Boolean((response as { enabled?: boolean })?.enabled ?? true));
+      setHasAiApiKey(Boolean((response as { hasApiKey?: boolean })?.hasApiKey));
+      setAiApiKeyHint(String((response as { apiKeyHint?: string })?.apiKeyHint || ""));
+    } catch (error) {
+      console.error("Failed to load AI provider settings:", error);
+    }
+  };
+
+  const handleSaveAiSettings = async () => {
+    if (isSavingAi) return;
+    setIsSavingAi(true);
+    try {
+      await adminApi.updateAiProviderSettings({
+        provider: aiProvider,
+        apiKey: aiApiKey.trim() || undefined,
+        baseUrl: aiBaseUrl.trim() || undefined,
+        model: aiModel.trim() || undefined,
+        enabled: aiEnabled,
+      });
+      setAiApiKey("");
+      await loadAiSettings();
+      toast.success("AI provider settings saved");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to save AI settings";
+      toast.error(message);
+    } finally {
+      setIsSavingAi(false);
+    }
+  };
+
+  const handleTestAiConnection = async () => {
+    if (isTestingAi) return;
+    setIsTestingAi(true);
+    try {
+      if (aiApiKey.trim()) {
+        await adminApi.updateAiProviderSettings({
+          provider: aiProvider,
+          apiKey: aiApiKey.trim(),
+          baseUrl: aiBaseUrl.trim() || undefined,
+          model: aiModel.trim() || undefined,
+          enabled: aiEnabled,
+        });
+        setAiApiKey("");
+        await loadAiSettings();
+      }
+      const result = await adminApi.testAiProviderSettings();
+      toast.success(`AI connection OK: ${(result as { message?: string })?.message || "OK"}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "AI connection test failed";
+      toast.error(message);
+    } finally {
+      setIsTestingAi(false);
     }
   };
 
@@ -749,6 +822,126 @@ function SettingsPageContent() {
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          </SettingCard>
+
+          <SettingCard
+            icon={Sparkles}
+            title="AI Provider"
+            description="API key and model used for blog AI, email generation, surveys, and contact spam detection"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+                <div>
+                  <Label className="font-medium">Enable AI features</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Turn off to disable all AI-powered tools across the app
+                  </p>
+                </div>
+                <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-medium">Provider</Label>
+                <Select
+                  value={aiProvider}
+                  onValueChange={(v) => setAiProvider(v as "nvidia" | "openai")}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nvidia">NVIDIA (build.nvidia.com)</SelectItem>
+                    <SelectItem value="openai">OpenAI-compatible</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="font-medium">API Key</Label>
+                <Input
+                  type="password"
+                  value={aiApiKey}
+                  onChange={(e) =>
+                    preserveScrollPosition(() => setAiApiKey(e.target.value))
+                  }
+                  placeholder={
+                    hasAiApiKey
+                      ? `Key configured ${aiApiKeyHint} — enter new to replace`
+                      : aiProvider === "nvidia"
+                        ? "nvapi-..."
+                        : "sk-..."
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  {hasAiApiKey
+                    ? `A key is saved ${aiApiKeyHint}. Leave blank to keep it when saving other fields.`
+                    : "No API key saved yet. Falls back to NVIDIA_API_KEY in Backend/.env if unset."}
+                </p>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="font-medium">Base URL</Label>
+                  <Input
+                    value={aiBaseUrl}
+                    onChange={(e) =>
+                      preserveScrollPosition(() => setAiBaseUrl(e.target.value))
+                    }
+                    placeholder={
+                      aiProvider === "nvidia"
+                        ? "https://integrate.api.nvidia.com/v1"
+                        : "https://api.openai.com/v1"
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="font-medium">Model</Label>
+                  <Input
+                    value={aiModel}
+                    onChange={(e) =>
+                      preserveScrollPosition(() => setAiModel(e.target.value))
+                    }
+                    placeholder={
+                      aiProvider === "nvidia"
+                        ? "meta/llama-3.1-70b-instruct"
+                        : "gpt-4o-mini"
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleTestAiConnection}
+                  disabled={isTestingAi || isSavingAi}
+                >
+                  {isTestingAi ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    "Test connection"
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSaveAiSettings}
+                  disabled={isSavingAi || isTestingAi}
+                >
+                  {isSavingAi ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save AI settings"
+                  )}
+                </Button>
               </div>
             </div>
           </SettingCard>

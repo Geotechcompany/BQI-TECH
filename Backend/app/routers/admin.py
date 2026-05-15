@@ -961,6 +961,154 @@ async def delete_blog_post(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@router.post("/blog-posts/ai/generate")
+async def ai_generate_blog_content(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Generate blog fields or format content with AI (NVIDIA API)."""
+    from app.lib.ai_client import chat_completion, extract_json_object, strip_html_tags
+
+    task = (payload.get("task") or "").strip()
+    context = payload.get("context") or {}
+    if not isinstance(context, dict):
+        context = {}
+
+    instructions = (context.get("instructions") or "").strip()
+    title = (context.get("title") or "").strip()
+    excerpt = (context.get("excerpt") or "").strip()
+    category = (context.get("category") or "").strip()
+    author_name = (context.get("authorName") or "").strip()
+    author_title = (context.get("authorTitle") or "").strip()
+    author_bio = (context.get("authorBio") or "").strip()
+    content_html = (context.get("content") or "").strip()
+    plain_content = strip_html_tags(content_html, max_len=6000)
+
+    valid_tasks = {
+        "excerpt",
+        "meta_description",
+        "author_bio",
+        "author_title",
+        "format_content",
+        "suggest_tags",
+        "read_time",
+    }
+    if task not in valid_tasks:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid task. Use one of: {', '.join(sorted(valid_tasks))}",
+        )
+
+    brand = "BQI Technologies (BQI Tech) — GovTech and enterprise digital transformation"
+    base_context = f"""Blog title: {title or '(untitled)'}
+Category: {category or 'Technology'}
+Current excerpt: {excerpt or '(none)'}
+Author name: {author_name or '(not set)'}
+Author title: {author_title or '(not set)'}
+Extra instructions: {instructions or '(none)'}
+
+Article body (plain text excerpt):
+{plain_content or '(empty)'}"""
+
+    try:
+        if task == "excerpt":
+            system = (
+                f"You write compelling blog excerpts for {brand}. "
+                "Return ONLY valid JSON: {\"excerpt\": \"...\"}. "
+                "Max 280 characters. No markdown."
+            )
+            user = f"{base_context}\n\nWrite a concise, engaging excerpt for this blog post."
+            raw = await chat_completion(user, system_prompt=system, max_tokens=256)
+            parsed = extract_json_object(raw) or {}
+            excerpt_text = (parsed.get("excerpt") or raw).strip()[:300]
+            return {"excerpt": excerpt_text}
+
+        if task == "meta_description":
+            system = (
+                "You are an SEO specialist. Return ONLY valid JSON: "
+                '{"metaDescription": "..."}. Max 160 characters. Include primary keyword. No markdown.'
+            )
+            user = f"{base_context}\n\nWrite an SEO meta description for search results."
+            raw = await chat_completion(user, system_prompt=system, max_tokens=200)
+            parsed = extract_json_object(raw) or {}
+            meta = (parsed.get("metaDescription") or parsed.get("meta_description") or raw).strip()[:160]
+            return {"metaDescription": meta}
+
+        if task == "author_bio":
+            system = (
+                f"You write professional author bios for {brand} blog contributors. "
+                'Return ONLY valid JSON: {"authorBio": "..."}. '
+                "Max 500 characters. Third person. Professional tone. No markdown."
+            )
+            user = f"{base_context}\n\nWrite an author bio for {author_name or 'the author'}."
+            raw = await chat_completion(user, system_prompt=system, max_tokens=400)
+            parsed = extract_json_object(raw) or {}
+            bio = (parsed.get("authorBio") or parsed.get("author_bio") or raw).strip()[:500]
+            return {"authorBio": bio}
+
+        if task == "author_title":
+            system = (
+                'Return ONLY valid JSON: {"authorTitle": "..."}. '
+                "Max 100 characters. Job title or role at BQI Tech. No markdown."
+            )
+            user = f"{base_context}\n\nSuggest a professional author title/role."
+            raw = await chat_completion(user, system_prompt=system, max_tokens=120)
+            parsed = extract_json_object(raw) or {}
+            atitle = (parsed.get("authorTitle") or parsed.get("author_title") or raw).strip()[:100]
+            return {"authorTitle": atitle}
+
+        if task == "suggest_tags":
+            system = (
+                'Return ONLY valid JSON: {"tags": ["tag1", "tag2"]}. '
+                "3 to 8 lowercase tags, hyphenated where needed. No markdown."
+            )
+            user = f"{base_context}\n\nSuggest relevant blog tags."
+            raw = await chat_completion(user, system_prompt=system, max_tokens=256)
+            parsed = extract_json_object(raw) or {}
+            tags = parsed.get("tags") or []
+            if not isinstance(tags, list):
+                tags = []
+            cleaned = [str(t).strip().lower()[:50] for t in tags if str(t).strip()][:10]
+            return {"tags": cleaned}
+
+        if task == "read_time":
+            words = len(plain_content.split()) if plain_content else 0
+            minutes = max(1, round(words / 200)) if words else 5
+            return {"readTime": f"{minutes} min Read"}
+
+        if task == "format_content":
+            system = (
+                f"You format long-form BQI Tech blog articles as clean HTML for a rich text editor. "
+                "Use <h2> for major sections, <h3> for subsections, <p> for paragraphs, "
+                "<ul><li> for bullet lists. Do NOT include <h1>. "
+                "Preserve all factual content and improve structure, headings, and paragraph breaks. "
+                "Do not invent new facts. Return ONLY valid JSON: "
+                '{"content": "<h2>...</h2><p>...</p>..."}'
+            )
+            user = (
+                f"Title: {title}\nCategory: {category}\n\n"
+                f"Format this HTML content with clear sections:\n\n{content_html or plain_content}"
+            )
+            raw = await chat_completion(
+                user, system_prompt=system, max_tokens=4000, temperature=0.4
+            )
+            parsed = extract_json_object(raw) or {}
+            formatted = parsed.get("content") or raw
+            formatted = formatted.strip()
+            if formatted.startswith("```"):
+                formatted = re.sub(r"^```[a-z]*\n?", "", formatted)
+                formatted = re.sub(r"\n?```$", "", formatted).strip()
+            return {"content": formatted}
+
+        raise HTTPException(status_code=400, detail="Unknown task")
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Blog AI generation failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.options("/blog-posts/{post_id}", include_in_schema=False)
 async def options_blog_post_by_id(request: Request, post_id: str):
     """Handle CORS preflight requests for specific blog post"""
@@ -2506,6 +2654,131 @@ async def get_recaptcha_settings(
         raise HTTPException(status_code=500, detail="Failed to load reCAPTCHA settings")
 
 
+@router.get("/settings/ai")
+async def get_ai_provider_settings(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Get AI provider settings (API key is never returned in full)."""
+    try:
+        from app.lib.ai_client import PROVIDER_DEFAULTS, mask_api_key
+
+        db = get_database()
+        settings_doc = await db.settings.find_one({"type": "admin"}, {"aiProvider": 1})
+        ai = (settings_doc or {}).get("aiProvider") or {}
+
+        provider = str(ai.get("provider") or "nvidia").lower()
+        if provider not in PROVIDER_DEFAULTS:
+            provider = "nvidia"
+        defaults = PROVIDER_DEFAULTS[provider]
+
+        api_key = str(ai.get("apiKey") or "")
+        masked = mask_api_key(api_key)
+
+        return {
+            "provider": provider,
+            "baseUrl": str(ai.get("baseUrl") or defaults["baseUrl"]),
+            "model": str(ai.get("model") or defaults["model"]),
+            "enabled": bool(ai.get("enabled", True)),
+            **masked,
+        }
+    except Exception as e:
+        logger.error(f"Error in get_ai_provider_settings: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to load AI provider settings")
+
+
+@router.put("/settings/ai")
+async def update_ai_provider_settings(
+    payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Update AI provider settings stored in admin settings."""
+    try:
+        from app.lib.ai_client import PROVIDER_DEFAULTS, clear_ai_config_cache
+
+        db = get_database()
+        provider = str(payload.get("provider") or "nvidia").strip().lower()
+        if provider not in PROVIDER_DEFAULTS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid provider. Use one of: {', '.join(PROVIDER_DEFAULTS)}",
+            )
+
+        defaults = PROVIDER_DEFAULTS[provider]
+        update_fields: Dict[str, Any] = {
+            "updatedAt": datetime.utcnow(),
+            "type": "admin",
+            "aiProvider.provider": provider,
+        }
+
+        if "baseUrl" in payload:
+            base_url = str(payload.get("baseUrl") or "").strip()
+            update_fields["aiProvider.baseUrl"] = base_url or defaults["baseUrl"]
+        if "model" in payload:
+            model = str(payload.get("model") or "").strip()
+            update_fields["aiProvider.model"] = model or defaults["model"]
+        if "enabled" in payload:
+            update_fields["aiProvider.enabled"] = bool(payload.get("enabled"))
+
+        api_key = str(payload.get("apiKey") or "").strip()
+        if api_key:
+            update_fields["aiProvider.apiKey"] = api_key
+
+        if len(update_fields) <= 3 and not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide at least one field to update (provider, apiKey, baseUrl, model, enabled)",
+            )
+
+        await db.settings.update_one(
+            {"type": "admin"},
+            {"$set": update_fields},
+            upsert=True,
+        )
+        clear_ai_config_cache()
+
+        updated = await db.settings.find_one({"type": "admin"}, {"aiProvider": 1})
+        ai = (updated or {}).get("aiProvider") or {}
+        from app.lib.ai_client import mask_api_key
+
+        masked = mask_api_key(str(ai.get("apiKey") or ""))
+        return {
+            "message": "AI provider settings updated",
+            "provider": str(ai.get("provider") or provider),
+            "baseUrl": str(ai.get("baseUrl") or defaults["baseUrl"]),
+            "model": str(ai.get("model") or defaults["model"]),
+            "enabled": bool(ai.get("enabled", True)),
+            **masked,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in update_ai_provider_settings: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to update AI provider settings")
+
+
+@router.post("/settings/ai/test")
+async def test_ai_provider_settings(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Test the configured AI provider with a minimal completion request."""
+    try:
+        from app.lib.ai_client import chat_completion, clear_ai_config_cache
+
+        clear_ai_config_cache()
+        reply = await chat_completion(
+            "Reply with exactly: OK",
+            system_prompt="You are a test assistant. Reply with one word only.",
+            max_tokens=16,
+            temperature=0,
+        )
+        return {"success": True, "message": reply[:200]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("AI provider test failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.put("/settings/recaptcha")
 async def update_recaptcha_settings(
     payload: Dict[str, Any],
@@ -3067,24 +3340,15 @@ async def ai_generate_email(
 ):
     """Generate email content using AI based on a prompt"""
     try:
-        import os
-        import httpx
         import json
         import re
+
+        from app.lib.ai_client import chat_completion, extract_json_object
 
         prompt = (payload.get("prompt") or "").strip()
         if not prompt:
             raise HTTPException(status_code=400, detail="Prompt is required")
 
-        # Get AI configuration from environment
-        base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-        api_key = os.getenv("NVIDIA_API_KEY")
-        model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
-
-        if not api_key:
-            raise HTTPException(status_code=500, detail="AI service not configured")
-
-        # Create the system prompt for email generation
         system_prompt = """You are an expert email marketing specialist. Generate professional email content based on the user's prompt.
 
 CRITICAL: You MUST return ONLY valid JSON in this exact format. Do not include any text before or after the JSON.
@@ -3114,71 +3378,17 @@ Where:
 
 Generate an email based on this prompt:"""
 
-        user_prompt = f"{system_prompt}\n\n{prompt}"
-
-        # Make request to NVIDIA API
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 2000,
-                },
-                timeout=30.0,
-            )
-
-        if resp.status_code != 200:
-            raise HTTPException(status_code=500, detail=f"AI service error: {resp.status_code}")
-
-        data = resp.json()
-        content = (
-            data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = await chat_completion(
+            prompt,
+            system_prompt=system_prompt,
+            max_tokens=2000,
+            temperature=0.7,
         )
-
-        # Log the AI response for debugging
         logger.info(f"AI Response: {content[:500]}...")
 
-        # Parse JSON response from AI
-        json_patterns = [
-            r'```json\s*(\{[\s\S]*?\})\s*```',  # JSON in code blocks
-            r'```\s*(\{[\s\S]*?\})\s*```',      # JSON in generic code blocks
-            r'(\{[\s\S]*?\})',                   # Any JSON object
-        ]
-
-        for pattern in json_patterns:
-            match = re.search(pattern, content.strip(), re.DOTALL)
-            if match:
-                try:
-                    json_str = match.group(1)
-                    logger.info(f"Found JSON pattern: {json_str[:200]}...")
-                    parsed = json.loads(json_str)
-                    # Validate the structure
-                    if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
-                        logger.info("Successfully parsed AI response")
-                        return parsed
-                    else:
-                        logger.warning(f"Invalid JSON structure: {parsed}")
-                except (json.JSONDecodeError, KeyError) as e:
-                    logger.warning(f"JSON parsing error: {e}")
-                    continue
-
-        # Try to parse the entire response as JSON (in case AI returned clean JSON)
-        try:
-            logger.info("Attempting to parse entire response as JSON")
-            parsed = json.loads(content.strip())
-            if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
-                logger.info("Successfully parsed entire response as JSON")
-                return parsed
-        except json.JSONDecodeError:
-            logger.warning("Entire response is not valid JSON")
+        parsed = extract_json_object(content)
+        if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
+            return parsed
 
         logger.warning("No valid JSON found in AI response, using fallback")
 

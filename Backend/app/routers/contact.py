@@ -165,11 +165,14 @@ async def _ai_detect_gibberish(message: str) -> Dict[str, Any]:
     Optional AI classifier for borderline gibberish.
     Returns {"is_gibberish": bool, "confidence": float, "source": "ai|fallback"}.
     """
-    base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-    api_key = os.getenv("NVIDIA_API_KEY")
-    model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
+    from app.lib.ai_client import chat_completion, get_ai_config
 
-    if not api_key:
+    try:
+        config = await get_ai_config()
+    except Exception:
+        return {"is_gibberish": False, "confidence": 0.0, "source": "fallback-no-config"}
+
+    if not config.enabled or not config.api_key:
         return {"is_gibberish": False, "confidence": 0.0, "source": "fallback-no-api-key"}
 
     prompt = (
@@ -178,31 +181,14 @@ async def _ai_detect_gibberish(message: str) -> Dict[str, Any]:
         "Message:\n"
         f"{message}"
     )
-    body = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "You are a strict spam classifier. Output only JSON."},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.0,
-        "max_tokens": 120,
-    }
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
 
     try:
-        async with httpx.AsyncClient(timeout=3.5) as client:
-            resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=body)
-        if resp.status_code != 200:
-            return {"is_gibberish": False, "confidence": 0.0, "source": f"fallback-http-{resp.status_code}"}
-
-        data = resp.json()
-        text = (
-            ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
-            or "{}"
-        ).strip()
+        text = await chat_completion(
+            prompt,
+            system_prompt="You are a strict spam classifier. Output only JSON.",
+            max_tokens=120,
+            temperature=0.0,
+        )
         # Support models that wrap JSON in code fences
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
         parsed = json.loads(cleaned)
