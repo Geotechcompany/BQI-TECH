@@ -21,6 +21,10 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import type { BlogPost } from "@/types/blog"
+import {
+  BlogCreatedAtPicker,
+  toDateInputValue,
+} from "@/components/admin/BlogCreatedAtPicker"
 
 export default function BlogManagementPage() {
   const router = useRouter()
@@ -88,7 +92,7 @@ export default function BlogManagementPage() {
     enabled: isAuthenticated && isAdmin
   })
 
-  const posts = data?.blogPosts || []
+  const posts: BlogPost[] = data?.blogPosts || []
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -263,24 +267,21 @@ export default function BlogManagementPage() {
     return res.json()
   }
 
-  const toDateInputValue = (iso: string) => {
-    const d = new Date(iso)
-    if (Number.isNaN(d.getTime())) return ''
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
-
   const handleCreatedAtChange = async (id: string, dateValue: string) => {
     if (!id || !dateValue) return
+    const post = posts.find((p) => p.id === id)
+    const saved = toDateInputValue(post?.createdAt ?? "")
+    if (dateValue === saved) return
+
     setUpdatingCreatedAtId(id)
     try {
       await patchBlogPost(id, { createdAt: dateValue })
-      queryClient.invalidateQueries({ queryKey: ['blog-posts'] })
-      toast.success('Created date updated')
+      await queryClient.invalidateQueries({ queryKey: ["blog-posts"] })
+      toast.success("Created date updated")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update created date')
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update created date"
+      )
     } finally {
       setUpdatingCreatedAtId(null)
     }
@@ -399,25 +400,16 @@ export default function BlogManagementPage() {
                       </span>
                     </div>
                   </td>
-                  <td className="p-4 align-middle">
-                    <div className="flex flex-col gap-1 min-w-[140px]">
-                      <input
-                        type="date"
-                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                        value={toDateInputValue(post.createdAt)}
-                        disabled={updatingCreatedAtId === post.id}
-                        onChange={(e) => {
-                          const next = e.target.value
-                          if (next && next !== toDateInputValue(post.createdAt)) {
-                            void handleCreatedAtChange(post.id, next)
-                          }
-                        }}
-                        title="Edit created date"
-                      />
-                      {updatingCreatedAtId === post.id && (
-                        <span className="text-xs text-muted-foreground">Saving…</span>
-                      )}
-                    </div>
+                  <td className="p-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                    <BlogCreatedAtPicker
+                      value={toDateInputValue(post.createdAt)}
+                      onSelect={(dateValue) => handleCreatedAtChange(post.id, dateValue)}
+                      disabled={
+                        updatingCreatedAtId !== null &&
+                        updatingCreatedAtId !== post.id
+                      }
+                      saving={updatingCreatedAtId === post.id}
+                    />
                   </td>
                   <td className="p-4 align-middle">
                     <div className="flex gap-2">
