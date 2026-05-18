@@ -816,6 +816,13 @@ async def create_blog_post(
     result = await db.blogposts.insert_one(post_data)
     post_data["_id"] = str(result.inserted_id)
     post_data["id"] = str(result.inserted_id)
+
+    try:
+        from app.lib.admin_audit import log_blog_created
+
+        await log_blog_created(db, current_user, post_data)
+    except Exception as audit_err:
+        logger.warning("Failed to record blog create activity: %s", audit_err)
     
     return post_data
 
@@ -861,6 +868,10 @@ async def update_blog_post(
     db = get_database()
     
     try:
+        existing = await db.blogposts.find_one({"_id": ObjectId(post_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Blog post not found")
+
         # Handle author profile data
         if all(key in update_data for key in ['authorName', 'authorBio', 'authorTitle', 'authorProfileImage']):
             social_links = {}
@@ -902,6 +913,13 @@ async def update_blog_post(
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Blog post not found")
+
+        try:
+            from app.lib.admin_audit import log_blog_updated
+
+            await log_blog_updated(db, current_user, existing, update_data)
+        except Exception as audit_err:
+            logger.warning("Failed to record blog update activity: %s", audit_err)
         
         return {"message": "Blog post updated successfully"}
     except HTTPException:
@@ -963,6 +981,10 @@ async def patch_blog_post(
 
         if "createdAt" not in update_data:
             update_data["updatedAt"] = datetime.utcnow()
+
+        existing = await db.blogposts.find_one({"_id": ObjectId(post_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Blog post not found")
         
         result = await db.blogposts.update_one(
             {"_id": ObjectId(post_id)},
@@ -971,6 +993,13 @@ async def patch_blog_post(
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Blog post not found")
+
+        try:
+            from app.lib.admin_audit import log_blog_updated
+
+            await log_blog_updated(db, current_user, existing, update_data)
+        except Exception as audit_err:
+            logger.warning("Failed to record blog patch activity: %s", audit_err)
         
         return JSONResponse(
             content={"message": "Blog post updated successfully"},
@@ -995,11 +1024,24 @@ async def delete_blog_post(
     db = get_database()
     
     try:
+        existing = await db.blogposts.find_one({"_id": ObjectId(post_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Blog post not found")
+
         result = await db.blogposts.delete_one({"_id": ObjectId(post_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Blog post not found")
+
+        try:
+            from app.lib.admin_audit import log_blog_deleted
+
+            await log_blog_deleted(db, current_user, existing)
+        except Exception as audit_err:
+            logger.warning("Failed to record blog delete activity: %s", audit_err)
         
         return {"message": "Blog post deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -3136,92 +3178,76 @@ async def seed_notifications(
 async def get_audit_logs(
     current_user: dict = Depends(get_current_admin_user),
     skip: int = Query(0, ge=0),
-    limit: int = Query(200, ge=1, le=1000),
-    level: Optional[str] = Query(None, description="Filter by log level (INFO, WARNING, ERROR, DEBUG)"),
-    search: Optional[str] = Query(None, description="Search text in log message"),
-    date: Optional[str] = Query(None, description="Specific date in YYYYMMDD to read from a particular file")
+    limit: int = Query(50, ge=1, le=200),
+    action: Optional[str] = Query(None, description="Filter by action (created, updated, deleted, published, unpublished)"),
+    resource_type: Optional[str] = Query(None, description="Filter by resource type (blog_post, etc.)"),
+    search: Optional[str] = Query(None, description="Search admin email, summary, or resource title"),
+    date: Optional[str] = Query(None, description="Filter by date YYYY-MM-DD or YYYYMMDD"),
 ):
-    """Return recent application logs from rotating log files.
-
-    This reads structured lines from app/logs/app_YYYYMMDD.log and exposes them
-    as simple audit entries for admin visibility.
-    """
+    """Return human-readable admin activity entries from MongoDB."""
     try:
-        # Resolve logs directory
-        logs_dir = (Path(__file__).resolve().parent.parent / "logs").resolve()
-        if not logs_dir.exists():
-            return {"logs": [], "total": 0}
+        from app.lib.admin_audit import COLLECTION
 
-        # Select files to read
-        files: list[Path] = []
+        db = get_database()
+        query: dict[str, Any] = {}
+
+        if action and action.lower() != "all":
+            query["action"] = action.lower()
+
+        if resource_type and resource_type.lower() != "all":
+            query["resourceType"] = resource_type.lower()
+
         if date:
-            candidate = logs_dir / f"app_{date}.log"
-            if candidate.exists():
-                files = [candidate]
-        if not files:
-            # Fallback to all log files sorted by modified time (newest first)
-            files = sorted(logs_dir.glob("app_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+            raw = date.strip().replace("-", "")
+            if len(raw) == 8:
+                try:
+                    day = datetime.strptime(raw, "%Y%m%d")
+                    next_day = day + timedelta(days=1)
+                    query["createdAt"] = {"$gte": day, "$lt": next_day}
+                except ValueError:
+                    pass
 
-        entries: list[dict[str, Any]] = []
-        total_matched = 0
-        level_upper = level.upper() if level else None
-        search_lower = search.lower() if search else None
+        if search and search.strip():
+            term = search.strip()
+            query["$or"] = [
+                {"summary": {"$regex": term, "$options": "i"}},
+                {"actorEmail": {"$regex": term, "$options": "i"}},
+                {"actorName": {"$regex": term, "$options": "i"}},
+                {"resourceTitle": {"$regex": term, "$options": "i"}},
+            ]
 
-        # Read lines newest first across files until we have enough
-        for fpath in files:
-            try:
-                with fpath.open("r", encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-            except Exception as e:
-                logger.error(f"Failed to read log file {fpath}: {e}")
-                continue
+        total = await db[COLLECTION].count_documents(query)
+        cursor = (
+            db[COLLECTION]
+            .find(query)
+            .sort("createdAt", -1)
+            .skip(skip)
+            .limit(limit)
+        )
+        rows = await cursor.to_list(length=limit)
 
-            # Iterate newest first
-            for line in reversed(lines):
-                line = line.strip()
-                if not line:
-                    continue
-                # Expected format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-                parts = line.split(" - ", 3)
-                if len(parts) != 4:
-                    # Not a standard line; include as raw
-                    record = {
-                        "timestamp": None,
-                        "logger": None,
-                        "level": None,
-                        "message": line,
-                        "file": fpath.name,
-                    }
-                else:
-                    ts, logger_name, lvl, msg = parts
-                    record = {
-                        "timestamp": ts,
-                        "logger": logger_name,
-                        "level": lvl,
-                        "message": msg,
-                        "file": fpath.name,
-                    }
-
-                # Filters
-                if level_upper and (record.get("level") or "").upper() != level_upper:
-                    continue
-                if search_lower and search_lower not in (record.get("message") or "").lower():
-                    continue
-
-                # Count matches; apply pagination window afterwards
-                total_matched += 1
-                if total_matched <= skip:
-                    continue
-                if len(entries) < limit:
-                    entries.append(record)
-                else:
-                    # Collected enough
-                    break
-            if len(entries) >= limit:
-                break
+        activities: list[dict[str, Any]] = []
+        for row in rows:
+            created = row.get("createdAt")
+            ts = created.isoformat() if hasattr(created, "isoformat") else str(created or "")
+            activities.append(
+                {
+                    "id": str(row.get("_id", "")),
+                    "timestamp": ts,
+                    "actorEmail": row.get("actorEmail") or "",
+                    "actorName": row.get("actorName") or "",
+                    "action": row.get("action") or "",
+                    "resourceType": row.get("resourceType") or "",
+                    "resourceId": row.get("resourceId") or "",
+                    "resourceTitle": row.get("resourceTitle") or "",
+                    "resourcePath": row.get("resourcePath") or "",
+                    "changes": row.get("changes") or [],
+                    "summary": row.get("summary") or "",
+                }
+            )
 
         return JSONResponse(
-            content={"logs": entries, "total": total_matched},
+            content={"activities": activities, "total": total},
             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -3231,7 +3257,7 @@ async def get_audit_logs(
     except Exception as e:
         logger.error(f"Error in get_audit_logs: {str(e)}")
         logger.exception("Full traceback:")
-        raise HTTPException(status_code=500, detail="Failed to read audit logs")
+        raise HTTPException(status_code=500, detail="Failed to read admin activity")
 
 @router.get("/user/application-stats")
 async def get_user_application_stats(

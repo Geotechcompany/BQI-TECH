@@ -431,10 +431,27 @@ export const adminApi = {
   getAuditLogs: (params?: {
     skip?: number;
     limit?: number;
-    level?: "INFO" | "WARNING" | "ERROR" | "DEBUG";
+    action?: string;
+    resource_type?: string;
     search?: string;
-    date?: string; // YYYYMMDD
-  }) => backendApi.get("/api/admin/audit-logs", params),
+    date?: string; // YYYY-MM-DD or YYYYMMDD
+  }) =>
+    backendApi.get<{
+      activities: Array<{
+        id: string;
+        timestamp: string;
+        actorEmail: string;
+        actorName: string;
+        action: string;
+        resourceType: string;
+        resourceId: string;
+        resourceTitle: string;
+        resourcePath: string;
+        changes: string[];
+        summary: string;
+      }>;
+      total: number;
+    }>("/api/admin/audit-logs", params),
 
   // Surveys
   listSurveys: (params?: { skip?: number; limit?: number }) =>

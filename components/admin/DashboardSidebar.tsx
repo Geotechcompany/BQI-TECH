@@ -149,7 +149,7 @@ export const menuSections: MenuSection[] = [
         icon: MailIcon,
       },
       {
-        name: "Audit Logs",
+        name: "Admin Activity",
         href: "/admin/audit-logs",
         icon: ScrollText,
       },

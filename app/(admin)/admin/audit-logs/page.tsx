@@ -1,41 +1,96 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery, keepPreviousData } from "@tanstack/react-query"
+import { format, parseISO } from "date-fns"
 import { adminApi } from "@/lib/api-backend"
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Loader2, RefreshCw } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, RefreshCw, ExternalLink } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 
-type LogLevel = "INFO" | "WARNING" | "ERROR" | "DEBUG" | "ALL"
+type ActivityAction =
+  | "ALL"
+  | "created"
+  | "updated"
+  | "deleted"
+  | "published"
+  | "unpublished"
+
+interface AdminActivity {
+  id: string
+  timestamp: string
+  actorEmail: string
+  actorName: string
+  action: string
+  resourceType: string
+  resourceId: string
+  resourceTitle: string
+  resourcePath: string
+  changes: string[]
+  summary: string
+}
+
+function actionBadgeVariant(action: string) {
+  switch (action) {
+    case "created":
+      return "default"
+    case "updated":
+      return "secondary"
+    case "deleted":
+      return "destructive"
+    case "published":
+      return "default"
+    case "unpublished":
+      return "outline"
+    default:
+      return "outline"
+  }
+}
+
+function formatTimestamp(ts: string) {
+  if (!ts) return "—"
+  try {
+    return format(parseISO(ts), "MMM d, yyyy · h:mm a")
+  } catch {
+    return ts
+  }
+}
 
 export default function AuditLogsPage() {
   const router = useRouter()
   const { isAuthenticated, isAdmin, authLoading } = useAuth()
 
   const [search, setSearch] = useState("")
-  const [level, setLevel] = useState<LogLevel>("ALL")
-  const [date, setDate] = useState("") // YYYYMMDD
+  const [action, setAction] = useState<ActivityAction>("ALL")
+  const [date, setDate] = useState("")
   const [page, setPage] = useState(0)
-  const pageSize = 200
+  const pageSize = 50
 
   const params = useMemo(() => {
-    const p: Record<string, any> = {
+    const p: Record<string, string | number> = {
       skip: page * pageSize,
       limit: pageSize,
     }
     if (search.trim()) p.search = search.trim()
     if (date.trim()) p.date = date.trim()
-    if (level !== "ALL") p.level = level
+    if (action !== "ALL") p.action = action
     return p
-  }, [search, level, date, page])
+  }, [search, action, date, page])
 
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["audit-logs", params],
+    queryKey: ["admin-activities", params],
     queryFn: () => adminApi.getAuditLogs(params),
     placeholderData: keepPreviousData,
     staleTime: 10_000,
@@ -49,7 +104,7 @@ export default function AuditLogsPage() {
 
   if (authLoading) {
     return (
-      <AdminPageLayout title="Audit Logs">
+      <AdminPageLayout title="Admin Activity">
         <div className="flex items-center justify-center py-10 text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
@@ -59,77 +114,136 @@ export default function AuditLogsPage() {
 
   if (!isAuthenticated || !isAdmin) return null
 
-  const logs = data?.logs ?? []
+  const activities: AdminActivity[] = data?.activities ?? []
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <AdminPageLayout title="Audit Logs">
+    <AdminPageLayout title="Admin Activity">
       <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Track what admins change in the dashboard — blog edits, publish status,
+          and more. New actions are recorded from now on.
+        </p>
+
         <div className="flex flex-wrap gap-2">
           <Input
-            placeholder="Search message..."
+            placeholder="Search by admin, email, or post title..."
             value={search}
-            onChange={(e) => { setPage(0); setSearch(e.target.value) }}
-            className="max-w-xs"
+            onChange={(e) => {
+              setPage(0)
+              setSearch(e.target.value)
+            }}
+            className="max-w-sm"
           />
-          <Select value={level} onValueChange={(v) => { setPage(0); setLevel(v as LogLevel) }}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Level" />
+          <Select
+            value={action}
+            onValueChange={(v) => {
+              setPage(0)
+              setAction(v as ActivityAction)
+            }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Action" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL">All levels</SelectItem>
-              <SelectItem value="ERROR">Error</SelectItem>
-              <SelectItem value="WARNING">Warning</SelectItem>
-              <SelectItem value="INFO">Info</SelectItem>
-              <SelectItem value="DEBUG">Debug</SelectItem>
+              <SelectItem value="ALL">All actions</SelectItem>
+              <SelectItem value="created">Created</SelectItem>
+              <SelectItem value="updated">Updated</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="unpublished">Unpublished</SelectItem>
+              <SelectItem value="deleted">Deleted</SelectItem>
             </SelectContent>
           </Select>
           <Input
-            placeholder="Date YYYYMMDD (optional)"
+            type="date"
             value={date}
-            onChange={(e) => { setPage(0); setDate(e.target.value) }}
-            className="w-[220px]"
+            onChange={(e) => {
+              setPage(0)
+              setDate(e.target.value)
+            }}
+            className="w-[180px]"
           />
           <Button onClick={() => refetch()} disabled={isFetching} variant="outline">
-            <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
         </div>
 
         <div className="border rounded-md overflow-hidden">
-          <div className="grid grid-cols-[180px_120px_110px_1fr_140px] gap-2 px-3 py-2 bg-muted text-xs font-medium">
-            <div>Timestamp</div>
-            <div>Logger</div>
-            <div>Level</div>
-            <div>Message</div>
-            <div>File</div>
+          <div className="grid grid-cols-[160px_200px_100px_1fr_100px] gap-2 px-3 py-2 bg-muted text-xs font-medium">
+            <div>When</div>
+            <div>Admin</div>
+            <div>Action</div>
+            <div>Activity</div>
+            <div>Link</div>
           </div>
           {isLoading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground">
               <Loader2 className="h-6 w-6 animate-spin" />
             </div>
-          ) : logs.length === 0 ? (
-            <div className="p-6 text-sm text-muted-foreground">No logs found.</div>
+          ) : activities.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              <p>No admin activity recorded yet.</p>
+              <p className="mt-2">
+                Edit or publish a blog post — activity will appear here with the
+                admin&apos;s email and what changed.
+              </p>
+            </div>
           ) : (
             <div className="max-h-[70vh] overflow-auto">
-              {logs.map((log: any, idx: number) => (
+              {activities.map((item) => (
                 <div
-                  key={`${log.timestamp}-${log.file}-${idx}`}
-                  className="grid grid-cols-[180px_120px_110px_1fr_140px] gap-2 px-3 py-2 border-t text-sm"
+                  key={item.id}
+                  className="grid grid-cols-[160px_200px_100px_1fr_100px] gap-2 px-3 py-3 border-t text-sm items-start"
                 >
-                  <div className="truncate" title={log.timestamp || ''}>{log.timestamp || '-'}</div>
-                  <div className="truncate" title={log.logger || ''}>{log.logger || '-'}</div>
-                  <div className={`truncate font-medium ${
-                    log.level === 'ERROR' ? 'text-red-600' :
-                    log.level === 'WARNING' ? 'text-yellow-600' :
-                    log.level === 'INFO' ? 'text-blue-600' :
-                    'text-muted-foreground'
-                  }`}>
-                    {log.level || '-'}
+                  <div className="text-muted-foreground text-xs whitespace-nowrap">
+                    {formatTimestamp(item.timestamp)}
                   </div>
-                  <div className="whitespace-pre-wrap break-words">{log.message}</div>
-                  <div className="truncate" title={log.file || ''}>{log.file || '-'}</div>
+                  <div className="min-w-0">
+                    <div
+                      className="font-medium truncate"
+                      title={item.actorEmail}
+                    >
+                      {item.actorEmail}
+                    </div>
+                    {item.actorName && item.actorName !== item.actorEmail && (
+                      <div className="text-xs text-muted-foreground truncate">
+                        {item.actorName}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Badge
+                      variant={actionBadgeVariant(item.action)}
+                      className="capitalize"
+                    >
+                      {item.action || "—"}
+                    </Badge>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="leading-snug">{item.summary}</p>
+                    {item.changes?.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Fields: {item.changes.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    {item.resourcePath && item.resourceType === "blog_post" ? (
+                      <Link
+                        href={item.resourcePath}
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        View
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -138,16 +252,26 @@ export default function AuditLogsPage() {
 
         <div className="flex items-center justify-between text-sm">
           <div>
-            Showing {logs.length} of {total} entries
+            Showing {activities.length} of {total} activities
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage((p) => p - 1)}
+            >
               Prev
             </Button>
             <span>
               Page {page + 1} / {totalPages}
             </span>
-            <Button variant="outline" size="sm" disabled={(page + 1) >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
               Next
             </Button>
           </div>
@@ -156,5 +280,3 @@ export default function AuditLogsPage() {
     </AdminPageLayout>
   )
 }
-
-
