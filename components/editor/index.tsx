@@ -30,12 +30,17 @@ import {
   Strikethrough,
   Trash2,
   Undo,
+  CodeXml,
+  Eye,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { authService } from "@/lib/auth-backend"
 import { BACKEND_URL } from "@/lib/config"
+
+type EditorViewMode = "visual" | "html"
 
 interface EditorProps {
   value: string
@@ -43,6 +48,8 @@ interface EditorProps {
   variant?: "default" | "blog"
   onAiFormat?: () => void | Promise<void>
   aiFormatting?: boolean
+  /** Show visual / HTML source toggle (default: true for blog variant) */
+  showHtmlToggle?: boolean
 }
 
 export function normalizeBlogHtml(html: string): string {
@@ -217,11 +224,17 @@ const MenuBar = ({
   isUploading,
   onAiFormat,
   aiFormatting,
+  viewMode,
+  onToggleViewMode,
+  showHtmlToggle,
 }: {
   editor: TiptapEditor | null
   isUploading: boolean
   onAiFormat?: () => void | Promise<void>
   aiFormatting?: boolean
+  viewMode: EditorViewMode
+  onToggleViewMode: () => void
+  showHtmlToggle: boolean
 }) => {
   const [imageActive, setImageActive] = useState(false)
 
@@ -237,9 +250,10 @@ const MenuBar = ({
     }
   }, [editor])
 
-  if (!editor) return null
+  if (!editor && viewMode === "visual") return null
 
   const addLink = () => {
+    if (!editor) return
     const previous = editor.getAttributes("link").href as string | undefined
     const url = window.prompt("Enter URL", previous || "https://")
     if (url === null) return
@@ -274,6 +288,7 @@ const MenuBar = ({
         throw new Error(error.message || "Upload failed")
       }
       const data = await response.json()
+      if (!editor) return
       editor.chain().focus().setImage({ src: data.url, alt: file.name }).run()
       toast.success("Image inserted — drag it or use ↑ ↓ to reposition.")
     } catch (error) {
@@ -283,10 +298,27 @@ const MenuBar = ({
     }
   }
 
+  if (viewMode === "html") {
+    return (
+      <div className="border-b border-input bg-muted/30 rounded-t-md p-1 flex flex-col gap-1 sticky top-0 z-10 backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 py-0.5">
+          <span className="text-xs text-muted-foreground">
+            HTML source — edit tags directly. Switch back to Visual to preview.
+          </span>
+          {showHtmlToggle && (
+            <ToolButton title="Visual editor" onClick={onToggleViewMode} active>
+              <Eye className="h-4 w-4" />
+            </ToolButton>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="border-b border-input bg-muted/30 rounded-t-md p-1 flex flex-col gap-1 sticky top-0 z-10 backdrop-blur-sm">
-      <div className="flex flex-wrap gap-1">
-        <ToolButton title="Bold" onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive("bold")}>
+      <div className="flex flex-wrap gap-1 items-center">
+        <ToolButton title="Bold" onClick={() => editor!.chain().focus().toggleBold().run()} active={editor!.isActive("bold")}>
           <Bold className="h-4 w-4" />
         </ToolButton>
         <ToolButton title="Italic" onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive("italic")}>
@@ -366,9 +398,17 @@ const MenuBar = ({
             )}
           </ToolButton>
         )}
+        {showHtmlToggle && (
+          <>
+            <div className="w-px h-6 bg-border mx-0.5 self-center" aria-hidden />
+            <ToolButton title="Edit HTML source" onClick={onToggleViewMode}>
+              <CodeXml className="h-4 w-4" />
+            </ToolButton>
+          </>
+        )}
       </div>
 
-      {imageActive && (
+      {imageActive && editor && (
         <div className="flex flex-wrap items-center gap-1 px-1 py-1 border-t border-input/60 bg-background/80 rounded-md">
           <span className="text-xs text-muted-foreground mr-1">Image:</span>
           <ToolButton title="Move image up" onClick={() => moveSelectedBlock(editor, "up")}>
@@ -395,10 +435,16 @@ export function Editor({
   variant = "default",
   onAiFormat,
   aiFormatting = false,
+  showHtmlToggle: showHtmlToggleProp,
 }: EditorProps) {
   const [isUploading] = useState(false)
+  const [viewMode, setViewMode] = useState<EditorViewMode>("visual")
+  const [htmlDraft, setHtmlDraft] = useState("")
+  const viewModeRef = useRef<EditorViewMode>("visual")
   const scrollRef = useRef<HTMLDivElement>(null)
+  viewModeRef.current = viewMode
   const normalizedValue = normalizeBlogHtml(value)
+  const showHtmlToggle = showHtmlToggleProp ?? variant === "blog"
   useDragAutoScroll(scrollRef)
 
   const editor = useEditor({
@@ -435,17 +481,42 @@ export function Editor({
       },
     },
     onUpdate: ({ editor: ed }) => {
-      onChange(ed.getHTML())
+      if (viewModeRef.current === "visual") {
+        onChange(ed.getHTML())
+      }
     },
   })
 
+  const toggleViewMode = useCallback(() => {
+    if (viewMode === "visual") {
+      const html = editor?.getHTML() ?? normalizedValue
+      setHtmlDraft(html)
+      setViewMode("html")
+      return
+    }
+    const next = normalizeBlogHtml(htmlDraft)
+    onChange(next)
+    if (editor) {
+      editor.commands.setContent(next, false)
+    }
+    setViewMode("visual")
+  }, [viewMode, editor, normalizedValue, htmlDraft, onChange])
+
   useEffect(() => {
-    if (!editor) return
+    if (viewMode !== "visual" || !editor) return
     const next = normalizeBlogHtml(value)
     if (next !== normalizeBlogHtml(editor.getHTML())) {
       editor.commands.setContent(next, false)
     }
-  }, [value, editor])
+  }, [value, editor, viewMode])
+
+  useEffect(() => {
+    if (viewMode !== "html") return
+    const next = normalizeBlogHtml(value)
+    if (next !== htmlDraft) {
+      setHtmlDraft(next)
+    }
+  }, [value, viewMode, htmlDraft])
 
   useEffect(() => {
     if (!editor) return
@@ -477,18 +548,39 @@ export function Editor({
         isUploading={isUploading}
         onAiFormat={onAiFormat}
         aiFormatting={aiFormatting}
+        viewMode={viewMode}
+        onToggleViewMode={toggleViewMode}
+        showHtmlToggle={showHtmlToggle}
       />
       <div
         ref={scrollRef}
         className={cn(
-          "p-4 overflow-y-auto overscroll-contain",
+          "overflow-y-auto overscroll-contain",
+          viewMode === "html" ? "p-0" : "p-4",
           isBlog ? "flex-1 min-h-[420px] max-h-[calc(78vh-120px)]" : "min-h-[500px] max-h-[70vh]"
         )}
       >
-        <EditorContent
-          editor={editor}
-          className="[&_.ProseMirror]:outline-none [&_.ProseMirror_img]:cursor-grab [&_.ProseMirror_img.ProseMirror-selectednode]:cursor-grabbing [&_.ProseMirror_img.ProseMirror-selectednode]:ring-2 [&_.ProseMirror_img.ProseMirror-selectednode]:ring-primary/50 [&_.ProseMirror-selectednode]:rounded-lg"
-        />
+        {viewMode === "html" ? (
+          <Textarea
+            value={htmlDraft}
+            onChange={(e) => {
+              const next = e.target.value
+              setHtmlDraft(next)
+              onChange(next)
+            }}
+            spellCheck={false}
+            className={cn(
+              "min-h-[420px] font-mono text-sm border-0 rounded-none resize-y focus-visible:ring-0",
+              isBlog ? "min-h-[calc(78vh-160px)]" : "min-h-[480px]"
+            )}
+            placeholder="<p>Your HTML content...</p>"
+          />
+        ) : (
+          <EditorContent
+            editor={editor}
+            className="[&_.ProseMirror]:outline-none [&_.ProseMirror_img]:cursor-grab [&_.ProseMirror_img.ProseMirror-selectednode]:cursor-grabbing [&_.ProseMirror_img.ProseMirror-selectednode]:ring-2 [&_.ProseMirror_img.ProseMirror-selectednode]:ring-primary/50 [&_.ProseMirror-selectednode]:rounded-lg"
+          />
+        )}
       </div>
     </div>
   )

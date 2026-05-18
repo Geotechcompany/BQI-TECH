@@ -21,7 +21,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import type { BlogPost } from "@/types/blog"
-import { format } from "date-fns"
 
 export default function BlogManagementPage() {
   const router = useRouter()
@@ -30,6 +29,7 @@ export default function BlogManagementPage() {
   const [postIdToDelete, setPostIdToDelete] = useState<string | null>(null)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState<string | null>(null)
+  const [updatingCreatedAtId, setUpdatingCreatedAtId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && (!isAuthenticated || !isAdmin)) {
@@ -224,6 +224,68 @@ export default function BlogManagementPage() {
     await togglePublishMutation.mutateAsync({ id, published: !currentStatus })
   }
 
+  const patchBlogPost = async (id: string, body: Record<string, unknown>) => {
+    const session = authService.getSession()
+    if (!session) {
+      throw new Error('No authentication session')
+    }
+
+    const baseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || 'http://localhost:8000'
+    const doPatch = (token: string) =>
+      fetch(`${baseUrl}/api/admin/blog-posts/${id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+
+    let res = await doPatch(session.token)
+    if (res.status === 401) {
+      const refreshed = await authService.refreshToken()
+      if (!refreshed) {
+        throw new Error('Session expired')
+      }
+      res = await doPatch(refreshed.access_token)
+    }
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}))
+      throw new Error(
+        (error as { detail?: string }).detail ||
+          (error as { message?: string }).message ||
+          'Failed to update post'
+      )
+    }
+    return res.json()
+  }
+
+  const toDateInputValue = (iso: string) => {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  const handleCreatedAtChange = async (id: string, dateValue: string) => {
+    if (!id || !dateValue) return
+    setUpdatingCreatedAtId(id)
+    try {
+      await patchBlogPost(id, { createdAt: dateValue })
+      queryClient.invalidateQueries({ queryKey: ['blog-posts'] })
+      toast.success('Created date updated')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update created date')
+    } finally {
+      setUpdatingCreatedAtId(null)
+    }
+  }
+
   if (authLoading || isDataLoading) {
     return (
       <AdminPageLayout title="Blog Management">
@@ -338,7 +400,24 @@ export default function BlogManagementPage() {
                     </div>
                   </td>
                   <td className="p-4 align-middle">
-                    {format(new Date(post.createdAt), 'MMM d, yyyy')}
+                    <div className="flex flex-col gap-1 min-w-[140px]">
+                      <input
+                        type="date"
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                        value={toDateInputValue(post.createdAt)}
+                        disabled={updatingCreatedAtId === post.id}
+                        onChange={(e) => {
+                          const next = e.target.value
+                          if (next && next !== toDateInputValue(post.createdAt)) {
+                            void handleCreatedAtChange(post.id, next)
+                          }
+                        }}
+                        title="Edit created date"
+                      />
+                      {updatingCreatedAtId === post.id && (
+                        <span className="text-xs text-muted-foreground">Saving…</span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-4 align-middle">
                     <div className="flex gap-2">

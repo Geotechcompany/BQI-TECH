@@ -59,6 +59,32 @@ def generate_slug(title: str) -> str:
     slug = re.sub(r'[-\s]+', '-', slug)
     return slug
 
+
+def parse_blog_datetime(value: Any) -> datetime:
+    """Parse createdAt/updatedAt from admin UI (ISO string or YYYY-MM-DD)."""
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        raise ValueError("Date must be a string (YYYY-MM-DD or ISO)")
+    text = value.strip()
+    if not text:
+        raise ValueError("Date cannot be empty")
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        return datetime.strptime(text, "%Y-%m-%d")
+    normalized = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"Invalid date format: {value}") from exc
+
+
+def _normalize_blog_date_fields(update_data: Dict[str, Any]) -> None:
+    """Convert createdAt from JSON strings to datetime for MongoDB."""
+    if "createdAt" in update_data and update_data["createdAt"] is not None:
+        update_data["createdAt"] = parse_blog_datetime(update_data["createdAt"])
+    if "updatedAt" in update_data and update_data["updatedAt"] is not None:
+        update_data["updatedAt"] = parse_blog_datetime(update_data["updatedAt"])
+
 # ---------------------- Admin Email Broadcast ----------------------
 @router.post("/emails/broadcast")
 async def admin_email_broadcast(
@@ -861,7 +887,13 @@ async def update_blog_post(
         if "title" in update_data and update_data["title"]:
             update_data["slug"] = generate_slug(update_data["title"])
 
-        update_data["updatedAt"] = datetime.utcnow()
+        try:
+            _normalize_blog_date_fields(update_data)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if "createdAt" not in update_data:
+            update_data["updatedAt"] = datetime.utcnow()
         
         result = await db.blogposts.update_one(
             {"_id": ObjectId(post_id)},
@@ -872,6 +904,8 @@ async def update_blog_post(
             raise HTTPException(status_code=404, detail="Blog post not found")
         
         return {"message": "Blog post updated successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -922,7 +956,13 @@ async def patch_blog_post(
             except Exception:
                 pass
 
-        update_data["updatedAt"] = datetime.utcnow()
+        try:
+            _normalize_blog_date_fields(update_data)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if "createdAt" not in update_data:
+            update_data["updatedAt"] = datetime.utcnow()
         
         result = await db.blogposts.update_one(
             {"_id": ObjectId(post_id)},
@@ -940,6 +980,8 @@ async def patch_blog_post(
                 "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept"
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in patch_blog_post: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

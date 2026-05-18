@@ -747,11 +747,16 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Content</FormLabel>
+              <FormDescription>
+                Rich text editor with toolbar. Use the &lt;/&gt; button for HTML source, or AI buttons on other fields.
+              </FormDescription>
               <FormControl>
                 <Editor
                   value={field.value}
                   onChange={field.onChange}
                   variant="blog"
+                  onAiFormat={() => runBlogAi("format_content")}
+                  aiFormatting={aiTask === "format_content"}
                 />
               </FormControl>
               <FormMessage />
