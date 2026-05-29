@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from 'framer-motion';
-import { Users, FileText, CheckCircle, XCircle, UserCheck, Code, MessageSquare, ArrowRight, ChevronDown, Clock, BarChart, Plus, ArrowUp, ArrowDown, TrendingUp, Briefcase, Target, Activity } from 'lucide-react';
+import { Users, FileText, CheckCircle, XCircle, UserCheck, Code, MessageSquare, ArrowRight, BarChart, Plus, TrendingUp, Briefcase, Target, Activity } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Line, Pie, Doughnut } from 'react-chartjs-2';
 import {
@@ -18,8 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from 'next/link';
@@ -29,6 +27,11 @@ import { toast } from 'react-hot-toast';
 import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
 import { Application } from "@/types/application";
 import { getPositionDisplay } from "@/components/admin/utils/table-utils";
+import {
+  PremiumMetricCard,
+  PremiumStatusCard,
+} from "@/components/admin/premium-cards";
+import { RecentApplicationsPanel } from "@/components/admin/RecentApplicationsPanel";
 
 ChartJS.register(
   CategoryScale,
@@ -70,113 +73,6 @@ interface ApplicationsByJob {
     statusBreakdown: Record<string, number>;
   }>;
 }
-
-const statusColors = {
-  New: 'bg-blue-100 text-blue-800',
-  Shortlisted: 'bg-green-100 text-green-800',
-  Interviewing: 'bg-purple-100 text-purple-800',
-  Hired: 'bg-emerald-100 text-emerald-800',
-  Rejected: 'bg-rose-100 text-rose-800',
-  'Technical Assessment': 'bg-yellow-100 text-yellow-800',
-  Disqualified: 'bg-red-100 text-red-800',
-};
-
-const MetricCard = ({ 
-  title, 
-  value, 
-  icon: Icon, 
-  trend, 
-  color, 
-  path, 
-  subtitle,
-  isLarge = false 
-}: {
-  title: string;
-  value: number;
-  icon: any;
-  trend?: number;
-  color: string;
-  path: string;
-  subtitle?: string;
-  isLarge?: boolean;
-}) => (
-  <Link href={path} className="hover:opacity-90 transition-opacity">
-    <motion.div
-      whileHover={{ y: -2, scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      className={`rounded-2xl border border-border bg-card p-6 shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer backdrop-blur-sm ${
-        isLarge ? 'lg:col-span-2' : ''
-      }`}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`p-3 rounded-xl ${color} shadow-sm`}>
-              <Icon className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
-              {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <h3 className="text-3xl font-bold text-foreground">{value.toLocaleString()}</h3>
-            {trend !== undefined && (
-              <div className="flex items-center gap-2">
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                  trend > 0 ? 'bg-emerald-500/10 text-emerald-500' : trend < 0 ? 'bg-rose-500/10 text-rose-500' : 'bg-muted text-muted-foreground'
-                }`}>
-                  {trend > 0 ? (
-                  <ArrowUp className="h-3 w-3 mr-1" />
-                  ) : trend < 0 ? (
-                  <ArrowDown className="h-3 w-3 mr-1" />
-                  ) : null}
-                  {trend === 0 ? 'No change' : `${Math.abs(trend)}%`}
-                </span>
-                <span className="text-xs text-muted-foreground">vs last month</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  </Link>
-);
-
-const StatusCard = ({ 
-  title, 
-  count, 
-  percentage, 
-  icon: Icon, 
-  color, 
-  path 
-}: {
-  title: string;
-  count: number;
-  percentage: number;
-  icon: any;
-  color: string;
-  path: string;
-}) => (
-  <Link href={path}>
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      className="bg-card rounded-xl border border-border p-5 shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer backdrop-blur-sm"
-    >
-      <div className="flex items-center justify-between mb-4">
-        <div className={`p-2.5 rounded-lg ${color}`}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <span className="text-2xl font-bold text-foreground">{count}</span>
-      </div>
-      <div className="space-y-2">
-        <h4 className="font-semibold text-foreground">{title}</h4>
-        <Progress value={percentage} className="h-2" />
-        <p className="text-xs text-muted-foreground">{percentage.toFixed(1)}% of total</p>
-      </div>
-    </motion.div>
-  </Link>
-);
 
 export default function OverviewPage() {
   const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
@@ -543,38 +439,38 @@ export default function OverviewPage() {
         <div className="space-y-8 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
           {/* Key Metrics Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <MetricCard
+            <PremiumMetricCard
               title="Total Applications"
               value={effectiveStats.total}
               icon={FileText}
-              color="bg-blue-100 text-blue-600"
+              variant="blue"
               path="/admin/applications"
               subtitle="All time applications"
               trend={12}
             />
-            <MetricCard
+            <PremiumMetricCard
               title="Active Jobs"
               value={overviewData.jobs.active}
               icon={Briefcase}
-              color="bg-green-100 text-green-600"
+              variant="green"
               path="/admin/job-postings"
               subtitle="Currently hiring"
               trend={8}
             />
-            <MetricCard
+            <PremiumMetricCard
               title="Recent Applications"
               value={effectiveStats.recent}
               icon={Activity}
-              color="bg-purple-100 text-purple-600"
+              variant="purple"
               path="/admin/applications"
               subtitle="Last 7 days"
               trend={25}
             />
-            <MetricCard
+            <PremiumMetricCard
               title="Total Users"
               value={overviewData.users.total}
               icon={Users}
-              color="bg-orange-100 text-orange-600"
+              variant="orange"
               path="/admin/user-management"
               subtitle="Registered users"
               trend={5}
@@ -583,52 +479,52 @@ export default function OverviewPage() {
 
           {/* Application Status Overview */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <StatusCard
+            <PremiumStatusCard
               title="New"
               count={effectiveStats.new}
               percentage={(effectiveStats.new / totalApplications) * 100}
               icon={FileText}
-              color="bg-blue-100 text-blue-600"
+              variant="blue"
               path="/admin/applications?status=new"
             />
-            <StatusCard
+            <PremiumStatusCard
               title="Shortlisted"
               count={effectiveStats.shortlisted}
               percentage={(effectiveStats.shortlisted / totalApplications) * 100}
               icon={UserCheck}
-              color="bg-green-100 text-green-600"
+              variant="green"
               path="/admin/shortlisted"
             />
-            <StatusCard
+            <PremiumStatusCard
               title="Interviewing"
               count={effectiveStats.interviewing}
               percentage={(effectiveStats.interviewing / totalApplications) * 100}
               icon={MessageSquare}
-              color="bg-purple-100 text-purple-600"
+              variant="purple"
               path="/admin/interviewing"
             />
-            <StatusCard
+            <PremiumStatusCard
               title="Technical"
               count={effectiveStats.technical_assessment}
               percentage={(effectiveStats.technical_assessment / totalApplications) * 100}
               icon={Code}
-              color="bg-yellow-100 text-yellow-600"
+              variant="yellow"
               path="/admin/technical-assessment"
             />
-            <StatusCard
+            <PremiumStatusCard
               title="Hired"
               count={effectiveStats.hired}
               percentage={(effectiveStats.hired / totalApplications) * 100}
               icon={CheckCircle}
-              color="bg-emerald-100 text-emerald-600"
+              variant="emerald"
               path="/admin/hired"
             />
-            <StatusCard
+            <PremiumStatusCard
               title="Disqualified"
               count={effectiveStats.disqualified}
               percentage={(effectiveStats.disqualified / totalApplications) * 100}
               icon={XCircle}
-              color="bg-red-100 text-red-600"
+              variant="red"
               path="/admin/disqualified"
             />
           </div>
@@ -689,81 +585,15 @@ export default function OverviewPage() {
             </Card>
           </div>
 
-          {/* Recent Applications */}
-          <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <Clock className="h-5 w-5 text-purple-600" />
-                  </div>
-                  Recent Applications
-                </div>
-                <Link href="/admin/applications" className="text-primary hover:opacity-90 text-sm font-medium">
-                  View All →
-                </Link>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {(recentApplications.length > 0 || computedStats.recentApplications.length > 0) ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {(recentApplications.length > 0 ? recentApplications : computedStats.recentApplications).map((app) => {
-                    const firstName = app.answers?.find(a => 
-                      a.questionText === "First Name"
-                    )?.answer || "Unknown";
-                    
-                    return (
-                      <motion.div
-                        key={app.id}
-                        whileHover={{ scale: 1.02 }}
-                        className="bg-card rounded-lg p-4 border border-border shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
-                        onClick={() => handleViewApplication(app)}
-                      >
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <h2 className="text-xl font-semibold text-foreground line-clamp-1">
-                              {getPositionDisplay(app, jobTitles)}
-                            </h2>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {firstName}
-                            </p>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleViewApplication(app);
-                            }}
-                            className="hover:bg-muted p-1 rounded-full transition-colors"
-                          >
-                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                          </button>
-                        </div>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <Badge
-                              className={`${
-                                statusColors[app.status as keyof typeof statusColors] || 
-                                "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {app.status}
-                            </Badge>
-                            <span className="text-muted-foreground">
-                              {new Date(app.appliedDate).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-6 text-muted-foreground">
-                  No recent applications
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <RecentApplicationsPanel
+            applications={
+              recentApplications.length > 0
+                ? recentApplications
+                : computedStats.recentApplications
+            }
+            jobTitles={jobTitles}
+            onView={handleViewApplication}
+          />
         </div>
       </div>
 
