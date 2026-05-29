@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Application } from "@/types/application";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Trash2, ClipboardList, CheckSquare, Settings } from "lucide-react";
+import { Eye, Pencil, Trash2, ClipboardList, Settings, Archive, ArchiveRestore } from "lucide-react";
 import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "./utils/table-utils";
 import { CVCell } from "@/components/admin/CVCell";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,18 +11,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 interface UnifiedApplicationTableProps {
   applications: Application[];
   jobTitles: Record<string, string>;
-  statusType: 'all' | 'shortlisted' | 'technical-assessment' | 'interviewing' | 'hired' | 'disqualified';
+  statusType: 'all' | 'shortlisted' | 'technical-assessment' | 'interviewing' | 'hired' | 'disqualified' | 'archived';
   dateField?: string; // Field to show for status-specific date (e.g., 'shortlistedDate', 'interviewDate')
   onView: (id: string) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onBulkStatusUpdate?: (ids: string[], status: string) => void;
+  onBulkArchive?: (ids: string[]) => void;
+  onBulkUnarchive?: (ids: string[]) => void;
   isLoading?: boolean;
 }
 
@@ -35,8 +38,11 @@ export function UnifiedApplicationTable({
   onEdit, 
   onDelete,
   onBulkStatusUpdate,
+  onBulkArchive,
+  onBulkUnarchive,
   isLoading = false
 }: UnifiedApplicationTableProps) {
+  const showBulkActions = Boolean(onBulkStatusUpdate || onBulkArchive || onBulkUnarchive);
   const [selectedApplications, setSelectedApplications] = useState<Set<string>>(new Set());
 
   const statusOptions = [
@@ -117,6 +123,10 @@ export function UnifiedApplicationTable({
       disqualified: {
         title: "No Disqualified or Rejected Candidates",
         description: "Candidates who have been disqualified or rejected during the recruitment process will appear here. This includes both disqualified and rejected applications."
+      },
+      archived: {
+        title: "No Archived Applications",
+        description: "Archived applications will appear here. Use Archive All on the Applications page to move candidates out of the active pipeline."
       }
     };
     
@@ -141,29 +151,74 @@ export function UnifiedApplicationTable({
   return (
     <div className="space-y-4">
       {/* Bulk Actions */}
-      {selectedApplications.size > 0 && onBulkStatusUpdate && (
+      {selectedApplications.size > 0 && showBulkActions && (
         <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
           <span className="text-sm font-medium">
             {selectedApplications.size} application(s) selected
           </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Settings className="h-4 w-4 mr-2" />
-                Bulk Update Status
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              {statusOptions.map((option) => (
-                <DropdownMenuItem 
-                  key={option.value}
-                  onClick={() => handleBulkUpdate(option.value)}
+          {onBulkUnarchive ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onBulkUnarchive(Array.from(selectedApplications));
+                setSelectedApplications(new Set());
+              }}
+            >
+              <ArchiveRestore className="h-4 w-4 mr-2" />
+              Restore Selected
+            </Button>
+          ) : (
+            <>
+              {onBulkArchive && statusType !== "archived" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onBulkArchive(Array.from(selectedApplications));
+                    setSelectedApplications(new Set());
+                  }}
                 >
-                  {option.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <Archive className="h-4 w-4 mr-2" />
+                  Archive Selected
+                </Button>
+              )}
+              {onBulkStatusUpdate && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Bulk Update Status
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {statusOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.value}
+                        onClick={() => handleBulkUpdate(option.value)}
+                      >
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                    {onBulkArchive && statusType !== "archived" && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => {
+                            onBulkArchive(Array.from(selectedApplications));
+                            setSelectedApplications(new Set());
+                          }}
+                        >
+                          <Archive className="h-4 w-4 mr-2" />
+                          Archive
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -172,7 +227,7 @@ export function UnifiedApplicationTable({
         <table className="min-w-full divide-y divide-border">
           <thead className="bg-muted/50">
             <tr>
-              {onBulkStatusUpdate && (
+              {showBulkActions && (
                 <th className="px-6 py-3 text-left">
                   <Checkbox
                     checked={selectedApplications.size === applications.length}
@@ -198,6 +253,7 @@ export function UnifiedApplicationTable({
                    dateField === 'interviewDate' ? 'Interview Date' :
                    dateField === 'hiredDate' ? 'Hired Date' :
                    dateField === 'disqualifiedDate' ? 'Disqualified Date' :
+                   dateField === 'archivedAt' ? 'Archived Date' :
                    dateField === 'appliedDate' ? 'Applied Date' : 'Date'}
                 </th>
               )}
@@ -212,7 +268,7 @@ export function UnifiedApplicationTable({
           <tbody className="bg-card divide-y divide-border">
             {applications.map((application) => (
               <tr key={application.id} className="hover:bg-muted/50">
-                {onBulkStatusUpdate && (
+                {showBulkActions && (
                   <td className="px-6 py-4">
                     <Checkbox
                       checked={selectedApplications.has(application.id)}

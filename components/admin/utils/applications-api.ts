@@ -98,7 +98,8 @@ class AdminApplicationsApi {
       | "technical-assessment"
       | "interviewing"
       | "hired"
-      | "disqualified",
+      | "disqualified"
+      | "archived",
     filters: ApplicationFilters = {}
   ) {
     const params = new URLSearchParams();
@@ -141,6 +142,10 @@ class AdminApplicationsApi {
     } else if (status === "disqualified") {
       // Use dedicated disqualified endpoint
       endpoint = `/applications/disqualified${
+        queryString ? `?${queryString}` : ""
+      }`;
+    } else if (status === "archived") {
+      endpoint = `/applications/archived${
         queryString ? `?${queryString}` : ""
       }`;
     } else {
@@ -186,14 +191,55 @@ class AdminApplicationsApi {
     });
   }
 
+  // Archive all active applications
+  async archiveAllApplications() {
+    return this.makeRequest<{
+      message: string;
+      archived_count: number;
+      matched_count: number;
+    }>("/applications/archive-all", {
+      method: "PUT",
+    });
+  }
+
+  // Archive selected applications
+  async bulkArchiveApplications(ids: string[]) {
+    return this.makeRequest<{
+      message: string;
+      archived_count: number;
+      matched_count: number;
+    }>("/applications/bulk-archive", {
+      method: "PUT",
+      body: JSON.stringify({ ids }),
+    });
+  }
+
+  // Restore archived applications
+  async bulkUnarchiveApplications(ids: string[]) {
+    return this.makeRequest<{
+      message: string;
+      restored_count: number;
+      matched_count: number;
+    }>("/applications/bulk-unarchive", {
+      method: "PUT",
+      body: JSON.stringify({ ids }),
+    });
+  }
+
   // Get job postings for position filtering
   async getJobPostings() {
     return this.makeRequest("/job-postings");
   }
 
   // Get application positions for filtering
-  async getApplicationPositions(status?: string) {
+  async getApplicationPositions(
+    status?: string,
+    options?: { archived?: boolean }
+  ) {
     const params = new URLSearchParams();
+    if (options?.archived) {
+      params.append("archived", "true");
+    }
     if (status && status !== "all") {
       // Map frontend status to backend status format
       const statusMap: Record<string, string> = {
@@ -283,6 +329,10 @@ class AdminApplicationsApi {
     // Since rejected and disqualified are handled as a single status in the backend,
     // we just fetch disqualified applications using the dedicated endpoint
     return this.getApplicationsByStatus("disqualified", filters);
+  }
+
+  async getArchivedApplications(filters: ApplicationFilters = {}) {
+    return this.getApplicationsByStatus("archived", filters);
   }
 }
 

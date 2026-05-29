@@ -75,6 +75,11 @@ class Application(BaseModel):
     # New status history tracking
     statusHistory: Optional[List[StatusHistoryEntry]] = []
     
+    # Archive tracking
+    isArchived: Optional[bool] = False
+    archivedAt: Optional[datetime] = None
+    archivedBy: Optional[str] = None
+    
     # Additional fields for enhanced tracking
     name: Optional[str] = None
     email: Optional[str] = None

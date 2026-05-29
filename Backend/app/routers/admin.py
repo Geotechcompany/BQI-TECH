@@ -1264,6 +1264,7 @@ async def get_admin_overview(
         total_users = await db.users.count_documents({})
         total_jobs = await db.jobpostings.count_documents({})
         active_jobs = await db.jobpostings.count_documents({"isActive": True})
+        job_filter = {**job_filter, **_active_application_filter()}
         total_applications = await db.applications.count_documents(job_filter)
         
         # Get application counts by status
@@ -1345,12 +1346,23 @@ class CustomJSONEncoder(json.JSONEncoder):
             return str(obj)
         return super().default(obj)
 
+
+def _active_application_filter() -> Dict[str, Any]:
+    """Exclude archived applications from active pipeline views."""
+    return {"isArchived": {"$ne": True}}
+
+
+def _archived_application_filter() -> Dict[str, Any]:
+    return {"isArchived": True}
+
+
 @router.get("/applications")
 async def get_admin_applications(
     current_user: dict = Depends(get_current_admin_user),
     limit: int = Query(50, ge=1, le=100),  # Reduced default limit
     skip: int = Query(0, ge=0),
     status: Optional[str] = Query(None, description="Filter by application status"),
+    archived: bool = Query(False, description="Return archived applications only"),
     sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
     search: Optional[str] = Query(None, description="Search term for name, email, or position"),
@@ -1364,7 +1376,7 @@ async def get_admin_applications(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Base query - include all applications or filter by status
-        match_query = {}
+        match_query = _archived_application_filter() if archived else _active_application_filter()
         if status and status != "all":
             match_query["status"] = status
         
@@ -1377,7 +1389,9 @@ async def get_admin_applications(
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
-        sort_field = sort_by if sort_by in ["appliedDate", "status", "createdAt", "updatedAt"] else "appliedDate"
+        allowed_sort_fields = ["appliedDate", "status", "createdAt", "updatedAt", "archivedAt"]
+        default_sort = "archivedAt" if archived else "appliedDate"
+        sort_field = sort_by if sort_by in allowed_sort_fields else default_sort
         
         pipeline = [
             {"$match": match_query},
@@ -1471,7 +1485,7 @@ async def get_admin_applications(
             app["id"] = str(app.pop("_id"))
             
             # Convert datetime fields
-            for field in ["createdAt", "updatedAt", "appliedDate", "shortlistedDate", "disqualifiedDate"]:
+            for field in ["createdAt", "updatedAt", "appliedDate", "shortlistedDate", "disqualifiedDate", "archivedAt"]:
                 if field in app and isinstance(app[field], datetime):
                     app[field] = app[field].isoformat()
             
@@ -1530,10 +1544,36 @@ async def get_admin_applications(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/applications/archived")
+async def get_archived_applications(
+    current_user: dict = Depends(get_current_admin_user),
+    limit: int = Query(50, ge=1, le=100),
+    skip: int = Query(0, ge=0),
+    sort_by: Optional[str] = Query("archivedAt", description="Field to sort by"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
+    search: Optional[str] = Query(None, description="Search term for name, email, or position"),
+    position: Optional[str] = Query(None, description="Filter by position/job title"),
+):
+    """Get archived applications for admin."""
+    return await get_admin_applications(
+        current_user=current_user,
+        limit=limit,
+        skip=skip,
+        status=None,
+        archived=True,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        search=search,
+        position=position,
+        jobId=None,
+    )
+
+
 @router.get("/applications/positions")
 async def get_application_positions(
     current_user: dict = Depends(get_current_admin_user),
-    status: Optional[str] = Query(None, description="Filter positions by application status")
+    status: Optional[str] = Query(None, description="Filter positions by application status"),
+    archived: bool = Query(False, description="Filter positions for archived applications only"),
 ):
     """Get unique position titles for filtering applications"""
     try:
@@ -1542,7 +1582,7 @@ async def get_application_positions(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Build match query
-        match_query = {}
+        match_query = _archived_application_filter() if archived else _active_application_filter()
         if status and status != "all":
             match_query["status"] = status
         
@@ -1643,7 +1683,7 @@ async def get_shortlisted_applications(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Base query for shortlisted applications
-        match_query = {"status": "Shortlisted"}
+        match_query = {"status": "Shortlisted", **_active_application_filter()}
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
@@ -1817,7 +1857,7 @@ async def get_disqualified_applications(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Base query for disqualified applications
-        match_query = {"status": "Disqualified"}
+        match_query = {"status": "Disqualified", **_active_application_filter()}
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
@@ -1971,6 +2011,147 @@ async def get_disqualified_applications(
         
     except Exception as e:
         logger.error(f"Error in get_disqualified_applications: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/applications/archive-all")
+async def archive_all_applications(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Archive all non-archived applications."""
+    try:
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        now = datetime.utcnow()
+        admin_id = str(current_user.get("_id") or current_user.get("id", ""))
+
+        result = await db.applications.update_many(
+            _active_application_filter(),
+            {
+                "$set": {
+                    "isArchived": True,
+                    "archivedAt": now,
+                    "archivedBy": admin_id,
+                    "updatedAt": now,
+                }
+            },
+        )
+
+        return {
+            "message": f"Successfully archived {result.modified_count} application(s)",
+            "archived_count": result.modified_count,
+            "matched_count": result.matched_count,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in archive_all_applications: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/applications/bulk-archive")
+async def bulk_archive_applications(
+    data: dict,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Archive selected applications (remove from active pipeline)."""
+    try:
+        if not isinstance(data, dict) or "ids" not in data:
+            raise HTTPException(status_code=400, detail="Missing 'ids' field")
+
+        ids = data["ids"]
+        if not isinstance(ids, list) or len(ids) == 0:
+            raise HTTPException(status_code=400, detail="At least one application ID must be provided")
+
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        object_ids = []
+        for i, id_str in enumerate(ids):
+            try:
+                object_ids.append(ObjectId(id_str))
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"Invalid ObjectId at index {i}: '{id_str}'")
+
+        now = datetime.utcnow()
+        admin_id = str(current_user.get("_id") or current_user.get("id", ""))
+
+        result = await db.applications.update_many(
+            {"_id": {"$in": object_ids}, "isArchived": {"$ne": True}},
+            {
+                "$set": {
+                    "isArchived": True,
+                    "archivedAt": now,
+                    "archivedBy": admin_id,
+                    "updatedAt": now,
+                }
+            },
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="No active applications found to archive")
+
+        return {
+            "message": f"Successfully archived {result.modified_count} application(s)",
+            "archived_count": result.modified_count,
+            "matched_count": result.matched_count,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk_archive_applications: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/applications/bulk-unarchive")
+async def bulk_unarchive_applications(
+    data: dict,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Restore archived applications to the active pipeline."""
+    try:
+        if not isinstance(data, dict) or "ids" not in data:
+            raise HTTPException(status_code=400, detail="Missing 'ids' field")
+
+        ids = data["ids"]
+        if not isinstance(ids, list) or len(ids) == 0:
+            raise HTTPException(status_code=400, detail="At least one application ID must be provided")
+
+        db = get_database()
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not available")
+
+        object_ids = []
+        for i, id_str in enumerate(ids):
+            try:
+                object_ids.append(ObjectId(id_str))
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"Invalid ObjectId at index {i}: '{id_str}'")
+
+        now = datetime.utcnow()
+        result = await db.applications.update_many(
+            {"_id": {"$in": object_ids}, "isArchived": True},
+            {
+                "$set": {"isArchived": False, "updatedAt": now},
+                "$unset": {"archivedAt": "", "archivedBy": ""},
+            },
+        )
+
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="No archived applications found to restore")
+
+        return {
+            "message": f"Successfully restored {result.modified_count} application(s)",
+            "restored_count": result.modified_count,
+            "matched_count": result.matched_count,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in bulk_unarchive_applications: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

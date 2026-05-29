@@ -78,6 +78,9 @@ export interface Application {
     };
     createdAt?: Date | string;
     updatedAt?: Date | string;
+    isArchived?: boolean;
+    archivedAt?: Date | string;
+    archivedBy?: string;
 }
 
 export interface ShortlistedCandidate extends Application {

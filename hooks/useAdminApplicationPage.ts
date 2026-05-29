@@ -8,7 +8,7 @@ import { Application } from '@/types/application';
 import { toast } from 'react-hot-toast';
 import { useDebounce } from './useDebounce';
 
-export type StatusType = 'all' | 'shortlisted' | 'technical-assessment' | 'interviewing' | 'hired' | 'disqualified';
+export type StatusType = 'all' | 'shortlisted' | 'technical-assessment' | 'interviewing' | 'hired' | 'disqualified' | 'archived';
 
 interface UseAdminApplicationPageOptions {
   statusType: StatusType;
@@ -146,6 +146,9 @@ export function useAdminApplicationPage({
           case 'disqualified':
             response = await adminApplicationsApi.getDisqualifiedApplications(filters);
             break;
+          case 'archived':
+            response = await adminApplicationsApi.getArchivedApplications(filters);
+            break;
           default:
             throw new Error(`Unknown status type: ${statusType}`);
         }
@@ -202,7 +205,9 @@ export function useAdminApplicationPage({
     
     try {
       // Use the dedicated positions endpoint for better performance
-      const response = await adminApplicationsApi.getApplicationPositions(statusType) as any;
+      const response = await adminApplicationsApi.getApplicationPositions(statusType, {
+        archived: statusType === 'archived',
+      }) as any;
       const positions = response.positions || [];
 
       // Only show positions that currently have applications in this view
@@ -358,6 +363,42 @@ export function useAdminApplicationPage({
     }
   };
 
+  const handleArchiveAll = async () => {
+    try {
+      const result = await adminApplicationsApi.archiveAllApplications();
+      await loadApplications();
+      toast.success(result.message || 'All applications archived successfully');
+    } catch (error) {
+      console.error('Failed to archive all applications:', error);
+      toast.error('Failed to archive all applications');
+      throw error;
+    }
+  };
+
+  const handleBulkArchive = async (ids: string[]) => {
+    if (!enableBulkUpdates) return;
+
+    try {
+      const result = await adminApplicationsApi.bulkArchiveApplications(ids);
+      await loadApplications();
+      toast.success(result.message || `Archived ${ids.length} application(s)`);
+    } catch (error) {
+      console.error('Failed to archive applications:', error);
+      toast.error('Failed to archive applications');
+    }
+  };
+
+  const handleBulkUnarchive = async (ids: string[]) => {
+    try {
+      const result = await adminApplicationsApi.bulkUnarchiveApplications(ids);
+      await loadApplications();
+      toast.success(result.message || `Restored ${ids.length} application(s)`);
+    } catch (error) {
+      console.error('Failed to restore applications:', error);
+      toast.error('Failed to restore applications');
+    }
+  };
+
   return {
     // Data
     applications: filteredApplications,
@@ -400,6 +441,9 @@ export function useAdminApplicationPage({
     handleSaveEdit,
     handleConfirmDelete,
     handleBulkStatusUpdate: enableBulkUpdates ? handleBulkStatusUpdate : undefined,
+    handleBulkArchive: enableBulkUpdates ? handleBulkArchive : undefined,
+    handleArchiveAll,
+    handleBulkUnarchive,
     
     // Utilities
     refreshData: loadApplications,

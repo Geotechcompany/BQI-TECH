@@ -457,6 +457,49 @@ async def initialize_database_indexes():
 			name="applications_appliedDate"
 		)
 
+		# CV vault cache (Dropbox CV metadata)
+		await ensure_index(
+			_database.cv_vault,
+			["vaultId"],
+			name="cv_vault_vaultId_unique",
+			unique=True,
+		)
+		await ensure_index(
+			_database.cv_vault,
+			["name"],
+			name="cv_vault_name",
+		)
+		await ensure_index(
+			_database.cv_vault,
+			["email"],
+			name="cv_vault_email",
+		)
+		await ensure_index(
+			_database.cv_vault,
+			["fileName"],
+			name="cv_vault_fileName",
+		)
+		await ensure_index(
+			_database.cv_vault,
+			["syncedAt"],
+			name="cv_vault_syncedAt",
+		)
+		await ensure_index(
+			_database.cv_vault,
+			["completenessScore", "sortTimestamp"],
+			name="cv_vault_completeness_sort",
+		)
+		await ensure_index(
+			_database.cv_vault,
+			["sortTimestamp"],
+			name="cv_vault_sortTimestamp",
+		)
+		await ensure_index(
+			_database.cv_vault,
+			["hasEmail", "hasName"],
+			name="cv_vault_contact_flags",
+		)
+
 		# Email campaigns collection indexes
 		await ensure_index(
 			_database.email_campaigns,

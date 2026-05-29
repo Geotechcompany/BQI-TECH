@@ -35,6 +35,7 @@ from .routers.user_notifications import router as user_notifications_router
 from .routers.surveys import router as surveys_router
 from .routers.upload import router as upload_router
 from .routers.broadcast_lists import router as broadcast_lists_router
+from .routers.cv_vault import router as cv_vault_router
 
 # Try to import misc router if it exists
 try:
@@ -228,6 +229,8 @@ logger.info("Registering surveys router at /api")
 app.include_router(surveys_router, prefix="/api")
 logger.info("Registering broadcast lists router at /api/admin")
 app.include_router(broadcast_lists_router)
+logger.info("Registering cv vault router")
+app.include_router(cv_vault_router)
 
 # Include misc router if available
 if HAS_MISC_ROUTER:

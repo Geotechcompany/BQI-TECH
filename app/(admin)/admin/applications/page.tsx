@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { UnifiedApplicationTable } from "@/components/admin/UnifiedApplicationTable";
 import { EditApplicationModal } from "@/components/admin/EditApplicationModal";
@@ -11,7 +12,18 @@ import { useAdminApplicationPage } from "@/hooks/useAdminApplicationPage";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Download, FileText, Sheet, ArrowUpDown } from "lucide-react";
+import { Download, FileText, Sheet, Archive } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { FailedStatusState } from "@/components/ui/failed-status-state";
 import {
   DropdownMenu,
@@ -23,6 +35,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function ApplicationsPage() {
+  const [isArchivingAll, setIsArchivingAll] = useState(false);
+
   const {
     applications,
     jobTitles,
@@ -54,6 +68,8 @@ export default function ApplicationsPage() {
     handleSaveEdit,
     handleConfirmDelete,
     handleBulkStatusUpdate,
+    handleBulkArchive,
+    handleArchiveAll,
   } = useAdminApplicationPage({
     statusType: 'all',
     dateField: 'appliedDate',
@@ -90,6 +106,45 @@ export default function ApplicationsPage() {
       onSearch={setSearchTerm}
       headerActions={
         <div className="flex items-center space-x-3">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="flex items-center gap-2"
+                disabled={isArchivingAll || total === 0}
+              >
+                <Archive className="h-4 w-4" />
+                Archive All
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Archive all applications?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will move all {total} active application(s) to the archive.
+                  They will no longer appear in pipeline views but can be restored from the Archive page.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isArchivingAll}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={isArchivingAll}
+                  onClick={async (event) => {
+                    event.preventDefault();
+                    setIsArchivingAll(true);
+                    try {
+                      await handleArchiveAll();
+                    } finally {
+                      setIsArchivingAll(false);
+                    }
+                  }}
+                >
+                  {isArchivingAll ? "Archiving..." : "Archive All"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="secondary" className="flex items-center gap-2">
@@ -172,6 +227,7 @@ export default function ApplicationsPage() {
         onEdit={handleEdit}
         onDelete={handleDelete}
         onBulkStatusUpdate={handleBulkStatusUpdate}
+        onBulkArchive={handleBulkArchive}
       />
 
       {/* Pagination */}
