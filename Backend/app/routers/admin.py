@@ -6,6 +6,7 @@ from app.database import get_database, sync_databases_now
 from bson import ObjectId
 from bson.errors import InvalidId
 from datetime import datetime, timedelta
+import asyncio
 import json
 from fastapi.responses import JSONResponse
 from ..logger import logger
@@ -14,8 +15,8 @@ from pathlib import Path
 import os
 import re
 from typing import Dict, Any, List
-from app.lib.email import send_bulk_emails_backend
-from app.lib.roles import is_admin_role
+from app.lib.email import send_bulk_emails_backend, send_admin_privilege_upgrade_email
+from app.lib.roles import is_admin_role, normalize_role, was_promoted_to_admin
 
 router = APIRouter(tags=["admin"])
 
@@ -663,15 +664,22 @@ async def update_user(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Update user details"""
-    from app.lib.roles import normalize_role
-
     db = get_database()
     
     try:
+        existing_user = await db.users.find_one(
+            {"_id": ObjectId(user_id)},
+            {"email": 1, "name": 1, "role": 1},
+        )
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        previous_role = existing_user.get("role")
         # Remove sensitive fields that shouldn't be updated this way
         update_data.pop("password", None)
         if "role" in update_data and update_data["role"] is not None:
             update_data["role"] = normalize_role(str(update_data["role"]))
+        new_role = update_data.get("role", previous_role)
         update_data["updatedAt"] = datetime.utcnow()
         
         result = await db.users.update_one(
@@ -681,6 +689,17 @@ async def update_user(
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="User not found")
+
+        if was_promoted_to_admin(previous_role, new_role):
+            recipient_email = existing_user.get("email")
+            if recipient_email:
+                asyncio.create_task(
+                    send_admin_privilege_upgrade_email(
+                        email=recipient_email,
+                        recipient_name=existing_user.get("name", ""),
+                        role=new_role,
+                    )
+                )
         
         return {"message": "User updated successfully"}
     except Exception as e:

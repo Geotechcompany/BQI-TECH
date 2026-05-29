@@ -413,6 +413,88 @@ async def send_password_reset_email(email: str, reset_link: str) -> bool:
         logger.error(f"Failed to send password reset email to {email}: {str(e)}")
         return False
 
+
+def _admin_role_display(role: str) -> str:
+    upper = (role or "").strip().upper()
+    if upper == "SUPER_ADMIN":
+        return "Super Administrator"
+    return "Administrator"
+
+
+def build_admin_privilege_upgrade_email(
+    recipient_name: str, role: str, admin_login_url: str
+) -> MIMEMultipart:
+    """Create an email notifying the user that admin access was granted."""
+    role_label = _admin_role_display(role)
+    display_name = (recipient_name or "").strip() or "there"
+
+    message = MIMEMultipart()
+    message["From"] = settings.from_email
+    message["Subject"] = "Your BQI Tech admin access is ready"
+
+    body = f"""
+    <html>
+    <body>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
+            </div>
+            <h2 style="color: #1f2937;">Admin access granted</h2>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
+                Hi {display_name},
+            </p>
+            <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
+                Your account has been upgraded to <strong>{role_label}</strong> on the BQI Tech platform.
+                You can now sign in to the admin portal to manage jobs, applications, and other workspace tools.
+            </p>
+            <p style="text-align: center; margin: 24px 0;">
+                <a href="{admin_login_url}" style="background: #2563eb; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Open Admin Portal</a>
+            </p>
+            <p style="color: #6b7280; font-size: 14px;">
+                If you are already signed in, log out and sign back in with this email so your session picks up the new permissions.
+            </p>
+            <p style="color: #6b7280; font-size: 14px;">
+                If the button doesn't work, copy and paste this URL into your browser:<br/>
+                <a href="{admin_login_url}">{admin_login_url}</a>
+            </p>
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+                    If you believe this change was made in error, contact us at {settings.hr_email}
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    message.attach(MIMEText(body, "html"))
+    return message
+
+
+async def send_admin_privilege_upgrade_email(
+    email: str,
+    recipient_name: str = "",
+    role: str = "ADMIN",
+) -> bool:
+    """Notify a user that admin privileges were granted on their account."""
+    try:
+        admin_login_url = f"{settings.frontend_url.rstrip('/')}/admin/login"
+        message = build_admin_privilege_upgrade_email(
+            recipient_name=recipient_name,
+            role=role,
+            admin_login_url=admin_login_url,
+        )
+        message["To"] = email
+
+        with get_smtp_connection() as server:
+            server.sendmail(settings.from_email, email, message.as_string())
+        logger.info(f"Admin privilege upgrade email sent to {email}")
+        return True
+    except Exception as e:
+        logger.error(
+            f"Failed to send admin privilege upgrade email to {email}: {str(e)}"
+        )
+        return False
+
 # ---------------------- Generic & Bulk Email Utilities ----------------------
 def send_generic_email(to: str, subject: str, html: str) -> bool:
     """Send a generic HTML email via configured SMTP settings.
