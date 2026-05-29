@@ -41,10 +41,16 @@ export interface CvVaultResponse {
   items: CvVaultEntry[]
   total: number
   filteredTotal?: number
+  cacheTotal?: number
   stats: {
     withEmail: number
     withApplication: number
     dropboxFolders: string[]
+    matchingFilters?: number
+  }
+  matchedStats?: {
+    withEmail: number
+    withApplication: number
   }
   lastSyncedAt?: string | null
   cached?: boolean

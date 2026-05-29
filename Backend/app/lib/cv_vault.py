@@ -343,6 +343,108 @@ VALID_SORTS = {
 }
 
 
+EMAIL_PRESENT_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+", re.IGNORECASE)
+INVALID_NAMES = frozenset(
+    {
+        "",
+        "unknown",
+        "Unknown",
+        "incomplete application",
+        "Incomplete Application",
+        "n/a",
+        "N/A",
+        "not set",
+        "none",
+    }
+)
+
+
+def _email_present_match() -> Dict[str, Any]:
+    """Match rows with an email (flag or raw field — supports legacy cache docs)."""
+    return {
+        "$or": [
+            {"hasEmail": True},
+            {"email": {"$regex": EMAIL_PRESENT_RE.pattern, "$options": "i"}},
+        ]
+    }
+
+
+def _email_absent_match() -> Dict[str, Any]:
+    return {
+        "$and": [
+            {
+                "$or": [
+                    {"hasEmail": False},
+                    {"hasEmail": {"$exists": False}},
+                ]
+            },
+            {
+                "$or": [
+                    {"email": {"$in": [None, ""]}},
+                    {"email": {"$exists": False}},
+                    {"email": {"$not": {"$regex": "@", "$options": "i"}}},
+                ]
+            },
+        ]
+    }
+
+
+def _name_present_match() -> Dict[str, Any]:
+    return {
+        "$or": [
+            {"hasName": True},
+            {
+                "name": {
+                    "$exists": True,
+                    "$type": "string",
+                    "$nin": list(INVALID_NAMES),
+                    "$regex": r"\S",
+                }
+            },
+        ]
+    }
+
+
+def _name_absent_match() -> Dict[str, Any]:
+    return {
+        "$or": [
+            {"hasName": False},
+            {"hasName": {"$exists": False}},
+            {"name": {"$in": [None, ""]}},
+            {"name": {"$exists": False}},
+            {"name": {"$regex": r"^\s*unknown\s*$", "$options": "i"}},
+        ]
+    }
+
+
+def _linked_application_match() -> Dict[str, Any]:
+    return {
+        "$or": [
+            {"hasApplication": True},
+            {"applicationId": {"$exists": True, "$nin": [None, ""]}},
+        ]
+    }
+
+
+def _not_linked_application_match() -> Dict[str, Any]:
+    return {
+        "$and": [
+            {
+                "$or": [
+                    {"hasApplication": False},
+                    {"hasApplication": {"$exists": False}},
+                ]
+            },
+            {
+                "$or": [
+                    {"applicationId": {"$in": [None, ""]}},
+                    {"applicationId": {"$exists": False}},
+                ]
+            },
+        ]
+    }
+
+
 def _build_vault_match_query(
     *,
     search: str = "",
@@ -363,32 +465,34 @@ def _build_vault_match_query(
                     {"name": {"$regex": pattern, "$options": "i"}},
                     {"email": {"$regex": pattern, "$options": "i"}},
                     {"fileName": {"$regex": pattern, "$options": "i"}},
+                    {"dropboxPath": {"$regex": pattern, "$options": "i"}},
                 ]
             }
         )
 
     if has_email is True:
-        clauses.append({"hasEmail": True})
+        clauses.append(_email_present_match())
     elif has_email is False:
-        clauses.append({"hasEmail": False})
+        clauses.append(_email_absent_match())
 
     if has_name is True:
-        clauses.append({"hasName": True})
+        clauses.append(_name_present_match())
     elif has_name is False:
-        clauses.append({"hasName": False})
+        clauses.append(_name_absent_match())
 
     if linked_application is True:
-        clauses.append({"hasApplication": True})
+        clauses.append(_linked_application_match())
     elif linked_application is False:
-        clauses.append({"hasApplication": False})
+        clauses.append(_not_linked_application_match())
 
     if source and source != "all":
         clauses.append({"source": source})
 
     if contact_filter == "complete":
-        clauses.append({"hasEmail": True, "hasName": True})
+        clauses.append(_email_present_match())
+        clauses.append(_name_present_match())
     elif contact_filter == "missing":
-        clauses.append({"$or": [{"hasEmail": False}, {"hasName": False}]})
+        clauses.append({"$or": [_email_absent_match(), _name_absent_match()]})
 
     if application_status and application_status != "all":
         clauses.append({"applicationStatus": application_status})
@@ -398,6 +502,80 @@ def _build_vault_match_query(
     if len(clauses) == 1:
         return clauses[0]
     return {"$and": clauses}
+
+
+async def repair_cv_vault_quality_flags(db) -> int:
+    """Backfill quality flags on legacy cache documents (fast bulk updates)."""
+    collection = db[CV_VAULT_COLLECTION]
+    repaired = 0
+    email_re = EMAIL_PRESENT_RE.pattern
+
+    updates = [
+        (
+            {
+                "email": {"$regex": email_re, "$options": "i"},
+                "hasEmail": {"$ne": True},
+            },
+            {"hasEmail": True},
+        ),
+        (
+            {
+                "$or": [
+                    {"email": {"$in": [None, ""]}},
+                    {"email": {"$exists": False}},
+                    {"email": {"$not": {"$regex": "@", "$options": "i"}}},
+                ],
+                "hasEmail": {"$ne": False},
+            },
+            {"hasEmail": False},
+        ),
+        (
+            {
+                "applicationId": {"$exists": True, "$nin": [None, ""]},
+                "hasApplication": {"$ne": True},
+            },
+            {"hasApplication": True},
+        ),
+        (
+            {
+                "$or": [
+                    {"applicationId": {"$in": [None, ""]}},
+                    {"applicationId": {"$exists": False}},
+                ],
+                "hasApplication": {"$ne": False},
+            },
+            {"hasApplication": False},
+        ),
+        (
+            {
+                "name": {
+                    "$exists": True,
+                    "$type": "string",
+                    "$nin": list(INVALID_NAMES),
+                    "$regex": r"\S",
+                },
+                "hasName": {"$ne": True},
+            },
+            {"hasName": True},
+        ),
+        (
+            {
+                "$or": [
+                    {"name": {"$in": [None, ""]}},
+                    {"name": {"$exists": False}},
+                    {"name": {"$regex": r"^\s*unknown\s*$", "$options": "i"}},
+                ],
+                "hasName": {"$ne": False},
+            },
+            {"hasName": False},
+        ),
+    ]
+
+    for match, sets in updates:
+        result = await collection.update_many(match, {"$set": sets})
+        repaired += result.modified_count
+
+    return repaired
 
 
 def _vault_sort_spec(sort: str) -> List[tuple]:
@@ -531,6 +709,11 @@ async def list_cv_vault_from_db(
     if sort not in VALID_SORTS:
         sort = "complete_first"
 
+    try:
+        await repair_cv_vault_quality_flags(db)
+    except Exception as e:
+        logger.warning("CV vault quality flag repair skipped: %s", e)
+
     query = _build_vault_match_query(
         search=search,
         has_email=has_email,
@@ -553,20 +736,22 @@ async def list_cv_vault_from_db(
         last_synced = _serialize_date(meta["lastSyncedAt"])
 
     filtered_total = await collection.count_documents(query)
+    cache_total = await collection.count_documents({})
     global_stats = (meta or {}).get("stats") or {}
+    matched_stats = _compute_stats(items)
 
     return {
         "items": items,
-        "total": len(items),
+        "total": filtered_total,
         "filteredTotal": filtered_total,
+        "cacheTotal": cache_total,
         "stats": {
-            **global_stats,
-            "withEmail": global_stats.get("withEmail", _compute_stats(items)["withEmail"]),
-            "withApplication": global_stats.get(
-                "withApplication", _compute_stats(items)["withApplication"]
-            ),
+            "withEmail": global_stats.get("withEmail", 0),
+            "withApplication": global_stats.get("withApplication", 0),
             "dropboxFolders": DROPBOX_CV_FOLDERS,
+            "matchingFilters": filtered_total,
         },
+        "matchedStats": matched_stats,
         "lastSyncedAt": last_synced,
         "cached": True,
         "sort": sort,

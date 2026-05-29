@@ -10,23 +10,17 @@ import { CVCell } from "@/components/admin/CVCell"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import {
   ExternalLink,
   FileArchive,
-  Filter,
   Loader2,
   Mail,
   RefreshCw,
   Sparkles,
-  X,
 } from "lucide-react"
+import {
+  CvVaultFilters,
+  type TriFilter,
+} from "@/components/admin/cv-vault/CvVaultFilters"
 import type {
   CvVaultFilterOptions,
   CvVaultListParams,
@@ -44,16 +38,6 @@ const baseUrl = () =>
   )
 
 const DEFAULT_SORT: CvVaultSort = "complete_first"
-
-const SORT_LABELS: Record<CvVaultSort, string> = {
-  complete_first: "Complete profiles first",
-  dropbox_newest: "Newest on Dropbox",
-  dropbox_oldest: "Oldest on Dropbox",
-  applied_newest: "Latest application date",
-  applied_oldest: "Earliest application date",
-  name_asc: "Name (A–Z)",
-  name_desc: "Name (Z–A)",
-}
 
 function parseApiError(body: unknown, status: number): string {
   if (body && typeof body === "object" && "detail" in body) {
@@ -163,8 +147,6 @@ async function syncCvVault(
   return res.json()
 }
 
-type TriFilter = "all" | "yes" | "no"
-
 function triToBool(value: TriFilter): boolean | null {
   if (value === "yes") return true
   if (value === "no") return false
@@ -209,14 +191,18 @@ export default function CvVaultPage() {
     ]
   )
 
-  const hasActiveFilters =
-    contactFilter !== "all" ||
-    sourceFilter !== "all" ||
-    hasEmailFilter !== "all" ||
-    hasNameFilter !== "all" ||
-    linkedFilter !== "all" ||
-    statusFilter !== "all" ||
-    sort !== DEFAULT_SORT
+  const activeFilterCount = [
+    debouncedSearch.length > 0,
+    contactFilter !== "all",
+    sourceFilter !== "all",
+    hasEmailFilter !== "all",
+    hasNameFilter !== "all",
+    linkedFilter !== "all",
+    statusFilter !== "all",
+    sort !== DEFAULT_SORT,
+  ].filter(Boolean).length
+
+  const hasActiveFilters = activeFilterCount > 0
 
   useEffect(() => {
     if (!authLoading && (!isAuthenticated || !isAdmin)) {
@@ -257,6 +243,8 @@ export default function CvVaultPage() {
   })
 
   const resetFilters = () => {
+    setSearch("")
+    setDebouncedSearch("")
     setSort(DEFAULT_SORT)
     setContactFilter("all")
     setSourceFilter("all")
@@ -286,12 +274,7 @@ export default function CvVaultPage() {
   }
 
   return (
-    <AdminPageLayout
-      title="CV Vault"
-      searchPlaceholder="Search by name, email, or filename…"
-      searchValue={search}
-      onSearch={setSearch}
-    >
+    <AdminPageLayout title="CV Vault" showSearch={false}>
       <div className="max-w-screen-2xl mx-auto px-4 py-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-xl border bg-card">
           <div className="flex items-center gap-3">
@@ -304,12 +287,19 @@ export default function CvVaultPage() {
               </p>
               {stats && (
                 <p className="text-sm font-medium mt-0.5">
-                  Showing {data?.total ?? 0}
-                  {data?.filteredTotal !== undefined &&
-                    data.filteredTotal !== data.total &&
-                    ` of ${data.filteredTotal} matched`}
-                  {" · "}
-                  {stats.withEmail} with email · {stats.withApplication} linked
+                  <span className="text-foreground">
+                    {data?.total ?? 0} result{(data?.total ?? 0) === 1 ? "" : "s"}
+                  </span>
+                  {data?.cacheTotal !== undefined && (
+                    <span className="text-muted-foreground font-normal">
+                      {" "}
+                      of {data.cacheTotal} in vault
+                    </span>
+                  )}
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    · {stats.withEmail} with email · {stats.withApplication} linked
+                  </span>
                   {data?.lastSyncedAt && (
                     <span className="text-muted-foreground font-normal">
                       {" "}
@@ -348,181 +338,29 @@ export default function CvVaultPage() {
           </div>
         </div>
 
-        {/* Filters */}
-        <div className="rounded-xl border bg-card p-4 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              Sort & filter
-            </div>
-            {hasActiveFilters && (
-              <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8">
-                <X className="h-3.5 w-3.5 mr-1" />
-                Reset filters
-              </Button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-            <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
-              <Label className="text-xs text-muted-foreground">Sort by</Label>
-              <Select value={sort} onValueChange={(v) => setSort(v as CvVaultSort)}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(filterOptions?.sorts ?? Object.entries(SORT_LABELS).map(([value, label]) => ({
-                    value: value as CvVaultSort,
-                    label,
-                  }))).map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Contact</Label>
-              <Select
-                value={contactFilter}
-                onValueChange={(v) =>
-                  setContactFilter(v as "all" | "complete" | "missing")
-                }
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="complete">Name + email</SelectItem>
-                  <SelectItem value="missing">Missing info</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Has email</Label>
-              <Select
-                value={hasEmailFilter}
-                onValueChange={(v) => setHasEmailFilter(v as TriFilter)}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Any</SelectItem>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Has name</Label>
-              <Select
-                value={hasNameFilter}
-                onValueChange={(v) => setHasNameFilter(v as TriFilter)}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Any</SelectItem>
-                  <SelectItem value="yes">Yes</SelectItem>
-                  <SelectItem value="no">No</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Application</Label>
-              <Select
-                value={linkedFilter}
-                onValueChange={(v) => setLinkedFilter(v as TriFilter)}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Any</SelectItem>
-                  <SelectItem value="yes">Linked</SelectItem>
-                  <SelectItem value="no">Not linked</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Source</Label>
-              <Select
-                value={sourceFilter}
-                onValueChange={(v) =>
-                  setSourceFilter(v as "all" | "application" | "dropbox")
-                }
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All sources</SelectItem>
-                  <SelectItem value="application">Application</SelectItem>
-                  <SelectItem value="dropbox">Dropbox only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs text-muted-foreground">App status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {(filterOptions?.applicationStatuses ?? []).map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setSort("complete_first")
-                setContactFilter("complete")
-              }}
-            >
-              Best profiles first
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setSort("dropbox_newest")
-                setContactFilter("all")
-              }}
-            >
-              Latest on Dropbox
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setContactFilter("missing")
-                setHasEmailFilter("no")
-              }}
-            >
-              Missing email
-            </Button>
-          </div>
-        </div>
+        <CvVaultFilters
+          search={search}
+          onSearchChange={setSearch}
+          sort={sort}
+          onSortChange={setSort}
+          contactFilter={contactFilter}
+          onContactFilterChange={setContactFilter}
+          hasEmailFilter={hasEmailFilter}
+          onHasEmailChange={setHasEmailFilter}
+          hasNameFilter={hasNameFilter}
+          onHasNameChange={setHasNameFilter}
+          linkedFilter={linkedFilter}
+          onLinkedChange={setLinkedFilter}
+          sourceFilter={sourceFilter}
+          onSourceChange={setSourceFilter}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          applicationStatuses={filterOptions?.applicationStatuses ?? []}
+          sortOptions={filterOptions?.sorts}
+          onReset={resetFilters}
+          hasActiveFilters={hasActiveFilters}
+          activeFilterCount={activeFilterCount}
+        />
 
         {error && (
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive text-sm">
@@ -568,7 +406,14 @@ export default function CvVaultPage() {
                         className="p-8 text-center text-muted-foreground"
                       >
                         No CVs match your filters
-                        {debouncedSearch ? ` for "${debouncedSearch}"` : ""}.
+                        {debouncedSearch ? ` for “${debouncedSearch}”` : ""}.
+                        {hasActiveFilters && (
+                          <span className="block mt-2">
+                            <Button variant="link" size="sm" onClick={resetFilters}>
+                              Clear filters
+                            </Button>
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ) : (
