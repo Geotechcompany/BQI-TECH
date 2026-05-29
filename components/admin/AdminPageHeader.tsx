@@ -14,10 +14,10 @@ import {
   Laptop,
   Trash2,
   Check,
-  User,
-  LogOut
+  LogOut,
+  ShieldCheck,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -39,6 +39,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "@/contexts/SettingsContext";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { useBackendHealth } from "@/hooks/useBackendHealth";
+import { formatAdminRoleLabel, isAdminRoleLabel } from "@/lib/format-admin-role";
 
 interface Notification {
   id: string;
@@ -66,7 +67,7 @@ export default function AdminPageHeader({
   showSearch = false,
   onSearch 
 }: AdminPageHeaderProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, userRole } = useAuth();
   const { setTheme: setGlobalTheme } = useTheme();
   const { theme, setTheme } = useAdminTheme();
   const { sidebarCollapsed } = useSettings();
@@ -126,9 +127,16 @@ export default function AdminPageHeader({
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
+  const displayRole = formatAdminRoleLabel(userRole || user?.role);
+  const isAdminUser = isAdminRoleLabel(userRole || user?.role);
+  const initials =
+    [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join("") ||
+    user?.name?.slice(0, 2).toUpperCase() ||
+    "A";
+
   return (
     <div 
-      className="bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50 flex h-16 items-center border-b w-full fixed left-0 right-0 transition-all duration-300 ease-in-out"
+      className="bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 z-50 flex h-16 items-center border-b border-border/60 w-full fixed left-0 right-0 transition-all duration-300 ease-in-out shadow-sm"
       style={{ top: "var(--admin-banner-offset, 0px)" }}
       data-collapsed={sidebarCollapsed}
     >
@@ -166,13 +174,15 @@ export default function AdminPageHeader({
         )}
 
         {/* Right Section */}
-        <div className="flex items-center gap-2">
-          {/* Backend status indicator */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <BackendStatusIndicator />
+
+          <div className="hidden sm:block h-6 w-px bg-border/70 mx-1" />
+
           {/* Theme Switcher */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
                 <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                 <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                 <span className="sr-only">Toggle theme</span>
@@ -197,7 +207,7 @@ export default function AdminPageHeader({
           {/* Notifications */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9">
+              <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl">
                 <Bell className="h-5 w-5" />
                 {unreadCount > 0 && (
                   <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-red-500 text-[10px] font-medium text-white flex items-center justify-center">
@@ -285,35 +295,78 @@ export default function AdminPageHeader({
 
           {/* Help */}
           <Link href="/admin/help" aria-label="Help">
-            <Button variant="ghost" size="icon" className="h-9 w-9">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
               <HelpCircle className="h-5 w-5" aria-hidden="true" />
             </Button>
           </Link>
 
+          <div className="hidden sm:block h-6 w-px bg-border/70 mx-1" />
+
           {/* Profile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center gap-2 px-2 h-9 hover:bg-accent rounded-lg">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={user?.avatar} alt={user?.name || 'Admin'} />
-                  <AvatarFallback>
-                    {[user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('') || 'A'}
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2.5 px-2.5 h-10 hover:bg-accent/70 rounded-xl border border-transparent hover:border-border/60"
+              >
+                <Avatar className={`h-8 w-8 ${isAdminUser ? "ring-2 ring-blue-500/30 ring-offset-2 ring-offset-background" : ""}`}>
+                  <AvatarImage src={user?.avatar} alt={user?.name || "Admin"} />
+                  <AvatarFallback className="bg-blue-600/10 text-blue-700 dark:text-blue-300 text-xs font-semibold">
+                    {initials}
                   </AvatarFallback>
                 </Avatar>
-                <div className="hidden md:flex flex-col items-start">
-                  <span className="text-sm font-medium">{user?.name || 'Admin User'}</span>
-                  <span className="text-xs text-muted-foreground">{user?.role || 'admin'}</span>
+                <div className="hidden md:flex flex-col items-start min-w-0">
+                  <span className="text-sm font-semibold leading-none truncate max-w-[160px]">
+                    {user?.name || "Admin User"}
+                  </span>
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {isAdminUser && (
+                      <ShieldCheck className="h-3 w-3 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                    )}
+                    <Badge
+                      variant={isAdminUser ? "default" : "secondary"}
+                      className={`h-5 px-2 text-[10px] font-medium tracking-wide ${
+                        isAdminUser
+                          ? "bg-blue-600/10 text-blue-700 hover:bg-blue-600/10 dark:bg-blue-500/15 dark:text-blue-300 border border-blue-200/60 dark:border-blue-500/30"
+                          : ""
+                      }`}
+                    >
+                      {displayRole}
+                    </Badge>
+                  </div>
                 </div>
-                <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
+            <DropdownMenuContent className="w-64" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user?.name || 'Admin User'}</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user?.email}
-                  </p>
+                <div className="flex flex-col space-y-2">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={user?.avatar} alt={user?.name || "Admin"} />
+                      <AvatarFallback className="bg-blue-600/10 text-blue-700 dark:text-blue-300 text-sm font-semibold">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold leading-none truncate">
+                        {user?.name || "Admin User"}
+                      </p>
+                      <p className="text-xs leading-none text-muted-foreground truncate mt-1">
+                        {user?.email}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant={isAdminUser ? "default" : "secondary"}
+                    className={`w-fit ${
+                      isAdminUser
+                        ? "bg-blue-600/10 text-blue-700 hover:bg-blue-600/10 dark:bg-blue-500/15 dark:text-blue-300"
+                        : ""
+                    }`}
+                  >
+                    {displayRole}
+                  </Badge>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -351,12 +404,12 @@ function BackendStatusIndicator() {
     <HoverCard openDelay={150} closeDelay={100}>
       <HoverCardTrigger asChild>
         <button
-          className="group inline-flex items-center gap-2 rounded-full border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-white/60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800/60"
+          className="group inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/40 px-3 py-1.5 text-xs font-medium text-foreground/80 hover:bg-muted/70 transition-colors"
           aria-label="Backend status"
         >
-          <span className={`relative flex h-2.5 w-2.5 items-center justify-center`}> 
-            <span className={`absolute inline-flex h-2.5 w-2.5 rounded-full ${color} ${pulse} opacity-75`}></span>
-            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${color}`}></span>
+          <span className="relative flex h-2 w-2 items-center justify-center">
+            <span className={`absolute inline-flex h-full w-full rounded-full ${color} opacity-40 ${pulse}`} />
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${color}`} />
           </span>
           <span className="hidden sm:block">{label}</span>
         </button>

@@ -3,17 +3,12 @@
 import { motion } from 'framer-motion';
 import { Users, FileText, CheckCircle, XCircle, UserCheck, Code, MessageSquare, ArrowRight, BarChart, Plus, TrendingUp, Briefcase, Target, Activity } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { Line, Pie, Doughnut } from 'react-chartjs-2';
+import { Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
+  ArcElement,
   Tooltip,
   Legend,
-  ArcElement,
 } from 'chart.js';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
@@ -32,17 +27,13 @@ import {
   PremiumStatusCard,
 } from "@/components/admin/premium-cards";
 import { RecentApplicationsPanel } from "@/components/admin/RecentApplicationsPanel";
+import { AdminTrendChart } from "@/components/admin/AdminTrendChart";
+import {
+  normalizeTrendSeries,
+  trendSeriesHasActivity,
+} from "@/lib/normalize-trend-data";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement
-);
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 interface OverviewData {
   applications: {
@@ -229,28 +220,14 @@ export default function OverviewPage() {
     };
   }, [allApplications, jobTitles]);
 
-  // Chart configurations
-  const trendChartData = {
-    labels:
-      trendData?.trends?.map((t: any) => {
-        const date = new Date(t._id);
-        return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      }) || computedStats.trendLabels,
-    datasets: [
-      {
-        label: 'Applications',
-        data: trendData?.trends?.map((t: any) => t.count) || computedStats.trendCounts,
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        fill: true,
-        tension: 0.4,
-        pointBackgroundColor: 'rgb(59, 130, 246)',
-        pointBorderColor: 'white',
-        pointBorderWidth: 2,
-        pointRadius: 4,
-      },
-    ],
-  };
+  const trendSeries = useMemo(
+    () =>
+      normalizeTrendSeries(trendData?.trends, {
+        labels: computedStats.trendLabels,
+        counts: computedStats.trendCounts,
+      }),
+    [trendData?.trends, computedStats.trendLabels, computedStats.trendCounts]
+  );
 
   const pieByJobData =
     applicationsByJob?.applicationsByJob && applicationsByJob.applicationsByJob.length > 0
@@ -294,54 +271,31 @@ export default function OverviewPage() {
     ],
   };
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'top' as const,
-        labels: {
-          padding: 20,
-          usePointStyle: true,
-          font: {
-            size: 12,
-          },
-        },
-      },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        titleColor: 'white',
-        bodyColor: 'white',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 1,
-      },
-    },
-  };
-
   const pieChartOptions = {
+    cutout: "68%",
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
         position: 'right' as const,
         labels: {
-          padding: 15,
+          padding: 14,
           usePointStyle: true,
-          font: {
-            size: 11,
-          },
+          pointStyle: 'circle',
+          font: { size: 11 },
+          color: 'hsl(var(--muted-foreground))',
           generateLabels: (chart: any) => {
             const data = chart.data;
             if (data.labels.length && data.datasets.length) {
               return data.labels.map((label: string, i: number) => {
                 const value = data.datasets[0].data[i];
                 const total = data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
-                const percentage = ((value / total) * 100).toFixed(1);
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
                 return {
                   text: `${label} (${percentage}%)`,
                   fillStyle: data.datasets[0].backgroundColor[i],
                   strokeStyle: data.datasets[0].borderColor[i],
-                  lineWidth: 2,
+                  lineWidth: 0,
                   pointStyle: 'circle',
                 };
               });
@@ -351,16 +305,16 @@ export default function OverviewPage() {
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        titleColor: 'white',
-        bodyColor: 'white',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: 'hsl(var(--popover))',
+        titleColor: 'hsl(var(--popover-foreground))',
+        bodyColor: 'hsl(var(--popover-foreground))',
+        borderColor: 'hsl(var(--border))',
         borderWidth: 1,
         callbacks: {
           label: function(context: any) {
             const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-            const percentage = ((context.parsed / total) * 100).toFixed(1);
-            return `${context.label}: ${context.parsed} (${percentage}%)`;
+            const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : "0.0";
+            return `${context.parsed} applications (${percentage}%)`;
           }
         }
       },
@@ -532,26 +486,29 @@ export default function OverviewPage() {
           {/* Charts Section */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
             {/* Application Trends Chart */}
-            <Card className="lg:col-span-3 shadow-sm border-border">
-              <CardHeader className="pb-4">
+            <Card className="lg:col-span-3 shadow-sm border-border/70 overflow-hidden">
+              <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
                 <CardTitle className="flex items-center gap-3 text-lg">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <TrendingUp className="h-5 w-5 text-blue-600" />
+                  <div className="p-2.5 bg-blue-500/10 rounded-xl ring-1 ring-blue-500/20">
+                    <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                   </div>
-                  Application Trends
-                  <span className="text-sm font-normal text-muted-foreground">(Last 30 Days)</span>
+                  <div>
+                    <div>Application Trends</div>
+                    <p className="text-sm font-normal text-muted-foreground mt-0.5">
+                      Daily submissions over the last 30 days
+                    </p>
+                  </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0">
-                {(trendData?.trends?.length || computedStats.trendCounts.length) > 0 ? (
-                  <div className="h-80">
-                    <Line data={trendChartData} options={chartOptions} />
-                  </div>
+              <CardContent className="pt-6">
+                {trendSeriesHasActivity(trendSeries) ? (
+                  <AdminTrendChart series={trendSeries} />
                 ) : (
                   <div className="h-80 flex items-center justify-center text-muted-foreground">
                     <div className="text-center">
                       <BarChart className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                      <p>No trend data available</p>
+                      <p className="font-medium">No applications in the last 30 days</p>
+                      <p className="text-sm mt-1">Trends will appear once applications start coming in.</p>
                     </div>
                   </div>
                 )}
@@ -559,16 +516,16 @@ export default function OverviewPage() {
             </Card>
 
             {/* Applications by Job Pie Chart */}
-            <Card className="lg:col-span-2 shadow-sm border-border">
-              <CardHeader className="pb-4">
+            <Card className="lg:col-span-2 shadow-sm border-border/70 overflow-hidden">
+              <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
                 <CardTitle className="flex items-center gap-3 text-lg">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Target className="h-5 w-5 text-green-600" />
+                  <div className="p-2.5 bg-emerald-500/10 rounded-xl ring-1 ring-emerald-500/20">
+                    <Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                   </div>
                   Applications by Job
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="pt-6">
                 {pieByJobData.length > 0 ? (
                   <div className="h-80">
                     <Doughnut data={pieChartData} options={pieChartOptions} />
