@@ -10,6 +10,7 @@ from jose import jwt
 import logging
 import json
 import os
+import re
 from pymongo.errors import (
     AutoReconnect,
     ConnectionFailure,
@@ -52,6 +53,37 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
+LOGIN_ERROR_EMAIL_NOT_FOUND = {
+    "code": "email_not_found",
+    "message": "We couldn't find an account with that email address. Please check for typos or sign up for a new account.",
+}
+LOGIN_ERROR_INVALID_PASSWORD = {
+    "code": "invalid_password",
+    "message": "The password you entered is incorrect. If you recently reset your password, use your new password or request another reset link.",
+}
+LOGIN_ERROR_PENDING_VERIFICATION = {
+    "code": "pending_verification",
+    "message": "Please verify your email to complete registration before signing in.",
+}
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _email_lookup_filter(email: str) -> dict:
+    normalized = _normalize_email(email)
+    return {"email": {"$regex": f"^{re.escape(normalized)}$", "$options": "i"}}
+
+
+async def _find_user_by_email(db, email: str):
+    return await db.users.find_one(_email_lookup_filter(email))
+
+
+async def _find_pending_registration_by_email(db, email: str):
+    return await db.pending_registrations.find_one(_email_lookup_filter(email))
+
+
 def _extract_email_from_body(payload: Any) -> str:
     """Accept raw string or JSON object {email} payloads."""
     if isinstance(payload, str):
@@ -81,11 +113,13 @@ async def login(
             logger.error("Database not connected during login attempt")
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database not connected")
         
-        # Find user by email
-        user = await db.users.find_one({"email": credentials.username})
+        email = _normalize_email(credentials.username)
+
+        # Find user by email (case-insensitive)
+        user = await _find_user_by_email(db, email)
         if not user:
             # Check if there's a pending registration
-            pending_registration = await db.pending_registrations.find_one({"email": credentials.username})
+            pending_registration = await _find_pending_registration_by_email(db, email)
             if pending_registration:
                 # Check if pending registration is expired
                 if pending_registration.get("expiresAt") and pending_registration["expiresAt"] < datetime.utcnow():
@@ -100,19 +134,20 @@ async def login(
                 if verify_password(credentials.password, pending_registration["password"]):
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Please verify your email to complete registration before logging in."
+                        detail=LOGIN_ERROR_PENDING_VERIFICATION,
                     )
             
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
+                detail=LOGIN_ERROR_EMAIL_NOT_FOUND,
             )
             
         # Verify password
-        if not verify_password(credentials.password, user["password"]):
+        stored_password = user.get("password")
+        if not stored_password or not verify_password(credentials.password, stored_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials"
+                detail=LOGIN_ERROR_INVALID_PASSWORD,
             )
             
         # Create access token
@@ -694,14 +729,23 @@ async def forgot_password(request: Request, data: ForgotPasswordRequest):
         db = get_database()
         email = data.email.strip().lower()
 
-        user = await db.users.find_one({"email": {"$regex": f"^{email}$", "$options": "i"}})
+        user = await _find_user_by_email(db, email)
 
         if user:
             token = _generate_reset_token()
             expires_at = datetime.utcnow() + timedelta(hours=1)
+            canonical_email = _normalize_email(user.get("email", email))
             await db.password_resets.update_one(
-                {"email": email},
-                {"$set": {"email": email, "token": token, "expiresAt": expires_at, "createdAt": datetime.utcnow()}},
+                {"email": canonical_email},
+                {
+                    "$set": {
+                        "email": canonical_email,
+                        "userId": str(user["_id"]),
+                        "token": token,
+                        "expiresAt": expires_at,
+                        "createdAt": datetime.utcnow(),
+                    }
+                },
                 upsert=True,
             )
 
@@ -752,8 +796,30 @@ async def reset_password(data: ResetPasswordRequest):
             raise HTTPException(status_code=400, detail="Invalid or expired token")
 
         email = rec["email"]
+        user = None
+        user_id = rec.get("userId")
+        if user_id:
+            try:
+                user = await db.users.find_one({"_id": ObjectId(user_id)})
+            except Exception:
+                user = None
+        if not user:
+            user = await _find_user_by_email(db, email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
         hashed = get_password_hash(data.password)
-        result = await db.users.update_one({"email": email}, {"$set": {"password": hashed, "updatedAt": datetime.utcnow()}})
+        result = await db.users.update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {
+                    "password": hashed,
+                    "email": _normalize_email(user.get("email", email)),
+                    "updatedAt": datetime.utcnow(),
+                    "passwordResetAt": datetime.utcnow(),
+                }
+            },
+        )
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="User not found")
 

@@ -14,6 +14,15 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirectTo')
   const [showLogoutSuccess, setShowLogoutSuccess] = useState(false)
+  const [showPasswordResetSuccess, setShowPasswordResetSuccess] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('passwordReset') === '1') {
+      setShowPasswordResetSuccess(true)
+      setTimeout(() => setShowPasswordResetSuccess(false), 5000)
+      router.replace('/login')
+    }
+  }, [searchParams, router])
 
   useEffect(() => {
     // Check for success message from logout
@@ -51,6 +60,17 @@ export default function LoginPage() {
             <AlertTitle>Success</AlertTitle>
             <AlertDescription>
               You have successfully logged out.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+      {showPasswordResetSuccess && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
+          <Alert className="shadow-lg border-emerald-200 bg-emerald-50">
+            <CheckCircle className="h-4 w-4 text-emerald-600" />
+            <AlertTitle>Password updated</AlertTitle>
+            <AlertDescription>
+              Your password was reset successfully. Sign in with your new password below.
             </AlertDescription>
           </Alert>
         </div>

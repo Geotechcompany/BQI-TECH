@@ -73,12 +73,19 @@ export default function ResetPasswordPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Password reset failed");
+        const detail = errorData.detail;
+        const message =
+          typeof detail === "string"
+            ? detail
+            : detail?.message || "Password reset failed";
+        throw new Error(message);
       }
 
-      toast.success("Password updated successfully!");
+      toast.success("Password updated successfully!", {
+        description: "You can now sign in with your new password.",
+      });
       // Redirect to login after 2 seconds
-      setTimeout(() => (window.location.href = "/login"), 2000);
+      setTimeout(() => (window.location.href = "/login?passwordReset=1"), 2000);
     } catch (error) {
       toast.error(error.message || "Failed to reset password");
     }

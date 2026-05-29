@@ -27,10 +27,15 @@ interface SessionData {
 
 import { BACKEND_URL } from "./config";
 
-/** FastAPI may return `detail` as a string or validation error list */
+/** FastAPI may return `detail` as a string, structured object, or validation error list */
 function formatFastApiDetail(detail: unknown): string {
   if (typeof detail === "string") {
     return detail;
+  }
+  if (detail && typeof detail === "object" && !Array.isArray(detail)) {
+    if ("message" in detail && typeof (detail as { message: unknown }).message === "string") {
+      return (detail as { message: string }).message;
+    }
   }
   if (Array.isArray(detail)) {
     return detail
@@ -45,7 +50,15 @@ function formatFastApiDetail(detail: unknown): string {
   return "Login failed";
 }
 
-export type AuthRequestError = Error & { status: number };
+function extractFastApiErrorCode(detail: unknown): string | undefined {
+  if (detail && typeof detail === "object" && !Array.isArray(detail) && "code" in detail) {
+    const code = (detail as { code: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
+export type AuthRequestError = Error & { status: number; code?: string };
 
 /** Maps login failures to user-facing toast copy (avoids labeling DB outages as wrong password). */
 export function getLoginToastFromError(error: unknown): {
@@ -59,6 +72,12 @@ export function getLoginToastFromError(error: unknown): {
     "status" in error &&
     typeof (error as AuthRequestError).status === "number"
       ? (error as AuthRequestError).status
+      : undefined;
+  const code =
+    error instanceof Error &&
+    "code" in error &&
+    typeof (error as AuthRequestError).code === "string"
+      ? (error as AuthRequestError).code
       : undefined;
 
   if (status === 503) {
@@ -89,9 +108,57 @@ export function getLoginToastFromError(error: unknown): {
     };
   }
 
+  if (code === "email_not_found") {
+    return {
+      title: "Email not recognized",
+      description:
+        message ||
+        "We couldn't find an account with that email address. Please check for typos or sign up for a new account.",
+    };
+  }
+
+  if (code === "invalid_password") {
+    return {
+      title: "Incorrect password",
+      description:
+        message ||
+        "The password you entered is incorrect. If you recently reset your password, use your new password or request another reset link.",
+    };
+  }
+
+  if (code === "pending_verification") {
+    return {
+      title: "Verify your email",
+      description:
+        message ||
+        "Please verify your email to complete registration before signing in.",
+    };
+  }
+
+  if (/couldn't find an account with that email/i.test(message)) {
+    return {
+      title: "Email not recognized",
+      description: message,
+    };
+  }
+
+  if (/password you entered is incorrect|recently reset your password/i.test(message)) {
+    return {
+      title: "Incorrect password",
+      description: message,
+    };
+  }
+
+  if (/verify your email/i.test(message)) {
+    return {
+      title: "Verify your email",
+      description: message,
+    };
+  }
+
   return {
-    title: "Invalid credentials",
-    description: message || "Please check your email and password.",
+    title: "Sign-in unsuccessful",
+    description: message || "Please check your email and password, then try again.",
   };
 }
 
@@ -221,9 +288,11 @@ class AuthService {
       if (!response.ok) {
         const errorBody = await response.json();
         console.error("Login error response:", errorBody);
-        const detail = formatFastApiDetail(errorBody.detail);
-        const err = new Error(detail || "Login failed") as AuthRequestError;
+        const detail = errorBody.detail;
+        const message = formatFastApiDetail(detail);
+        const err = new Error(message || "Login failed") as AuthRequestError;
         err.status = response.status;
+        err.code = extractFastApiErrorCode(detail);
         throw err;
       }
 

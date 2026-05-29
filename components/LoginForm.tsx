@@ -20,7 +20,7 @@ type FormData = z.infer<typeof formSchema>
 
 interface LoginFormProps {
   onLogin: (email: string, password: string) => Promise<void>
-  onError: (error: string) => void
+  onError: (error: unknown) => void
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onError }) => {
@@ -34,7 +34,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onError }) => {
       setIsLoading(true)
       await onLogin(data.email, data.password)
     } catch (error) {
-      onError(error.message)
+      onError(error)
     } finally {
       setIsLoading(false)
     }

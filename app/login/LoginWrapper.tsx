@@ -3,13 +3,12 @@
 import { ChevronLeft, Zap } from "lucide-react"
 import { LoginForm } from "@/components/LoginForm"
 import { useAuth } from "@/contexts/AuthContext"
-import { toast } from "react-hot-toast"
-import { useRouter } from "next/navigation"
+import { getLoginToastFromError } from "@/lib/auth-backend"
+import { toast } from "sonner"
 import Link from "next/link"
 
 export default function LoginWrapper() {
   const { login } = useAuth()
-  const router = useRouter()
 
   const handleLogin = async (email: string, password: string) => {
     try {
@@ -19,8 +18,9 @@ export default function LoginWrapper() {
     }
   }
 
-  const handleError = (error: string) => {
-    toast.error(error || "Login failed")
+  const handleError = (error: unknown) => {
+    const { title, description } = getLoginToastFromError(error)
+    toast.error(title, { description })
   }
 
   return (
