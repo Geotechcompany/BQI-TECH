@@ -358,11 +358,11 @@ class AuthService {
       }
 
       const rawData = await response.json();
-      // Try decryption first, then obfuscation decoding
+      const userId = session.user?.id;
       let data;
       try {
-        data = await ResponseDecryption.decrypt(rawData);
-      } catch (error) {
+        data = await ResponseDecryption.decrypt(rawData, userId);
+      } catch {
         data = ResponseDecoder.decode(rawData);
       }
 
@@ -372,9 +372,17 @@ class AuthService {
         return null;
       }
 
-      // Update session with new tokens while preserving user data
+      const refreshedUser = data.user
+        ? {
+            ...session.user,
+            ...data.user,
+            id: data.user.id || data.user._id || session.user.id,
+          }
+        : session.user;
+
+      // Update session with new tokens and latest user (role) from the server
       const newSession: SessionData = {
-        user: session.user,
+        user: refreshedUser,
         token: data.access_token,
         refreshToken: data.refresh_token,
       };
@@ -385,7 +393,7 @@ class AuthService {
         access_token: data.access_token,
         refresh_token: data.refresh_token,
         token_type: "bearer",
-        user: session.user,
+        user: refreshedUser,
       };
     } catch (error) {
       console.error("Token refresh error:", error);
@@ -512,27 +520,30 @@ class AuthService {
 
       if (response.ok) {
         const rawProfileData = await response.json();
-        // Try decryption with user ID first, then obfuscation decoding
+        const currentSession = this.getSession();
+        const userId = currentSession?.user?.id;
         let profileData;
         try {
-          const currentSession = this.getSession();
-          const userId = currentSession?.user?.id;
           profileData = await ResponseDecryption.decrypt(
             rawProfileData,
             userId
           );
-        } catch (error) {
+        } catch {
           profileData = ResponseDecoder.decode(rawProfileData);
         }
 
-        // Update session with new profile data
-        const currentSession = this.getSession();
-        if (currentSession) {
+        if (currentSession && profileData && typeof profileData === "object") {
           const updatedSession = {
             ...currentSession,
             user: {
               ...currentSession.user,
               ...profileData,
+              id:
+                profileData.id ||
+                profileData._id ||
+                currentSession.user.id,
+              firstName: profileData.firstName || "",
+              lastName: profileData.lastName || "",
               isEmailVerified: profileData.isEmailVerified || false,
             },
           };

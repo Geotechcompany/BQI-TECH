@@ -100,8 +100,10 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(verifyUrl);
     }
 
-    // Check admin access for admin routes
-    if (pathname.startsWith("/admin") && user?.role !== "admin") {
+    // Check admin access for admin routes (case-insensitive)
+    const role = String(user?.role ?? "").toUpperCase();
+    const isAdminRole = role === "ADMIN" || role === "SUPER_ADMIN";
+    if (pathname.startsWith("/admin") && !isAdminRole) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
 

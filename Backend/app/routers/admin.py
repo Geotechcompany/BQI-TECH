@@ -15,6 +15,7 @@ import os
 import re
 from typing import Dict, Any, List
 from app.lib.email import send_bulk_emails_backend
+from app.lib.roles import is_admin_role
 
 router = APIRouter(tags=["admin"])
 
@@ -301,7 +302,7 @@ async def test_auth_endpoint(request: Request):
         return {
             "message": "Authentication working",
             "user": user_data,
-            "is_admin": user_data.get("role") in ["ADMIN", "SUPER_ADMIN"]
+            "is_admin": is_admin_role(user_data.get("role"))
         }
     except Exception as e:
         return {"error": f"Failed to parse session: {str(e)}", "session_header": session_header}
@@ -662,11 +663,15 @@ async def update_user(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Update user details"""
+    from app.lib.roles import normalize_role
+
     db = get_database()
     
     try:
         # Remove sensitive fields that shouldn't be updated this way
         update_data.pop("password", None)
+        if "role" in update_data and update_data["role"] is not None:
+            update_data["role"] = normalize_role(str(update_data["role"]))
         update_data["updatedAt"] = datetime.utcnow()
         
         result = await db.users.update_one(

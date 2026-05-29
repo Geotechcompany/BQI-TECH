@@ -195,54 +195,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const session = authService.getSession();
         if (session?.token && session?.user) {
-          // Fetch complete user profile
-          try {
-            const profileResponse = await authService.authenticatedFetch(
-              `${BACKEND_URL}/api/users/profile`
-            );
-            if (profileResponse.ok) {
-              const profileData = await profileResponse.json();
-              const resolvedRole =
-                (profileData &&
-                  typeof profileData.role === "string" &&
-                  profileData.role) ||
-                (session?.user?.role as string | undefined) ||
-                undefined;
+          // Always refresh profile from DB so role changes (e.g. admin grant) apply
+          const updatedSession = await authService.refreshUserProfile();
+          const activeUser = updatedSession?.user ?? session.user;
+          const resolvedRole = activeUser.role;
 
-              setAuthState({
-                isAuthenticated: true,
-                isAdmin: roleIsAdmin(resolvedRole),
-                user: {
-                  ...session.user,
-                  ...profileData,
-                  firstName: profileData.firstName || "",
-                  lastName: profileData.lastName || "",
-                },
-                userRole: resolvedRole,
-                authLoading: false,
-              });
-            } else {
-              // Fallback to session user if profile fetch fails
-              setAuthState({
-                isAuthenticated: true,
-                isAdmin: roleIsAdmin(session.user.role),
-                user: session.user,
-                userRole: session.user.role,
-                authLoading: false,
-              });
-            }
-          } catch (profileError) {
-            console.error("Error fetching profile on init:", profileError);
-            handleAuthError(profileError);
-            // Fallback to session user if profile fetch fails
-            setAuthState({
-              isAuthenticated: true,
-              isAdmin: roleIsAdmin(session.user.role),
-              user: session.user,
-              userRole: session.user.role,
-              authLoading: false,
-            });
-          }
+          setAuthState({
+            isAuthenticated: true,
+            isAdmin: roleIsAdmin(resolvedRole),
+            user: activeUser,
+            userRole: resolvedRole,
+            authLoading: false,
+          });
         } else {
           setAuthState((prev) => ({ ...prev, authLoading: false }));
         }
@@ -259,54 +223,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await authService.login(email, password);
+      const updatedSession = await authService.refreshUserProfile();
+      const activeUser = updatedSession?.user ?? response.user;
+      const resolvedRole = activeUser.role;
 
-      // Fetch complete user profile after login
-      try {
-        const profileResponse = await authService.authenticatedFetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/profile`
-        );
-        if (profileResponse.ok) {
-          const profileData = await profileResponse.json();
-          const resolvedRole =
-            (profileData &&
-              typeof profileData.role === "string" &&
-              profileData.role) ||
-            (response?.user?.role as string | undefined) ||
-            undefined;
-
-          setAuthState({
-            isAuthenticated: true,
-            isAdmin: roleIsAdmin(resolvedRole),
-            user: {
-              ...response.user,
-              ...profileData,
-              firstName: profileData.firstName || "",
-              lastName: profileData.lastName || "",
-            },
-            userRole: resolvedRole,
-            authLoading: false,
-          });
-        } else {
-          // Fallback to login response if profile fetch fails
-          setAuthState({
-            isAuthenticated: true,
-            isAdmin: roleIsAdmin(response.user.role),
-            user: response.user,
-            userRole: response.user.role,
-            authLoading: false,
-          });
-        }
-      } catch (profileError) {
-        console.error("Error fetching profile:", profileError);
-        // Fallback to login response if profile fetch fails
-        setAuthState({
-          isAuthenticated: true,
-          isAdmin: roleIsAdmin(response.user.role),
-          user: response.user,
-          userRole: response.user.role,
-          authLoading: false,
-        });
-      }
+      setAuthState({
+        isAuthenticated: true,
+        isAdmin: roleIsAdmin(resolvedRole),
+        user: activeUser,
+        userRole: resolvedRole,
+        authLoading: false,
+      });
     } catch (error) {
       console.error("Login error:", error);
       setAuthState((prev) => ({
@@ -397,22 +324,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Failed to refresh token");
       }
 
-      const data = await response.json();
+      const rawData = await response.json();
+      let data = rawData;
+      try {
+        const { ResponseDecryption } = await import("@/lib/encryption-decoder");
+        data = await ResponseDecryption.decrypt(rawData, session.user?.id);
+      } catch {
+        const { ResponseDecoder } = await import("@/lib/response-decoder");
+        data = ResponseDecoder.decode(rawData);
+      }
+
+      const refreshedUser = data.user
+        ? { ...session.user, ...data.user, id: data.user.id || data.user._id || session.user.id }
+        : session.user;
+
       const newSession = {
         ...session,
+        user: refreshedUser,
         token: data.access_token,
         refreshToken: data.refresh_token,
       };
 
       authService.setSession(newSession);
 
-      // Update auth state with new session
       setAuthState((prev) => ({
         ...prev,
         isAuthenticated: true,
-        isAdmin: roleIsAdmin(session.user.role),
-        user: session.user,
-        userRole: session.user.role,
+        isAdmin: roleIsAdmin(refreshedUser.role),
+        user: refreshedUser,
+        userRole: refreshedUser.role,
         authLoading: false,
       }));
     } catch (error) {
@@ -471,45 +411,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUserProfile = async () => {
     try {
-      const session = authService.getSession();
-      if (!session?.token) {
-        throw new Error("No session token");
+      const updatedSession = await authService.refreshUserProfile();
+      if (!updatedSession?.user) {
+        setAuthState((prev) => ({ ...prev, authLoading: false }));
+        return;
       }
 
-      const response = await authService.authenticatedFetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/users/profile`
-      );
-      if (response.ok) {
-        const profileData = await response.json();
-
-        const updatedUser = {
-          ...session.user,
-          ...profileData,
-          firstName: profileData.firstName || "",
-          lastName: profileData.lastName || "",
-          isEmailVerified: profileData.isEmailVerified || false,
-        };
-
-        // Update session storage
-        authService.setSession({
-          ...session,
-          user: updatedUser,
-        });
-
-        setAuthState((prev) => ({
-          ...prev,
-          user: updatedUser,
-          userRole: profileData.role,
-          isAdmin: roleIsAdmin(profileData.role),
-          authLoading: false,
-        }));
-      } else {
-        console.error("Failed to refresh user profile");
-        setAuthState((prev) => ({
-          ...prev,
-          authLoading: false,
-        }));
-      }
+      setAuthState((prev) => ({
+        ...prev,
+        user: updatedSession.user,
+        userRole: updatedSession.user.role,
+        isAdmin: roleIsAdmin(updatedSession.user.role),
+        authLoading: false,
+      }));
     } catch (error) {
       console.error("Error refreshing user profile:", error);
       setAuthState((prev) => ({

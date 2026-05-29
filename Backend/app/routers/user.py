@@ -4,6 +4,7 @@ from app.auth import get_current_user, verify_password, get_password_hash
 from app.database import get_database
 from app.models.user import UserProfile, PasswordChange
 from app.lib.response_obfuscator import obfuscate_user_profile, ResponseObfuscator
+from app.lib.roles import normalize_role
 from app.lib.encryption import encrypt_user_response, should_encrypt_response
 from typing import Dict, Any, Optional
 from bson import ObjectId
@@ -56,7 +57,7 @@ async def get_user_profile(
             "name": name,
             "firstName": firstName,
             "lastName": lastName,
-            "role": user.get("role", "USER"),
+            "role": normalize_role(user.get("role", "USER")),
             "avatar": user.get("avatar", ""),
             "phone": user.get("phone", ""),
             "location": user.get("location", ""),

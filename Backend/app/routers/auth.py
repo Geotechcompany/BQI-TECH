@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.utils.ip_utils import get_real_client_ip
+from app.lib.roles import normalize_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -140,7 +141,7 @@ async def login(
             "id": str(user["_id"]),
             "email": user["email"],
             "name": user.get("name", ""),
-            "role": user.get("role", "USER"),
+            "role": normalize_role(user.get("role", "USER")),
             "isEmailVerified": is_verified,
             "avatar": user.get("avatar", ""),
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
@@ -370,7 +371,7 @@ async def refresh_token(
             "id": str(user["_id"]),
             "email": user["email"],
             "name": user.get("name", ""),
-            "role": user.get("role", "USER"),
+            "role": normalize_role(user.get("role", "USER")),
             "isEmailVerified": user.get("isEmailVerified", False),
             "avatar": user.get("avatar", ""),
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
