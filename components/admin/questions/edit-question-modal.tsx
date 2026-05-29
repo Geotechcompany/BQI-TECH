@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { adminApi } from "@/lib/api-backend";
+import { normalizeJobIds } from "@/lib/normalize-job-ids";
 
 const questionSchema = z.object({
   jobIds: z.array(z.string()).min(1, "At least one job must be selected"),
@@ -83,22 +84,14 @@ export function EditQuestionModal({
     }
   });
 
-  const [fetchedQuestion, setFetchedQuestion] = useState<any>(null);
-
   const { data: questionData, isLoading: isQuestionLoading } = useQuery({
     queryKey: ['question', questionId],
     queryFn: async () => {
       const question = await adminApi.getQuestion(questionId);
-      
-      // Transform the API response to match frontend expectations
-      const transformedQuestion = {
-        ...question,
-        jobIds: question.jobIds.map((j: { _id: string }) => j._id) // Extract just the ID strings
-      };
-
       return {
-        ...transformedQuestion,
-        jobTitles: question.jobTitles || []
+        ...question,
+        jobIds: normalizeJobIds(question.jobIds),
+        jobTitles: question.jobTitles || [],
       };
     },
     enabled: open && !!questionId,
@@ -107,30 +100,30 @@ export function EditQuestionModal({
 
   useEffect(() => {
     if (questionData) {
+      const jobIds = normalizeJobIds(questionData.jobIds);
       form.reset({
         ...questionData,
-        jobIds: questionData.jobIds || [],
+        jobIds,
         options: questionData.options || [],
-        type: questionData.type
+        type: questionData.type,
       });
       setEditOptions(questionData.options || []);
       setEditOptionInput("");
-      
-      // Force update checkbox states
-      form.setValue('jobIds', questionData.jobIds, { shouldValidate: true });
     }
   }, [questionData, form, setEditOptions, setEditOptionInput]);
 
   const handleSubmit = (values: QuestionFormValues) => {
-    const finalValues = {
-      ...values,
-      jobIds: values.jobIds,
-      options: values.type === 'boolean' ? ['Yes', 'No'] : form.getValues('options'),
-      id: questionId,
-      createdAt: fetchedQuestion?.createdAt,
-      updatedAt: new Date().toISOString()
-    };
-    onSubmit(finalValues);
+    onSubmit({
+      question: values.question,
+      type: values.type,
+      required: values.required,
+      order: values.order,
+      jobIds: normalizeJobIds(values.jobIds),
+      options:
+        values.type === "boolean"
+          ? ["Yes", "No"]
+          : form.getValues("options") || [],
+    });
   };
 
   const handleLocalTypeChange = (type: "text" | "select" | "radio" | "boolean" | "file" | "date") => {

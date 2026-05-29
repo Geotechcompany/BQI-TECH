@@ -433,7 +433,9 @@ async def get_job_postings(
                 
                 # Get questions count
                 try:
-                    posting["questionsCount"] = await db.jobquestions.count_documents({"jobId": str(posting["_id"])})
+                    posting["questionsCount"] = await db.jobquestions.count_documents(
+                        _question_job_filter(str(posting["_id"]))
+                    )
                 except Exception as e:
                     logger.error(f"Error getting questions count for job {posting['_id']}: {str(e)}")
                     posting["questionsCount"] = 0
@@ -2327,6 +2329,63 @@ async def get_applications_by_job(
         logger.error(f"Error in get_applications_by_job: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def _normalize_question_job_ids(raw_ids: Any) -> List[str]:
+    """Normalize jobIds to a list of valid MongoDB ObjectId strings."""
+    if not raw_ids:
+        return []
+    if not isinstance(raw_ids, list):
+        raw_ids = [raw_ids]
+
+    normalized: List[str] = []
+    for item in raw_ids:
+        if isinstance(item, dict):
+            item = item.get("_id") or item.get("id") or item.get("value")
+        if item is None:
+            continue
+        try:
+            normalized.append(str(ObjectId(str(item))))
+        except (InvalidId, TypeError, ValueError):
+            continue
+    return normalized
+
+
+def _question_job_filter(job_id: str) -> Dict[str, Any]:
+    """Match questions linked via jobIds array or legacy jobId field."""
+    try:
+        oid = ObjectId(job_id)
+        return {
+            "$or": [
+                {"jobIds": job_id},
+                {"jobIds": oid},
+                {"jobId": job_id},
+                {"jobId": oid},
+            ]
+        }
+    except InvalidId:
+        return {"$or": [{"jobIds": job_id}, {"jobId": job_id}]}
+
+
+def _build_question_document(payload: Dict[str, Any], *, is_create: bool = False) -> Dict[str, Any]:
+    """Whitelist and normalize question fields for create/update."""
+    doc: Dict[str, Any] = {"updatedAt": datetime.utcnow()}
+
+    for field in ("question", "type", "required", "options", "order", "description"):
+        if field in payload:
+            doc[field] = payload[field]
+
+    if "jobIds" in payload:
+        doc["jobIds"] = _normalize_question_job_ids(payload.get("jobIds"))
+
+    if is_create:
+        doc.setdefault("required", False)
+        doc.setdefault("options", [])
+        doc.setdefault("order", 0)
+        doc.setdefault("jobIds", [])
+        doc["createdAt"] = datetime.utcnow()
+
+    return doc
+
+
 # Questions Management
 @router.get("/questions")
 async def get_questions(
@@ -2341,7 +2400,7 @@ async def get_questions(
         
         filter_query = {}
         if job_id:
-            filter_query["jobId"] = job_id
+            filter_query = _question_job_filter(job_id)
         
         questions_cursor = db.jobquestions.find(filter_query).sort("order", 1)
         questions = await questions_cursor.to_list(length=None)
@@ -2390,15 +2449,19 @@ async def create_question(
 ):
     """Create new question"""
     db = get_database()
-    
-    question_data["createdAt"] = datetime.utcnow()
-    question_data["updatedAt"] = datetime.utcnow()
-    
-    result = await db.jobquestions.insert_one(question_data)
-    question_data["_id"] = str(result.inserted_id)
-    question_data["id"] = str(result.inserted_id)
-    
-    return question_data
+
+    if not question_data.get("question"):
+        raise HTTPException(status_code=400, detail="Question text is required")
+    if not question_data.get("type"):
+        raise HTTPException(status_code=400, detail="Question type is required")
+
+    doc = _build_question_document(question_data, is_create=True)
+    result = await db.jobquestions.insert_one(doc)
+    doc["_id"] = str(result.inserted_id)
+    doc["id"] = str(result.inserted_id)
+    convert_objectids_to_strings(doc)
+
+    return doc
 
 @router.get("/questions/{question_id}")
 async def get_question(
@@ -2419,6 +2482,19 @@ async def get_question(
             # Convert ObjectIds to strings
             convert_objectids_to_strings(question)
             question["id"] = str(question.pop("_id"))
+
+            if "jobIds" in question and question["jobIds"]:
+                job_titles = []
+                for jid in question["jobIds"]:
+                    try:
+                        job = await db.jobpostings.find_one({"_id": ObjectId(jid)}, {"title": 1})
+                        if job:
+                            job_titles.append(job["title"])
+                    except Exception:
+                        continue
+                question["jobTitles"] = job_titles
+            else:
+                question["jobTitles"] = []
             
             # Return with proper JSON serialization
             return JSONResponse(
@@ -2447,9 +2523,13 @@ async def update_question(
     db = get_database()
     
     try:
+        doc = _build_question_document(update_data, is_create=False)
+        if len(doc) <= 1:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+
         result = await db.jobquestions.update_one(
             {"_id": ObjectId(question_id)},
-            {"$set": update_data}
+            {"$set": doc}
         )
         
         if result.matched_count == 0:

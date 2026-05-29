@@ -194,6 +194,9 @@ export default function QuestionsManagementPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-questions'] });
+      if (currentQuestion?.id) {
+        queryClient.invalidateQueries({ queryKey: ['question', currentQuestion.id] });
+      }
       setIsEditOpen(false);
       toast.success('Question updated successfully');
     },
@@ -245,23 +248,11 @@ export default function QuestionsManagementPage() {
   };
 
   const handleEdit = (id: string) => {
-    const question = questions.find(q => q.id === id);
-    if (question && jobs) {
+    const question = questions.find((q) => q.id === id);
+    if (question) {
       setCurrentQuestion(question);
-      
-      // Map job IDs to select options
-      const selectedJobs = jobs
-        .filter(j => question.jobIds.includes(j.id))
-        .map(j => ({ value: j.id, label: j.title }));
-
-      editForm.reset({
-        jobIds: selectedJobs,
-        question: question.question,
-        type: question.type as "text" | "select" | "radio" | "boolean" | "file" | "date",
-        required: question.required,
-        options: question.options || [],
-        order: question.order,
-      });
+      setEditOptions(question.options || []);
+      setEditShowOptions(["select", "radio"].includes(question.type));
       setIsEditOpen(true);
     }
   };
