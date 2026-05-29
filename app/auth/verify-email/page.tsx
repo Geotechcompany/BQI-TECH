@@ -21,6 +21,8 @@ import OtpInput from "react-otp-input";
 import { Controller } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { authService } from "@/lib/auth-backend";
+import { resolveEmailVerified } from "@/lib/resolve-email-verified";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -81,7 +83,7 @@ export default function EmailVerificationPage() {
 function EmailVerificationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { updateEmailVerificationStatus, authLoading, user, isAuthenticated } =
+  const { updateEmailVerificationStatus, authLoading, user, isAuthenticated, isAdmin } =
     useAuth();
 
   // Robust email retrieval with multiple fallback mechanisms
@@ -187,6 +189,45 @@ function EmailVerificationContent() {
       localStorage.removeItem(`${LAST_SEND_TIME_KEY}_${emailToCheck}`);
     }
   }, []);
+
+  const redirectIfVerified = useCallback(
+    async (targetEmail: string) => {
+      try {
+        const refreshed = await authService.refreshUserProfile();
+        let verified = resolveEmailVerified(
+          refreshed?.user?.isEmailVerified,
+          false
+        );
+
+        if (!verified) {
+          const statusResponse = await fetch(
+            `${BACKEND_URL}/api/auth/verify-email/status`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify(targetEmail),
+            }
+          );
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            verified = resolveEmailVerified(statusData?.isEmailVerified, false);
+          }
+        }
+
+        if (verified) {
+          await updateEmailVerificationStatus(true);
+          toast.success("Email already verified. Redirecting...");
+          router.replace(isAdmin ? "/admin/overview" : "/dashboard");
+          return true;
+        }
+      } catch (error) {
+        console.error("Verification status check failed:", error);
+      }
+      return false;
+    },
+    [updateEmailVerificationStatus, router, isAdmin]
+  );
 
   // Initialize form outside of any conditional block
   const {
@@ -324,6 +365,12 @@ function EmailVerificationContent() {
     }
   }, [email, isAuthenticated, router, getEmailFromSources]);
 
+  // Confirm verification status before prompting for a code
+  useEffect(() => {
+    if (!email || authLoading) return;
+    redirectIfVerified(email);
+  }, [email, authLoading, redirectIfVerified]);
+
   // Send initial verification email with bulletproof duplicate prevention
   useEffect(() => {
     const sendInitialVerification = async () => {
@@ -336,6 +383,10 @@ function EmailVerificationContent() {
         user?.isEmailVerified
       ) {
         // Don't send if already verified
+        return;
+      }
+
+      if (await redirectIfVerified(email)) {
         return;
       }
 
@@ -364,7 +415,13 @@ function EmailVerificationContent() {
         setInitialEmailSent(true);
         toast.success("Verification code sent! Check your email.");
       } catch (error: any) {
-        toast.error(error.message || "Failed to send verification email");
+        const message = error?.message || "";
+        if (message.toLowerCase().includes("already verified")) {
+          if (await redirectIfVerified(email)) {
+            return;
+          }
+        }
+        toast.error(message || "Failed to send verification email");
       } finally {
         setStatus("idle");
         isRequestInProgress.current = false;
@@ -377,7 +434,7 @@ function EmailVerificationContent() {
       clearTimeout(debounceTimer);
       isRequestInProgress.current = false;
     };
-  }, [email, user?.isEmailVerified, hasAutoSentForEmail, markAutoSentForEmail]); // Include callback dependencies
+  }, [email, user?.isEmailVerified, hasAutoSentForEmail, markAutoSentForEmail, redirectIfVerified, status]);
 
   // Cleanup effect to reset flags on unmount
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { ResponseDecoder } from "./response-decoder";
 import { ResponseDecryption } from "./encryption-decoder";
+import { resolveEmailVerified } from "./resolve-email-verified";
 
 interface User {
   id: string;
@@ -141,10 +142,14 @@ class AuthService {
     }
   }
 
-  // Set session data
+  // Set session data (localStorage + cookie for middleware)
   setSession(session: SessionData): void {
     if (typeof window !== "undefined") {
       localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+      const maxAge = 30 * 24 * 60 * 60;
+      document.cookie = `${this.SESSION_KEY}=${encodeURIComponent(
+        JSON.stringify(session)
+      )}; path=/; max-age=${maxAge}; SameSite=Lax`;
     }
   }
 
@@ -172,6 +177,7 @@ class AuthService {
   clearSession(): void {
     if (typeof window !== "undefined") {
       localStorage.removeItem(this.SESSION_KEY);
+      document.cookie = `${this.SESSION_KEY}=; path=/; max-age=0; SameSite=Lax`;
     }
   }
 
@@ -239,6 +245,7 @@ class AuthService {
       const user = {
         ...data.user,
         id: data.user.id || data.user._id,
+        isEmailVerified: resolveEmailVerified(data.user?.isEmailVerified, false),
       };
 
       // Store session data
@@ -533,6 +540,10 @@ class AuthService {
         }
 
         if (currentSession && profileData && typeof profileData === "object") {
+          const isEmailVerified = resolveEmailVerified(
+            profileData.isEmailVerified,
+            resolveEmailVerified(currentSession.user?.isEmailVerified, false)
+          );
           const updatedSession = {
             ...currentSession,
             user: {
@@ -544,7 +555,7 @@ class AuthService {
                 currentSession.user.id,
               firstName: profileData.firstName || "",
               lastName: profileData.lastName || "",
-              isEmailVerified: profileData.isEmailVerified || false,
+              isEmailVerified,
             },
           };
           this.setSession(updatedSession);

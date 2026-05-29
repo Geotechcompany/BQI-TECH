@@ -22,6 +22,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.utils.ip_utils import get_real_client_ip
 from app.lib.roles import normalize_role
+from app.lib.user_verification import resolve_email_verified
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -125,16 +126,7 @@ async def login(
         )
         
         # Get verification status (standardize on isEmailVerified)
-        is_verified = user.get("isEmailVerified", False)
-        if not is_verified:
-            # Check legacy fields for backward compatibility
-            is_verified = user.get("is_verified", False) or user.get("email_verified", False)
-            # Update to new field if verified in legacy fields
-            if is_verified:
-                await db.users.update_one(
-                    {"_id": user["_id"]},
-                    {"$set": {"isEmailVerified": True}}
-                )
+        is_verified = await resolve_email_verified(db, user)
         
         # Format user data
         user_data = {
@@ -355,7 +347,9 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found"
             )
-            
+
+        is_verified = await resolve_email_verified(db, user)
+
         # Create new access token
         access_token = create_access_token(
             data={"sub": str(user["_id"])}
@@ -372,7 +366,7 @@ async def refresh_token(
             "email": user["email"],
             "name": user.get("name", ""),
             "role": normalize_role(user.get("role", "USER")),
-            "isEmailVerified": user.get("isEmailVerified", False),
+            "isEmailVerified": is_verified,
             "avatar": user.get("avatar", ""),
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
         }
@@ -814,7 +808,7 @@ async def send_verification_code_endpoint(
                 )
         else:
             # Check if already verified for existing users
-            if user.get("isEmailVerified", False):
+            if await resolve_email_verified(db, user):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Email is already verified"
@@ -858,16 +852,7 @@ async def check_email_verification(
             )
         
         # Check verification status
-        is_verified = user.get("isEmailVerified", False)
-        if not is_verified:
-            # Check legacy fields
-            is_verified = user.get("is_verified", False) or user.get("email_verified", False)
-            # Update to new field if verified in legacy fields
-            if is_verified:
-                await db.users.update_one(
-                    {"_id": user["_id"]},
-                    {"$set": {"isEmailVerified": True}}
-                )
+        is_verified = await resolve_email_verified(db, user)
         
         return {"isEmailVerified": is_verified}
         

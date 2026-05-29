@@ -198,6 +198,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Always refresh profile from DB so role changes (e.g. admin grant) apply
           const updatedSession = await authService.refreshUserProfile();
           const activeUser = updatedSession?.user ?? session.user;
+          if (updatedSession) {
+            authService.setSession(updatedSession);
+          } else {
+            authService.setSession(session);
+          }
           const resolvedRole = activeUser.role;
 
           setAuthState({
@@ -225,6 +230,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const response = await authService.login(email, password);
       const updatedSession = await authService.refreshUserProfile();
       const activeUser = updatedSession?.user ?? response.user;
+      if (updatedSession) {
+        authService.setSession(updatedSession);
+      }
       const resolvedRole = activeUser.role;
 
       setAuthState({

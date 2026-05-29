@@ -9,6 +9,7 @@ const publicPaths = [
   "/forgot-password",
   "/reset-password",
   "/auth/verify-email",
+  "/admin/login",
   "/about",
   "/contact-us",
   "/services",
@@ -19,6 +20,7 @@ const publicPaths = [
 // Paths that don't require email verification
 const noVerificationPaths = [
   "/auth/verify-email",
+  "/admin/login",
   "/login",
   "/sign-up",
   "/forgot-password",

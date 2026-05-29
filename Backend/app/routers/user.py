@@ -5,6 +5,7 @@ from app.database import get_database
 from app.models.user import UserProfile, PasswordChange
 from app.lib.response_obfuscator import obfuscate_user_profile, ResponseObfuscator
 from app.lib.roles import normalize_role
+from app.lib.user_verification import resolve_email_verified
 from app.lib.encryption import encrypt_user_response, should_encrypt_response
 from typing import Dict, Any, Optional
 from bson import ObjectId
@@ -36,21 +37,19 @@ async def get_user_profile(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Format user profile data
+        is_verified = await resolve_email_verified(db, user)
+
         name = user.get("name", "")
-        
-        # Try to parse firstName and lastName from name
         firstName = user.get("firstName", "")
         lastName = user.get("lastName", "")
-        
-        # If firstName/lastName not stored separately, try to parse from name
+
         if not firstName and not lastName and name:
             name_parts = name.strip().split()
             if len(name_parts) >= 1:
                 firstName = name_parts[0]
             if len(name_parts) >= 2:
                 lastName = " ".join(name_parts[1:])
-        
+
         profile = {
             "id": str(user["_id"]),
             "email": user.get("email", ""),
@@ -68,7 +67,7 @@ async def get_user_profile(
             "socialLinks": user.get("socialLinks", {}),
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None,
             "updatedAt": user.get("updatedAt", "").isoformat() if user.get("updatedAt") else None,
-            "isEmailVerified": user.get("isEmailVerified", False)
+            "isEmailVerified": is_verified
         }
         
         # Apply encryption if enabled, otherwise obfuscation

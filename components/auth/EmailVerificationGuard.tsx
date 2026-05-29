@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { authService } from '@/lib/auth-backend';
+import { BACKEND_URL } from '@/lib/config';
+import { resolveEmailVerified } from '@/lib/resolve-email-verified';
 import { Loader2, Mail, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -15,6 +18,7 @@ interface EmailVerificationGuardProps {
 const noVerificationPaths = [
   '/auth/verify-email',
   '/login',
+  '/admin/login',
   '/sign-up',
   '/forgot-password',
   '/reset-password',
@@ -25,7 +29,7 @@ export function EmailVerificationGuard({
   children, 
   requireVerification = true 
 }: EmailVerificationGuardProps) {
-  const { user, isAuthenticated, authLoading, isEmailVerified } = useAuth();
+  const { user, isAuthenticated, authLoading, isEmailVerified, updateEmailVerificationStatus } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [isChecking, setIsChecking] = useState(true);
@@ -53,11 +57,41 @@ export function EmailVerificationGuard({
       const hasRedirectedKey = 'emailVerificationRedirected';
       const hasRedirectedBefore = localStorage.getItem(hasRedirectedKey);
 
-      // Check if email is verified
-      const isVerified = isEmailVerified();
+      // Refresh profile / server status before redirecting
+      let verified = isEmailVerified();
+      if (!verified) {
+        const refreshed = await authService.refreshUserProfile();
+        verified = resolveEmailVerified(
+          refreshed?.user?.isEmailVerified,
+          verified
+        );
+      }
+
+      if (!verified && user.email) {
+        try {
+          const statusResponse = await fetch(
+            `${BACKEND_URL}/api/auth/verify-email/status`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify(user.email),
+            }
+          );
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            verified = resolveEmailVerified(statusData?.isEmailVerified, verified);
+            if (verified) {
+              await updateEmailVerificationStatus(true);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to confirm email verification status:", error);
+        }
+      }
 
       // Only redirect if not already on verification page and not redirected recently
-      if (!isVerified && 
+      if (!verified &&
           !pathname.startsWith('/auth/verify-email') && 
           !hasRedirectedBefore) {
         
@@ -85,6 +119,7 @@ export function EmailVerificationGuard({
     pathname, 
     requireVerification, 
     isEmailVerified, 
+    updateEmailVerificationStatus,
     router
   ]);
 
