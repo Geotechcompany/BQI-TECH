@@ -205,15 +205,12 @@ export default function DashboardSidebar({
   };
 
   return (
-    <motion.aside
-      initial={{ x: -300 }}
-      animate={{ x: 0 }}
-      transition={{ type: "spring", stiffness: 200, damping: 30 }}
+    <aside
       className={`
         fixed inset-y-0 left-0 z-[9999]
         bg-card text-foreground
-        shadow-xl transition-all duration-300 ease-in-out
-        ${isOpen ? "translate-x-0" : "-translate-x-full"}
+        shadow-xl transition-[width] duration-300 ease-in-out
+        translate-x-0
         ${sidebarCollapsed ? "w-20" : "w-64"}
         border-r-0
         ${className || ""}
@@ -458,21 +455,16 @@ export default function DashboardSidebar({
                     )}
                   </motion.button>
 
-                  <AnimatePresence>
+                  <AnimatePresence initial={false}>
                     {isExpanded(section) && (
                       <motion.div
-                        initial={{ opacity: 0, height: 0 }}
+                        initial={false}
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
                         className="ml-8 space-y-1"
                       >
-                        {section.items.map((item, index) => (
-                          <motion.div
-                            key={item.name}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                          >
+                        {section.items.map((item) => (
+                          <div key={item.name}>
                             <Link
                               href={item.href}
                               className={`flex items-center p-2 rounded-lg text-sm transition-colors
@@ -486,7 +478,7 @@ export default function DashboardSidebar({
                               <item.icon className="w-4 h-4" />
                               <span className="ml-3">{item.name}</span>
                             </Link>
-                          </motion.div>
+                          </div>
                         ))}
                       </motion.div>
                     )}
@@ -541,6 +533,6 @@ export default function DashboardSidebar({
           )}
         </motion.div>
       </TooltipProvider>
-    </motion.aside>
+    </aside>
   );
 }
