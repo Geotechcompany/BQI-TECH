@@ -32,6 +32,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { userApi } from "@/lib/api-backend";
 
+function getTextPlaceholder(questionText: string): string {
+  let text = questionText.replace(/\*+$/g, "").trim();
+  text = text.replace(
+    /^(what is your|what is the|what are your|what's your|how many|how much|please enter your|please provide your|describe your|enter your|tell us about your)\s+/i,
+    ""
+  );
+  text = text.replace(/\?+$/, "").trim();
+
+  if (!text) return "Enter your answer";
+  return `Enter your ${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+}
+
 function ApplicationForm() {
   const router = useRouter();
   const { id } = useParams();
@@ -513,11 +525,11 @@ function ApplicationForm() {
     const baseInputClasses =
       "w-full px-3 py-2 border rounded-md transition-all duration-200 focus:outline-none focus:ring-2";
     const normalClasses =
-      "border-gray-300 focus:ring-blue-500 focus:border-blue-500";
+      "bg-white text-gray-900 border-gray-300 placeholder:text-gray-500 focus:ring-blue-500 focus:border-blue-500 [color-scheme:light]";
     const inputClasses = `${baseInputClasses} ${normalClasses}`;
 
     const renderLabel = () => (
-      <label className="block text-sm font-medium text-gray-700 mb-1">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
         {question.question}
         {question.required && <span className="text-red-500 ml-1">*</span>}
       </label>
@@ -542,7 +554,7 @@ function ApplicationForm() {
                     ? "decimal"
                     : undefined
                 }
-                placeholder={`Enter your ${question.question.toLowerCase()}`}
+                placeholder={getTextPlaceholder(question.question)}
               />
             </div>
             {getFieldError(fieldName) && (

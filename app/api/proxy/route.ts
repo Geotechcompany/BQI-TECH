@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { normalizeDropboxUrl } from "@/lib/cv-url-utils";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const ALLOWED_HOSTNAMES = new Set([
   "dl.dropboxusercontent.com",
   "www.dropbox.com",
   "dropbox.com",
-  "ucarecdn.com", // add other cdn providers here if needed
+  "ucarecdn.com",
 ]);
 
 export async function GET(request: Request) {
@@ -26,72 +30,76 @@ export async function GET(request: Request) {
       return new NextResponse("Unsupported protocol", { status: 400 });
     }
 
-    // Optionally restrict to known hosts to prevent open proxy abuse
     if (!ALLOWED_HOSTNAMES.has(parsed.hostname)) {
       return new NextResponse("Host not allowed", { status: 400 });
     }
 
-    // Normalize Dropbox share links to direct file endpoints
-    if (parsed.hostname.includes("dropbox.com") && parsed.hostname !== "dl.dropboxusercontent.com") {
-      parsed.hostname = "dl.dropboxusercontent.com";
-      parsed.searchParams.set("dl", "1");
-    }
+    const fetchUrl = parsed.hostname.includes("dropbox")
+      ? normalizeDropboxUrl(parsed.toString())
+      : parsed.toString();
 
-    const upstreamResponse = await fetch(parsed.toString(), {
-      // Disable caching for safety; tweak if desired
+    const upstreamResponse = await fetch(fetchUrl, {
       cache: "no-store",
       headers: {
-        // Some providers require a UA
-        "User-Agent": "Mozilla/5.0 (compatible; BQI-Proxy/1.0)"
+        "User-Agent": "Mozilla/5.0 (compatible; BQI-Proxy/1.0)",
       },
     });
 
     if (!upstreamResponse.ok) {
-      return new NextResponse(`Upstream error: ${upstreamResponse.status}`, { status: 502 });
+      return new NextResponse(`Upstream error: ${upstreamResponse.status}`, {
+        status: 502,
+      });
     }
 
-    // Stream the body through
-    const contentType = upstreamResponse.headers.get("content-type") || "application/octet-stream";
-    const isPdf = contentType.includes("pdf") || /\.pdf($|\?)/i.test(parsed.pathname + parsed.search);
-    
-    // Extract filename from URL or Content-Disposition header
+    const contentType =
+      upstreamResponse.headers.get("content-type") || "application/octet-stream";
+    const isPdf =
+      contentType.includes("pdf") ||
+      /\.pdf($|\?)/i.test(parsed.pathname + parsed.search);
+
     let filename = "document";
     const contentDisposition = upstreamResponse.headers.get("content-disposition");
     if (contentDisposition) {
-      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      const filenameMatch = contentDisposition.match(
+        /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+      );
       if (filenameMatch) {
-        filename = filenameMatch[1].replace(/['"]/g, '');
+        filename = filenameMatch[1].replace(/['"]/g, "");
       }
     } else {
-      // Extract filename from URL path
-      const pathParts = parsed.pathname.split('/');
+      const pathParts = parsed.pathname.split("/");
       const lastPart = pathParts[pathParts.length - 1];
-      if (lastPart && lastPart.includes('.')) {
-        // Clean up the filename by removing URL parameters and keeping only the base name
-        filename = lastPart.split('?')[0];
+      if (lastPart && lastPart.includes(".")) {
+        filename = lastPart.split("?")[0];
       } else if (isPdf) {
         filename = "document.pdf";
       } else {
-        // Try to detect file extension from content type
-        const extension = contentType.includes('pdf') ? '.pdf' : 
-                         contentType.includes('word') ? '.docx' : 
-                         contentType.includes('text') ? '.txt' : '';
+        const extension = contentType.includes("pdf")
+          ? ".pdf"
+          : contentType.includes("word")
+            ? ".docx"
+            : contentType.includes("text")
+              ? ".txt"
+              : "";
         filename = `document${extension}`;
       }
     }
-    
+
+    const body = await upstreamResponse.arrayBuffer();
+
     const headers = new Headers();
     headers.set("Content-Type", isPdf ? "application/pdf" : contentType);
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
-    // Allow embedding in iframe from our own origin
+    headers.set("Content-Length", String(body.byteLength));
     headers.set("X-Content-Type-Options", "nosniff");
     headers.set("X-Frame-Options", "SAMEORIGIN");
 
-    return new NextResponse(upstreamResponse.body, {
+    return new NextResponse(body, {
       status: 200,
       headers,
     });
   } catch (error) {
+    console.error("Proxy error:", error);
     return new NextResponse("Proxy error", { status: 500 });
   }
 }

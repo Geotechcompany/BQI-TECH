@@ -64,7 +64,7 @@ const nextConfig = {
                     "connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk-telemetry.com https://*.googletagmanager.com https://www.googletagmanager.com https://www.google-analytics.com https://accounts.google.com https://www.google.com https://www.google.com/recaptcha/ https://www.gstatic.com https://www.gstatic.com/recaptcha/ https://hcaptcha.com https://sentry.hcaptcha.com https://organic-hound-41949.upstash.io https://bqitech-nonprod-1.onrender.com https://api.bqitech.com https://bqitech.com https://core.service.elfsight.com https://app.thinkstack.ai https://api.thinkstack.ai wss://api.thinkstack.ai",
                     "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
                     "img-src 'self' data: https://*",
-                    "frame-src 'self' https://www.google.com https://maps.google.com https://app.thinkstack.ai https://api.thinkstack.ai",
+                    "frame-src 'self' blob: https://www.google.com https://maps.google.com https://app.thinkstack.ai https://api.thinkstack.ai",
                 ].join('; ')
             }]
         }]

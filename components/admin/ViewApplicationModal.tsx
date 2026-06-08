@@ -7,10 +7,18 @@ import {
 } from "@/components/ui/dialog";
 import { Application, StatusHistoryEntry } from "@/types/application";
 import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "./utils/table-utils";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
+import {
+  getProxiedUrl,
+  getDownloadUrl,
+  getProxyFetchUrl,
+  getCvDisplayLabel,
+  isNonPreviewableDoc,
+  isPreviewableContentType,
+} from "@/lib/cv-url-utils";
 import { 
   UserIcon, 
   BriefcaseIcon, 
@@ -26,6 +34,7 @@ interface ViewApplicationModalProps {
   isOpen: boolean;
   onClose: () => void;
   jobTitles?: Record<string, string>;
+  showApplicationId?: boolean;
 }
 
 export function ViewApplicationModal({
@@ -33,9 +42,85 @@ export function ViewApplicationModal({
   isOpen,
   onClose,
   jobTitles = {},
+  showApplicationId = true,
 }: ViewApplicationModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [previewError, setPreviewError] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+  const previewBlobUrlRef = useRef<string | null>(null);
+
+  const cvUrl = application ? getCvUrl(application) : "";
+
+  useEffect(() => {
+    if (!isOpen || !cvUrl) {
+      if (previewBlobUrlRef.current) {
+        URL.revokeObjectURL(previewBlobUrlRef.current);
+        previewBlobUrlRef.current = null;
+      }
+      setPreviewBlobUrl(null);
+      setPreviewError(false);
+      setIsPreviewLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPreview() {
+      setPreviewError(false);
+      setIsPreviewLoading(true);
+
+      if (previewBlobUrlRef.current) {
+        URL.revokeObjectURL(previewBlobUrlRef.current);
+        previewBlobUrlRef.current = null;
+      }
+      setPreviewBlobUrl(null);
+
+      if (isNonPreviewableDoc(cvUrl)) {
+        setIsPreviewLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch(getProxyFetchUrl(cvUrl));
+        if (cancelled) return;
+
+        if (!response.ok) {
+          throw new Error(`Proxy returned ${response.status}`);
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+
+        if (!isPreviewableContentType(contentType, cvUrl)) {
+          setIsPreviewLoading(false);
+          return;
+        }
+
+        const blob = await response.blob();
+        if (cancelled) return;
+
+        const objectUrl = URL.createObjectURL(blob);
+        previewBlobUrlRef.current = objectUrl;
+        setPreviewBlobUrl(objectUrl);
+        setIsPreviewLoading(false);
+      } catch {
+        if (!cancelled) {
+          setPreviewError(true);
+          setIsPreviewLoading(false);
+        }
+      }
+    }
+
+    loadPreview();
+
+    return () => {
+      cancelled = true;
+      if (previewBlobUrlRef.current) {
+        URL.revokeObjectURL(previewBlobUrlRef.current);
+        previewBlobUrlRef.current = null;
+      }
+    };
+  }, [isOpen, cvUrl]);
 
   if (!application) return null;
 
@@ -69,30 +154,6 @@ export function ViewApplicationModal({
   const isResumeQuestion = (text: unknown) => {
     const q = (typeof text === 'string' ? text : '').toLowerCase();
     return q.includes('upload resume') || q.includes('resume/cv') || q.includes('cv');
-  };
-
-  const getPreviewUrl = (url: string | null | undefined) => {
-    if (!url) return '';
-    try {
-      const parsed = new URL(url);
-      const isPdfPath = /\.pdf($|\?)/i.test(parsed.pathname + parsed.search);
-      const isDropbox = parsed.hostname.includes('dropbox.com') || parsed.hostname.includes('dropboxusercontent.com');
-
-      // Route through our proxy to bypass X-Frame-Options and CORS for allowed hosts
-      const proxied = `/api/proxy?url=${encodeURIComponent(parsed.toString())}`;
-      
-      // Add zoom parameter for PDF files to set a better default view
-      // #zoom=75 sets the PDF to 75% zoom which is more readable
-      if (isPdfPath || isDropbox) {
-        return proxied + '#zoom=75&toolbar=1&navpanes=0';
-      }
-      
-      // If it's a direct PDF, the proxy will stream as application/pdf inline
-      // For non-PDFs, many providers still send a PDF or preview-able content; proxy handles headers
-      return proxied;
-    } catch {
-      return url;
-    }
   };
 
   function getAnswer(answers: any[] | undefined, question: string) {
@@ -133,11 +194,14 @@ export function ViewApplicationModal({
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-4 sm:space-y-6">
-            {/* ID Section */}
-            <div className="p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl">
-              <span className="text-xs font-medium text-gray-400">Application ID</span>
-              <p className="font-mono text-xs sm:text-sm text-gray-700 mt-1 break-all">{application.id}</p>
-            </div>
+            {showApplicationId && (
+              <div className="p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl">
+                <span className="text-xs font-medium text-gray-400">Application ID</span>
+                <p className="font-mono text-xs sm:text-sm text-gray-700 mt-1 break-all">
+                  {application.id || application._id}
+                </p>
+              </div>
+            )}
 
             {/* Main Info Grid - Stack on mobile */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
@@ -224,12 +288,17 @@ export function ViewApplicationModal({
                           {answer.answer || 'No answer provided'}
                         </div>
                       ) : (
-                        <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 break-all">
-                          <Link href={String(answer.answer)} target="_blank" className="text-blue-600 underline">
-                            {String(answer.answer)}
+                        <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4">
+                          <Link
+                            href={getProxiedUrl(String(answer.answer))}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline font-medium"
+                          >
+                            {getCvDisplayLabel(String(answer.answer))}
                           </Link>
                           <p className="text-xs text-gray-500 mt-2">
-                            CV preview is available in the "Attached Documents" section below
+                            CV preview is available in the &quot;Attached Documents&quot; section below
                           </p>
                         </div>
                       )}
@@ -244,59 +313,82 @@ export function ViewApplicationModal({
               </div>
             </div>
 
-            {/* CV Section - Enhanced to detect CV from answers or cvUrl field */}
-            {(() => {
-              const cvUrl = getCvUrl(application);
-              return cvUrl ? (
-                <div className="p-4 sm:p-5 bg-white border border-gray-100 rounded-lg sm:rounded-xl shadow-sm">
-                  <h4 className="text-sm sm:text-base font-semibold text-gray-500 flex items-center gap-2 mb-4 sm:mb-5">
-                    <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 flex-shrink-0" />
-                    <span>Attached Documents</span>
-                  </h4>
-                  <div className="p-3 sm:p-4 bg-gray-50 rounded-lg space-y-3 sm:space-y-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2 sm:p-3 bg-white rounded-lg shadow-sm flex-shrink-0">
-                        <FileTextIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm sm:text-base font-medium text-gray-700 truncate">Candidate CV</p>
-                        <p className="text-xs sm:text-sm text-gray-400">Uploaded {formatDate(application.appliedDate)}</p>
-                      </div>
-                      <Link
-                        href={cvUrl}
-                        target="_blank"
-                        className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
-                      >
-                        <span>Open in new tab</span>
-                        <ArrowUpRightIcon className="w-4 h-4" />
-                      </Link>
+            {cvUrl ? (
+              <div className="p-4 sm:p-5 bg-white border border-gray-100 rounded-lg sm:rounded-xl shadow-sm">
+                <h4 className="text-sm sm:text-base font-semibold text-gray-500 flex items-center gap-2 mb-4 sm:mb-5">
+                  <FileIcon className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500 flex-shrink-0" />
+                  <span>Attached Documents</span>
+                </h4>
+                <div className="p-3 sm:p-4 bg-gray-50 rounded-lg space-y-3 sm:space-y-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 sm:p-3 bg-white rounded-lg shadow-sm flex-shrink-0">
+                      <FileTextIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
                     </div>
-
-                    {!previewError ? (
-                      <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
-                        <iframe
-                          title="CV Preview"
-                          src={getPreviewUrl(cvUrl)}
-                          className="w-full h-full"
-                          referrerPolicy="no-referrer"
-                          allow="fullscreen"
-                          onError={() => setPreviewError(true)}
-                        />
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-600">
-                        Unable to preview this document inline. You can
-                        {" "}
-                        <Link href={cvUrl} target="_blank" className="text-blue-600 underline">
-                          open it in a new tab
-                        </Link>
-                        .
-                      </div>
-                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm sm:text-base font-medium text-gray-700 truncate">Candidate CV</p>
+                      <p className="text-xs sm:text-sm text-gray-400">Uploaded {formatDate(application.appliedDate)}</p>
+                    </div>
+                    <Link
+                      href={getProxiedUrl(cvUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
+                    >
+                      <span>Open in new tab</span>
+                      <ArrowUpRightIcon className="w-4 h-4" />
+                    </Link>
                   </div>
+
+                  {isPreviewLoading ? (
+                    <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg flex items-center justify-center">
+                      <div className="text-center space-y-2">
+                        <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto" />
+                        <p className="text-sm text-gray-500">Loading CV preview...</p>
+                      </div>
+                    </div>
+                  ) : previewBlobUrl ? (
+                    <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <iframe
+                        title="CV Preview"
+                        src={`${previewBlobUrl}#zoom=75&toolbar=1&navpanes=0`}
+                        className="w-full h-full"
+                        referrerPolicy="no-referrer"
+                        allow="fullscreen"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-600 p-4 bg-white border border-gray-200 rounded-lg">
+                      {previewError ? (
+                        <p className="mb-2">Unable to preview this document inline.</p>
+                      ) : (
+                        <p className="mb-2">
+                          This document type cannot be previewed in the browser. You can open or download it instead.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-3">
+                        <Link
+                          href={getProxiedUrl(cvUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-blue-600 underline"
+                        >
+                          Open in new tab
+                          <ArrowUpRightIcon className="w-4 h-4" />
+                        </Link>
+                        <Link
+                          href={getDownloadUrl(cvUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-blue-600 underline"
+                        >
+                          Download CV
+                        </Link>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : null;
-            })()}
+              </div>
+            ) : null}
 
             {/* Bottom padding for mobile scroll */}
             <div className="h-4 sm:h-0" />
