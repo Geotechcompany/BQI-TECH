@@ -81,9 +81,9 @@ export default function ResetPasswordPage() {
         throw new Error(message);
       }
 
-      toast.success("Password updated successfully!", {
-        description: "You can now sign in with your new password.",
-      });
+      toast.success(
+        "Password updated successfully! You can now sign in with your new password."
+      );
       // Redirect to login after 2 seconds
       setTimeout(() => (window.location.href = "/login?passwordReset=1"), 2000);
     } catch (error) {
