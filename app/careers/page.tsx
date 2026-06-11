@@ -65,20 +65,6 @@ While our team comes from diverse backgrounds, we all share key qualities:`,
     ],
     image: "/software.png",
   },
-  {
-    title: "Benefits",
-    content: `Our benefits include:`,
-    points: [
-      "Competitive compensation",
-      "Private Medical Insurance",
-      "Group Pension Scheme",
-      "Generous holiday allowances + Birtholiday",
-      "Professional development days",
-      "Employee Assistance Program",
-      "Amazing Office Space",
-    ],
-    image: "/benefits1.jpg",
-  },
 ];
 
 // Add this new animation helper

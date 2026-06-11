@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from 'framer-motion';
-import { Mail, Phone, MapPin } from 'lucide-react';
+import { Mail, MapPin } from 'lucide-react';
 
 export default function ContactUsPage() {
   const pageVariants = {
@@ -94,11 +94,7 @@ export default function ContactUsPage() {
           <div className="space-y-4 mb-6">
             <p className="flex items-center">
               <MapPin className="mr-2 text-teal-500" />
-              The Piano, 8th Floor, Brookside Drive, Westlands, Nairobi, Kenya
-            </p>
-            <p className="flex items-center">
-              <Phone className="mr-2 text-teal-500" />
-              +254 (0)11 229 5287
+              The Piano, Brookside Drive
             </p>
             <p className="flex items-center">
               <Mail className="mr-2 text-teal-500" />
@@ -109,7 +105,7 @@ export default function ContactUsPage() {
           </div>
           <div className="aspect-w-16 aspect-h-9">
             <iframe 
-              src="https://www.google.com/maps?q=The+Piano,+8th+Floor,+Brookside+Drive,+Westlands,+Nairobi,+Kenya&output=embed"
+              src="https://www.google.com/maps?q=The+Piano,+Brookside+Drive&output=embed"
               width="600" 
               height="450" 
               style={{border:0}} 
