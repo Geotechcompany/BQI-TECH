@@ -49,7 +49,7 @@ const sections = [
     points: [
       "Agility & Adaptability: We embrace change and stay ahead of industry trends.",
       "Impact-Driven Excellence: We deliver top-tier solutions that make a difference.",
-      "Innovation at Our Core: We challenge the status quo and push boundaries.",
+      "Innovation is in our DNA: We challenge the status quo and push boundaries.",
       "Stay Curious, Stay Hungry: Continuous learning fuels our growth.",
     ],
     image: "/culture10.jpg",
