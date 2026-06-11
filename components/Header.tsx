@@ -82,11 +82,11 @@ export default function Header() {
               </Link>
 
               <Link 
-                href="/careers" 
+                href="/about" 
                 scroll={false}
-                className={getNavLinkClasses("/careers")}
+                className={getNavLinkClasses("/about")}
               >
-                Careers
+                About
               </Link>
 
               <Link 
@@ -98,18 +98,19 @@ export default function Header() {
               </Link>
 
               <Link 
-                href="/about" 
+                href="/careers" 
                 scroll={false}
-                className={getNavLinkClasses("/about")}
+                className={getNavLinkClasses("/careers")}
               >
-                About
+                Careers
               </Link>
+
               <Link 
                 href="/blog" 
                 scroll={false}
                 className={getNavLinkClasses("/blog")}
               >
-                Blog
+                Blogs
               </Link>
             </nav>
 

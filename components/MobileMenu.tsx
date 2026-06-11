@@ -19,10 +19,10 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { title: "Home", href: "/" },
-  { title: "Careers", href: "/careers" },
-  { title: "Services",href: "/services" },
   { title: "About", href: "/about" },
-  { title: "Blog", href: "/blog" },
+  { title: "Services", href: "/services" },
+  { title: "Careers", href: "/careers" },
+  { title: "Blogs", href: "/blog" },
 ]
 
 function MenuItem({ item, onClose }: { item: MenuItem; onClose: () => void }) {
