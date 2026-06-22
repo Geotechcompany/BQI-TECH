@@ -11,7 +11,11 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.config import settings
-from app.lib.email import smtp_send_html
+from app.lib.email import (
+    normalize_relay_frontend_url,
+    rewrite_email_html_for_frontend,
+    smtp_send_html,
+)
 from app.logger import logger
 
 router = APIRouter(tags=["email-relay"])
@@ -24,6 +28,7 @@ limiter = Limiter(key_func=get_remote_address)
     description=(
         "Relay endpoint for non-production backends (e.g. Render free tier). "
         "Uses this host's Office 365 SMTP configuration. "
+        "Optional frontendUrl rewrites bqitech.com links in HTML for dev/staging. "
         "Set EMAIL_RELAY_SECRET on this server and pass the same value in "
         "the X-Email-Relay-Key header from calling backends."
     ),
@@ -39,6 +44,7 @@ async def public_send_email(
                 "subject": "BQI Tech — test email",
                 "html": "<p>Hello from the relay.</p>",
                 "from": "hr@bqitech.com",
+                "frontendUrl": "https://bqitech-hr-dev.netlify.app",
             }
         ],
     ),
@@ -53,6 +59,9 @@ async def public_send_email(
     subject = str(payload.get("subject") or "").strip()
     html = str(payload.get("html") or "").strip()
     from_email = str(payload.get("from") or settings.from_email or "").strip()
+    frontend_url = normalize_relay_frontend_url(
+        str(payload.get("frontendUrl") or payload.get("frontend_url") or "").strip()
+    )
 
     if not to or not subject or not html:
         raise HTTPException(
@@ -61,6 +70,9 @@ async def public_send_email(
         )
     if not from_email:
         raise HTTPException(status_code=400, detail="from email is required")
+
+    if frontend_url:
+        html = rewrite_email_html_for_frontend(html, frontend_url)
 
     try:
         await asyncio.to_thread(smtp_send_html, to, subject, html, from_email)

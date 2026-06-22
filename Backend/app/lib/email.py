@@ -496,6 +496,39 @@ async def send_admin_privilege_upgrade_email(
         return False
 
 # ---------------------- Generic & Bulk Email Utilities ----------------------
+from urllib.parse import urlparse
+
+_PRODUCTION_FRONTEND_ORIGINS = (
+    "https://bqitech.com",
+    "https://www.bqitech.com",
+    "http://bqitech.com",
+    "http://www.bqitech.com",
+)
+
+
+def normalize_relay_frontend_url(value: str | None) -> str | None:
+    url = (value or "").strip().rstrip("/")
+    if not url or any(ch in url for ch in "\r\n\t"):
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return url
+
+
+def rewrite_email_html_for_frontend(html: str, frontend_url: str | None) -> str:
+    """Swap production frontend URLs in relayed HTML for the caller's environment."""
+    target = normalize_relay_frontend_url(frontend_url)
+    if not target:
+        return html
+    if target in {origin.rstrip("/") for origin in _PRODUCTION_FRONTEND_ORIGINS}:
+        return html
+    result = html
+    for origin in _PRODUCTION_FRONTEND_ORIGINS:
+        result = result.replace(origin, target)
+    return result
+
+
 def smtp_send_html(
     to: str,
     subject: str,
