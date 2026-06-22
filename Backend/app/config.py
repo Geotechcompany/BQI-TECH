@@ -67,6 +67,7 @@ class Settings(BaseModel):
     smtp_pass: str = os.getenv("SMTP_PASS", "")
     from_email: str = os.getenv("FROM_EMAIL", "info@bqitech.com")
     hr_email: str = os.getenv("HR_EMAIL", "info@bqitech.com")
+    email_relay_secret: str = os.getenv("EMAIL_RELAY_SECRET", "")
     
     # Cloudinary Configuration
     cloudinary_cloud_name: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")

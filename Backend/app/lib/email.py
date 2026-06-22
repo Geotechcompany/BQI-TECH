@@ -496,22 +496,41 @@ async def send_admin_privilege_upgrade_email(
         return False
 
 # ---------------------- Generic & Bulk Email Utilities ----------------------
-def send_generic_email(to: str, subject: str, html: str) -> bool:
+def smtp_send_html(
+    to: str,
+    subject: str,
+    html: str,
+    from_email: Optional[str] = None,
+) -> None:
+    """Send HTML email via configured SMTP. Raises on failure."""
+    sender = (from_email or settings.from_email or "").strip()
+    if not sender:
+        raise ValueError("from email is required")
+
+    message = MIMEMultipart()
+    message["From"] = sender
+    message["To"] = to
+    message["Subject"] = subject
+    message.attach(MIMEText(html, "html"))
+
+    with get_smtp_connection() as server:
+        server.sendmail(sender, to, message.as_string())
+
+    logger.info("Email sent to %s", to)
+
+
+def send_generic_email(
+    to: str,
+    subject: str,
+    html: str,
+    from_email: Optional[str] = None,
+) -> bool:
     """Send a generic HTML email via configured SMTP settings.
 
     This is a synchronous helper designed to be used from async wrappers when needed.
     """
     try:
-        message = MIMEMultipart()
-        message["From"] = settings.from_email
-        message["To"] = to
-        message["Subject"] = subject
-        message.attach(MIMEText(html, "html"))
-
-        with get_smtp_connection() as server:
-            server.sendmail(settings.from_email, to, message.as_string())
-
-        logger.info(f"Email sent to {to}")
+        smtp_send_html(to, subject, html, from_email=from_email)
         return True
     except Exception as e:
         logger.error(f"Failed sending email to {to}: {e}")
