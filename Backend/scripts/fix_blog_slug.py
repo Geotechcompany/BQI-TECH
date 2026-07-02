@@ -9,9 +9,9 @@ from bson import ObjectId
 
 async def fix_slug():
     # Get MongoDB URI from settings
-    mongodb_uri = settings.MONGODB_URI
+    MONGODB_URI = settings.MONGODB_URI
     print(f"Connecting to MongoDB...")
-    client = AsyncIOMotorClient(mongodb_uri)
+    client = AsyncIOMotorClient(MONGODB_URI)
     db = client["BQITECH"]
     
     # Update the blog post with the correct slug

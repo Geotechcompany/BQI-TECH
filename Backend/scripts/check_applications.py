@@ -15,8 +15,8 @@ class JSONEncoder(json.JSONEncoder):
 
 def main():
     # Get MongoDB URI from environment
-    mongodb_uri = os.getenv("MONGODB_URI")
-    if not mongodb_uri:
+    MONGODB_URI = os.getenv("MONGODB_URI")
+    if not MONGODB_URI:
         print("Error: MONGODB_URI not found in environment variables")
         return
     
@@ -24,7 +24,7 @@ def main():
     
     try:
         # Connect to MongoDB
-        client = MongoClient(mongodb_uri)
+        client = MongoClient(MONGODB_URI)
         db = client.get_default_database()
         
         # Get all applications

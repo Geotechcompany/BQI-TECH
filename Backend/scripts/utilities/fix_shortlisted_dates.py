@@ -30,8 +30,8 @@ except ImportError:
         load_dotenv(env_path)
     
     def get_database():
-        mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/bqi_database')
-        client = MongoClient(mongo_uri)
+        MONGODB_URI = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/bqi_database')
+        client = MongoClient(MONGODB_URI)
         return client.get_default_database()
 
 def fix_shortlisted_dates():

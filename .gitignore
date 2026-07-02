@@ -1,121 +1,52 @@
-node_modules
-.next
-.env
-.env.local
-.env.development.local
-dist
+# All three app trees (DEV / STAGING / PRODUCTION)
+**/node_modules/
+**/.next/
+**/out/
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
 
-# Cache directories and files
-.cache/
-.npm
-.yarn
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-.eslintcache
-.stylelintcache
-.parcel-cache/
-.nuxt/
-.vuepress/dist
-.serverless/
-.fusebox/
-.dynamodb/
-.tern-port
+# Build artifacts
+**/*.stackdump
+tsconfig.tsbuildinfo
 
-# Log files
-*.log
-logs/
-*.log.*
-lerna-debug.log*
-.npm-debug.log*
-.yarn-integrity
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-.nyc_output
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS generated files
+# Logs and caches
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+**/.pnpm-debug.log*
+**/.eslintcache
+.cursor
+.cursorrules
+.cursorignore
+.cursorignorerules
+.cursorignorerulesrules
+.cursorignorerulesrulesrules
+.cursorignorerulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrulesrules
+,next
+.vscode
+.vscodeignore
+.vscodeignorerules
+.vscodeignorerulesrules
+.vscodeignorerulesrulesrules
+.vscodeignorerulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrulesrulesrulesrulesrules
+# OS / editor
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-
-# Python cache and logs
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-# lib/  # Commented out - we need lib/ for TypeScript modules
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-
-# Virtual environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# Temporary files
-*.tmp
-*.temp
-.tmp/
-.temp/
-
-
-# Local Netlify folder
-.netlify

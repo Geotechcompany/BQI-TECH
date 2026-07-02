@@ -479,7 +479,6 @@ export default function ApplicationsPage() {
               application={viewApplication}
               isOpen={!!viewApplication}
               onClose={() => setViewApplication(null)}
-              showApplicationId={false}
             />
           )}
         </AnimatePresence>

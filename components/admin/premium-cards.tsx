@@ -168,32 +168,32 @@ export function PremiumMetricCard({
           )}
         />
 
-        <div className="relative p-6">
-          <div className="flex items-start justify-between gap-4">
+        <div className="relative p-4">
+          <div className="flex items-start justify-between gap-3">
             <div
               className={cn(
-                "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br shadow-lg",
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-md",
                 styles.iconGradient
               )}
             >
-              <Icon className="h-6 w-6 text-white" strokeWidth={2} />
+              <Icon className="h-5 w-5 text-white" strokeWidth={2} />
             </div>
             <div className="min-w-0 flex-1 text-right sm:text-left">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
                 {title}
               </p>
               {subtitle && (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                   {subtitle}
                 </p>
               )}
             </div>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-3">
             <p
               className={cn(
-                "text-4xl font-bold tracking-tight tabular-nums",
+                "text-2xl font-bold tracking-tight tabular-nums",
                 "bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent",
                 "dark:from-white dark:to-white/80"
               )}
@@ -202,10 +202,10 @@ export function PremiumMetricCard({
             </p>
 
             {trend !== undefined && (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span
                   className={cn(
-                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset",
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
                     trend > 0 &&
                       "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
                     trend < 0 &&
@@ -217,18 +217,9 @@ export function PremiumMetricCard({
                   {trend < 0 && <ArrowDown className="mr-1 h-3 w-3" />}
                   {trend === 0 ? "No change" : `${Math.abs(trend)}%`}
                 </span>
-                <span className="text-xs text-muted-foreground">vs last month</span>
+                <span className="text-[11px] text-muted-foreground">vs last month</span>
               </div>
             )}
-          </div>
-
-          <div
-            className={cn(
-              "mt-4 flex items-center text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100",
-              styles.accent
-            )}
-          >
-            View details →
           </div>
         </div>
       </motion.div>
@@ -278,24 +269,24 @@ export function PremiumStatusCard({
           )}
         />
 
-        <div className="relative p-4">
+        <div className="relative p-3">
           <div className="flex items-center justify-between gap-2">
             <div
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br shadow-md",
+                "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br shadow-sm",
                 styles.iconGradient
               )}
             >
-              <Icon className="h-5 w-5 text-white" strokeWidth={2} />
+              <Icon className="h-4 w-4 text-white" strokeWidth={2} />
             </div>
-            <span className="text-2xl font-bold tabular-nums tracking-tight">
+            <span className="text-xl font-bold tabular-nums tracking-tight">
               {count.toLocaleString()}
             </span>
           </div>
 
-          <h4 className="mt-3 text-sm font-semibold text-foreground">{title}</h4>
+          <h4 className="mt-2 text-xs font-semibold text-foreground">{title}</h4>
 
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-2 space-y-1">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/80">
               <motion.div
                 initial={{ width: 0 }}
@@ -304,7 +295,7 @@ export function PremiumStatusCard({
                 className={cn("h-full rounded-full bg-gradient-to-r", styles.progress)}
               />
             </div>
-            <p className="text-[11px] font-medium text-muted-foreground">
+            <p className="text-[10px] font-medium text-muted-foreground">
               {safePercent.toFixed(1)}% of total
             </p>
           </div>

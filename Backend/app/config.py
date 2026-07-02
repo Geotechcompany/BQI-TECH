@@ -1,10 +1,11 @@
 import os
+from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from Backend/.env
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 class Settings(BaseModel):
     # Server Configuration
@@ -12,20 +13,23 @@ class Settings(BaseModel):
     port: int = int(os.getenv("PORT", "9000"))
     debug: bool = False
     
-    # Database — operational cluster is BACKUP_MONGO_URL (legacy primary MONGODB_URI unused by app)
+    # Database — primary connection string is MONGODB_URI
     DATABASE_URL: Optional[str] = Field(
-        default=os.getenv("BACKUP_MONGO_URL") or os.getenv("MONGODB_URI")
+        default=os.getenv("MONGODB_URI") or os.getenv("MONGO_URL")
     )
     MONGODB_URI: Optional[str] = Field(default=os.getenv("MONGODB_URI"))
-    BACKUP_MONGO_URL: Optional[str] = Field(default=os.getenv("BACKUP_MONGO_URL"))
+    MONGO_URL: Optional[str] = Field(default=os.getenv("MONGO_URL"))
     DB_SYNC_TARGET_URI: Optional[str] = Field(default=os.getenv("DB_SYNC_TARGET_URI"))
-    mongodb_uri: Optional[str] = os.getenv("MONGODB_URI")
     
     # API
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "BQI Tech Backend"
     app_url: str = "https://api.bqitech.com"
-    frontend_url: str = os.getenv("NEXT_PUBLIC_APP_URL", "https://bqitech.com")
+    frontend_url: str = (
+        os.getenv("FRONTEND_URL")
+        or os.getenv("NEXT_PUBLIC_APP_URL")
+        or "https://bqitech.com"
+    )
     
     # Security
     SECRET_KEY: str = Field(default=os.getenv("SECRET_KEY", "your-secret-key-change-in-production"))
@@ -51,14 +55,27 @@ class Settings(BaseModel):
     # Include production origins by default; can be overridden via ALLOWED_ORIGINS env
     ALLOWED_ORIGINS_RAW: str = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:3001,https://bqitech.com,https://www.bqitech.com"
+        "http://localhost:3000,http://localhost:3001,https://bqitech.com,https://www.bqitech.com,"
+        "https://bqitech-hr-dev.netlify.app",
     )
-    BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in ALLOWED_ORIGINS_RAW.split(",") if origin.strip()]
-    # Optional regex to match subdomains (e.g., https://*.bqitech.com)
+    BACKEND_CORS_ORIGINS: List[str] = [
+        origin.strip().rstrip("/")
+        for origin in ALLOWED_ORIGINS_RAW.split(",")
+        if origin.strip()
+    ]
+    # Optional regex for preview/staging hosts (Netlify, Render, bqitech.com)
     CORS_ORIGIN_REGEX: Optional[str] = os.getenv(
         "CORS_ORIGIN_REGEX",
-        r"https?:\/\/(.*\.)?bqitech\.com$|https?:\/\/localhost(:\d+)?$|https?:\/\/bqitech-nonprod-1\.onrender\.com$",
+        r"https?:\/\/(.*\.)?bqitech\.com$|"
+        r"https?:\/\/localhost(:\d+)?$|"
+        r"https?:\/\/bqitech-[a-z0-9-]+\.onrender\.com$|"
+        r"https?:\/\/([a-z0-9-]+\.)*netlify\.app$",
     )
+    
+    # Email provider (smtp | sendgrid | netlify_relay)
+    email_provider: str = os.getenv("EMAIL_PROVIDER", "smtp")
+    sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
+    email_relay_url: str = os.getenv("EMAIL_RELAY_URL", "")
     
     # Email Configuration (Office 365 SMTP)
     smtp_host: str = os.getenv("SMTP_HOST", "smtp.office365.com")
@@ -67,7 +84,6 @@ class Settings(BaseModel):
     smtp_pass: str = os.getenv("SMTP_PASS", "")
     from_email: str = os.getenv("FROM_EMAIL", "info@bqitech.com")
     hr_email: str = os.getenv("HR_EMAIL", "info@bqitech.com")
-    email_relay_secret: str = os.getenv("EMAIL_RELAY_SECRET", "")
     
     # Cloudinary Configuration
     cloudinary_cloud_name: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")

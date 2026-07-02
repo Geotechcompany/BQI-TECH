@@ -53,7 +53,7 @@ export default function Header() {
 
   return (
     <>
-      <div className="w-full fixed top-0 left-0 right-0 z-50">
+      <div className="w-full fixed left-0 right-0 z-50" style={{ top: "var(--env-banner-height, 0px)" }}>
         {/* Main Header */}
         <header className={`w-full transition-all duration-300 ${
           isScrolled 

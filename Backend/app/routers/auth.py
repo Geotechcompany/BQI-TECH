@@ -23,6 +23,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.utils.ip_utils import get_real_client_ip
 from app.lib.roles import normalize_role
+from app.lib.admin_permissions import get_effective_admin_modules
 from app.lib.user_verification import resolve_email_verified
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,7 @@ async def login(
             "email": user["email"],
             "name": user.get("name", ""),
             "role": normalize_role(user.get("role", "USER")),
+            "adminModules": get_effective_admin_modules(user),
             "isEmailVerified": is_verified,
             "avatar": user.get("avatar", ""),
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
@@ -401,6 +403,7 @@ async def refresh_token(
             "email": user["email"],
             "name": user.get("name", ""),
             "role": normalize_role(user.get("role", "USER")),
+            "adminModules": get_effective_admin_modules(user),
             "isEmailVerified": is_verified,
             "avatar": user.get("avatar", ""),
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
@@ -750,12 +753,20 @@ async def forgot_password(request: Request, data: ForgotPasswordRequest):
             )
 
             # Build reset link for frontend
-            from app.config import settings
-            reset_link = f"{settings.frontend_url}/reset-password?token={token}"
+            from app.lib.cors import resolve_frontend_url
+
+            reset_link = (
+                f"{resolve_frontend_url(request.headers.get('origin'))}"
+                f"/reset-password?token={token}"
+            )
             from app.lib.email import send_password_reset_email
 
             try:
-                await send_password_reset_email(email=email, reset_link=reset_link)
+                await send_password_reset_email(
+                    email=email,
+                    reset_link=reset_link,
+                    frontend_url=resolve_frontend_url(request.headers.get("origin")),
+                )
             except Exception as e:
                 logging.warning(f"Failed sending reset email to {email}: {e}")
 
@@ -817,11 +828,17 @@ async def reset_password(data: ResetPasswordRequest):
                     "email": _normalize_email(user.get("email", email)),
                     "updatedAt": datetime.utcnow(),
                     "passwordResetAt": datetime.utcnow(),
+                    "invitePending": False,
                 }
             },
         )
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="User not found")
+
+        await db.admin_invites.update_many(
+            {"email": email, "status": "pending"},
+            {"$set": {"status": "accepted", "acceptedAt": datetime.utcnow()}},
+        )
 
         # Burn the token
         await db.password_resets.delete_one({"_id": rec["_id"]})

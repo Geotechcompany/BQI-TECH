@@ -9,6 +9,7 @@ interface User {
   name: string;
   role: string;
   avatarUrl?: string;
+  adminModules?: string[];
   isEmailVerified: boolean;
 }
 
@@ -26,6 +27,51 @@ interface SessionData {
 }
 
 import { BACKEND_URL } from "./config";
+
+const AUTH_FETCH_TIMEOUT_MS = 15_000;
+
+function createFetchTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
+    return AbortSignal.timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
+function mergeFetchOptions(
+  options: RequestInit,
+  timeoutMs: number
+): RequestInit {
+  const timeoutSignal = createFetchTimeoutSignal(timeoutMs);
+  const signals = [options.signal, timeoutSignal].filter(Boolean) as AbortSignal[];
+
+  if (signals.length === 0) {
+    return { ...options, signal: timeoutSignal };
+  }
+
+  if (typeof AbortSignal !== "undefined" && "any" in AbortSignal) {
+    return {
+      ...options,
+      signal: AbortSignal.any(signals),
+    };
+  }
+
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort();
+      break;
+    }
+    signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  return {
+    ...options,
+    signal: controller.signal,
+  };
+}
 
 /** FastAPI may return `detail` as a string, structured object, or validation error list */
 function formatFastApiDetail(detail: unknown): string {
@@ -166,8 +212,31 @@ export function getLoginToastFromError(error: unknown): {
 const TOKEN_KEY = "auth_token";
 const USER_KEY = "user_data";
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const segment = token.split(".")[1];
+    if (!segment) return null;
+    const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "="
+    );
+    const json =
+      typeof atob === "function"
+        ? atob(padded)
+        : typeof Buffer !== "undefined"
+          ? Buffer.from(padded, "base64").toString("utf8")
+          : "";
+    if (!json) return null;
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 class AuthService {
   private SESSION_KEY = "auth_session";
+  private refreshPromise: Promise<AuthResponse | null> | null = null;
 
   private static instance: AuthService;
 
@@ -407,8 +476,43 @@ class AuthService {
     }
   }
 
-  // Refresh token
+  isAccessTokenExpired(token: string, bufferSeconds = 60): boolean {
+    const payload = decodeJwtPayload(token);
+    const exp = payload?.exp;
+    if (typeof exp !== "number") {
+      return false;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    return now >= exp - bufferSeconds;
+  }
+
+  async ensureValidSession(): Promise<boolean> {
+    const session = this.getSession();
+    if (!session?.token) {
+      return false;
+    }
+    if (!this.isAccessTokenExpired(session.token)) {
+      return true;
+    }
+    const refreshed = await this.refreshToken();
+    return Boolean(refreshed?.access_token);
+  }
+
+  // Refresh token (deduplicated — parallel 401s share one refresh request)
   async refreshToken(): Promise<AuthResponse | null> {
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = this.performRefreshToken();
+    try {
+      return await this.refreshPromise;
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+
+  private async performRefreshToken(): Promise<AuthResponse | null> {
     try {
       const session = this.getSession();
 
@@ -416,16 +520,22 @@ class AuthService {
         this.clearSession();
         return null;
       }
-      const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          refresh_token: session.refreshToken,
-        }),
-        credentials: "include",
-      });
+      const response = await fetch(
+        `${BACKEND_URL}/api/auth/refresh`,
+        mergeFetchOptions(
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              refresh_token: session.refreshToken,
+            }),
+            credentials: "include",
+          },
+          AUTH_FETCH_TIMEOUT_MS
+        )
+      );
 
       if (!response.ok) {
         console.error("Token refresh failed:", response.status);
@@ -545,11 +655,17 @@ class AuthService {
 
     // First attempt with current token
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-        credentials: "include",
-      });
+      const response = await fetch(
+        url,
+        mergeFetchOptions(
+          {
+            ...options,
+            headers,
+            credentials: "include",
+          },
+          AUTH_FETCH_TIMEOUT_MS
+        )
+      );
 
       // If token is valid, return response
       if (response.ok || response.status !== 401) {
@@ -570,11 +686,17 @@ class AuthService {
         Authorization: `Bearer ${refreshResult.access_token}`,
       };
 
-      return await fetch(url, {
-        ...options,
-        headers: newHeaders,
-        credentials: "include",
-      });
+      return await fetch(
+        url,
+        mergeFetchOptions(
+          {
+            ...options,
+            headers: newHeaders,
+            credentials: "include",
+          },
+          AUTH_FETCH_TIMEOUT_MS
+        )
+      );
     } catch (error) {
       console.error("Authenticated fetch error:", error);
       throw error;
@@ -608,6 +730,14 @@ class AuthService {
           profileData = ResponseDecoder.decode(rawProfileData);
         }
 
+        if (
+          profileData &&
+          typeof profileData === "object" &&
+          (profileData as { encrypted?: boolean }).encrypted
+        ) {
+          return currentSession;
+        }
+
         if (currentSession && profileData && typeof profileData === "object") {
           const isEmailVerified = resolveEmailVerified(
             profileData.isEmailVerified,
@@ -625,6 +755,7 @@ class AuthService {
               firstName: profileData.firstName || "",
               lastName: profileData.lastName || "",
               isEmailVerified,
+              adminModules: profileData.adminModules || currentSession.user.adminModules,
             },
           };
           this.setSession(updatedSession);

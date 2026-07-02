@@ -3,10 +3,12 @@
 import React, { useState } from 'react';
 import { Application } from "@/types/application";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Trash2, ClipboardList, Settings, Archive, ArchiveRestore } from "lucide-react";
+import { Eye, Pencil, Trash2, ClipboardList, Settings, Archive, ArchiveRestore, Sparkles, Loader2 } from "lucide-react";
 import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "./utils/table-utils";
 import { CVCell } from "@/components/admin/CVCell";
+import { AiRankScoreCell } from "@/components/admin/AiRankCell";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +28,11 @@ interface UnifiedApplicationTableProps {
   onBulkStatusUpdate?: (ids: string[], status: string) => void;
   onBulkArchive?: (ids: string[]) => void;
   onBulkUnarchive?: (ids: string[]) => void;
+  onRank?: (id: string) => void;
+  onBulkRank?: (ids: string[]) => void;
+  rankingApplicationId?: string | null;
   isLoading?: boolean;
+  showAiScore?: boolean;
 }
 
 export function UnifiedApplicationTable({ 
@@ -40,10 +46,15 @@ export function UnifiedApplicationTable({
   onBulkStatusUpdate,
   onBulkArchive,
   onBulkUnarchive,
-  isLoading = false
+  onRank,
+  onBulkRank,
+  rankingApplicationId = null,
+  isLoading = false,
+  showAiScore = true,
 }: UnifiedApplicationTableProps) {
-  const showBulkActions = Boolean(onBulkStatusUpdate || onBulkArchive || onBulkUnarchive);
+  const showBulkActions = Boolean(onBulkStatusUpdate || onBulkArchive || onBulkUnarchive || onBulkRank);
   const [selectedApplications, setSelectedApplications] = useState<Set<string>>(new Set());
+  const { isUnconfigured: aiUnconfigured } = useAiStatus();
 
   const statusOptions = [
     { label: "New", value: "New" },
@@ -170,6 +181,26 @@ export function UnifiedApplicationTable({
             </Button>
           ) : (
             <>
+              {onBulkRank && (
+                <span
+                  title={aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined}
+                  className="inline-flex"
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-violet-200 text-violet-700 hover:bg-violet-50"
+                    disabled={aiUnconfigured}
+                    onClick={() => {
+                      onBulkRank(Array.from(selectedApplications));
+                      setSelectedApplications(new Set());
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    AI Rank Selected
+                  </Button>
+                </span>
+              )}
               {onBulkArchive && statusType !== "archived" && (
                 <Button
                   variant="outline"
@@ -247,6 +278,11 @@ export function UnifiedApplicationTable({
               <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Status
               </th>
+              {showAiScore && (
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[100px]">
+                  AI Score
+                </th>
+              )}
               {dateField && (
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   {dateField === 'shortlistedDate' ? 'Shortlisted Date' :
@@ -299,6 +335,19 @@ export function UnifiedApplicationTable({
                     {application.status || 'New'}
                   </span>
                 </td>
+                {showAiScore && (
+                  <td className="px-4 py-4 text-sm align-top">
+                    <AiRankScoreCell
+                      score={application.aiRankScore}
+                      recommendation={application.aiRankRecommendation}
+                      onRank={onRank ? () => onRank(application.id) : undefined}
+                      isRanking={rankingApplicationId === application.id}
+                      disabledReason={
+                        aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined
+                      }
+                    />
+                  </td>
+                )}
                 {dateField && (
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                     {getDateValue(application)}
@@ -317,14 +366,41 @@ export function UnifiedApplicationTable({
                       size="sm"
                       onClick={() => onView(application.id)}
                       className="text-blue-600 hover:text-blue-800"
+                      title="View application"
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
+                    {onRank && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onRank(application.id)}
+                        disabled={
+                          rankingApplicationId === application.id ||
+                          aiUnconfigured
+                        }
+                        className="text-violet-600 hover:text-violet-800"
+                        title={
+                          aiUnconfigured
+                            ? AI_UNCONFIGURED_MESSAGE
+                            : application.aiRankScore != null
+                              ? "Re-rank with AI"
+                              : "AI Rank"
+                        }
+                      >
+                        {rankingApplicationId === application.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => onEdit(application.id)}
                       className="text-green-600 hover:text-green-800"
+                      title="Edit application"
                     >
                       <Pencil className="h-4 w-4" />
                     </Button>

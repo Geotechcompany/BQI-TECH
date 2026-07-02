@@ -28,6 +28,7 @@ export function JsonLd({
     ],
     contactPoint: {
       "@type": "ContactPoint",
+      telephone: "+254-11-229-5287",
       contactType: "customer service",
       email: "info@bqitech.com",
       areaServed: "KE",
@@ -35,7 +36,7 @@ export function JsonLd({
     },
     address: {
       "@type": "PostalAddress",
-      streetAddress: "The Piano, Brookside Drive",
+      streetAddress: "The Piano, 8th Floor, Brookside Drive, Westlands",
       addressLocality: "Nairobi",
       addressCountry: "KE",
     },

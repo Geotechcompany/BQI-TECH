@@ -15,13 +15,15 @@ async def ai_generate_email(
         if not prompt:
             raise HTTPException(status_code=400, detail="Prompt is required")
 
-        # Get AI configuration from environment
-        base_url = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-        api_key = os.getenv("NVIDIA_API_KEY")
-        model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
+        from app.lib.ai_provider_settings import get_active_ai_config
+
+        base_url, api_key, model = await get_active_ai_config()
 
         if not api_key:
-            raise HTTPException(status_code=500, detail="AI service not configured")
+            raise HTTPException(
+                status_code=503,
+                detail="AI service not configured — add a provider in Admin → Settings → AI providers",
+            )
 
         # Create the system prompt for email generation
         system_prompt = """You are an expert email marketing specialist. Generate professional email content based on the user's prompt.

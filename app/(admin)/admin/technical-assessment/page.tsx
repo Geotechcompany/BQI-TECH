@@ -39,6 +39,10 @@ export default function TechnicalAssessmentPage() {
     handleEdit,
     handleDelete,
     handleSaveEdit,
+    handleSaveFromView,
+    handleRankApplication,
+    aiRankProgress,
+    rankingApplicationId,
     handleConfirmDelete,
     handleBulkStatusUpdate,
   } = useAdminApplicationPage({
@@ -112,6 +116,8 @@ export default function TechnicalAssessmentPage() {
         onEdit={handleEdit}
         onDelete={handleDelete}
         onBulkStatusUpdate={handleBulkStatusUpdate}
+        onRank={handleRankApplication}
+        rankingApplicationId={rankingApplicationId}
       />
 
       {/* Pagination */}
@@ -130,6 +136,9 @@ export default function TechnicalAssessmentPage() {
         isOpen={!!viewApplication}
         onClose={() => setViewApplication(null)}
         jobTitles={jobTitles}
+        onSave={handleSaveFromView}
+        onRank={handleRankApplication}
+        rankProgress={aiRankProgress}
       />
       
       <EditApplicationModal

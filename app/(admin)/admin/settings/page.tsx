@@ -1,14 +1,26 @@
 "use client";
 
-import { motion } from 'framer-motion';
+import { motion } from "framer-motion";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
-import { 
-  Layout, 
-  Bell, 
+import {
+  Layout,
+  Bell,
   Shield,
   RefreshCw,
-  Sparkles,
-} from 'lucide-react';
+  Mail,
+  MessageSquare,
+  Database,
+  Camera,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Palette,
+  Bot,
+  Plus,
+  Trash2,
+  Star,
+  type LucideIcon,
+} from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,18 +34,35 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "react-hot-toast";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Camera } from "lucide-react";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAiStatus } from "@/contexts/AiStatusContext";
 import { adminApi, backendApi } from "@/lib/api-backend";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { authService } from "@/lib/auth-backend";
 import { useTheme } from "next-themes";
 import { useSettings } from "@/contexts/SettingsContext";
-
+import { useAdminTheme, type AdminTheme } from "@/contexts/AdminThemeContext";
+import { cn } from "@/lib/utils";
 
 interface AdminSettings {
   emailNotifications: boolean;
@@ -65,6 +94,65 @@ interface ContactSpamEvent {
   createdAt?: string;
 }
 
+type SettingsSection =
+  | "general"
+  | "notifications"
+  | "security"
+  | "contact"
+  | "email"
+  | "ai"
+  | "system";
+
+const NAV_ITEMS: {
+  id: SettingsSection;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}[] = [
+  {
+    id: "general",
+    label: "Appearance",
+    description: "Theme, density & layout",
+    icon: Palette,
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    description: "Email & push alerts",
+    icon: Bell,
+  },
+  {
+    id: "security",
+    label: "Security",
+    description: "Session & access",
+    icon: Shield,
+  },
+  {
+    id: "contact",
+    label: "Contact form",
+    description: "Public form & spam",
+    icon: MessageSquare,
+  },
+  {
+    id: "email",
+    label: "Email delivery",
+    description: "Outbound mail relay",
+    icon: Mail,
+  },
+  {
+    id: "ai",
+    label: "AI providers",
+    description: "Models & API keys",
+    icon: Bot,
+  },
+  {
+    id: "system",
+    label: "System",
+    description: "Database operations",
+    icon: Database,
+  },
+];
+
 const defaultSettings: AdminSettings = {
   emailNotifications: true,
   pushNotifications: true,
@@ -82,47 +170,226 @@ const defaultSettings: AdminSettings = {
   autoLogout: 30,
   tableRowsPerPage: 25,
   sidebarCollapsed: false,
-  theme: 'light',
-  language: 'en',
-  avatar: ''
+  theme: "light",
+  language: "en",
+  avatar: "",
 };
+
+function SettingsToggleRow({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-4 py-3.5 transition-colors hover:bg-muted/50">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium leading-none">{label}</p>
+        <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function SettingsField({
+  label,
+  hint,
+  children,
+  className,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-2", className)}>
+      <Label className="text-sm font-medium">{label}</Label>
+      {children}
+      {hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function SettingsPanel({
+  title,
+  description,
+  children,
+  badge,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  badge?: React.ReactNode;
+}) {
+  return (
+    <Card className="overflow-hidden border-border/60 shadow-sm">
+      <CardHeader className="border-b border-border/40 bg-muted/20 pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-lg font-semibold tracking-tight">
+              {title}
+            </CardTitle>
+            <CardDescription className="text-sm">{description}</CardDescription>
+          </div>
+          {badge}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6 p-6">{children}</CardContent>
+    </Card>
+  );
+}
+
+const DEFAULT_BQITECH_RELAY_URL =
+  "https://api.bqitech.com/api/internal/send-email";
+
+function isBqitechApiRelayUrl(url: string): boolean {
+  return url.includes("api.bqitech.com");
+}
+
+function isLegacyNetlifyRelayUrl(url: string): boolean {
+  return url.includes("netlify.app");
+}
+
+interface AiProvider {
+  id: string;
+  label: string;
+  providerType: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  hasApiKey: boolean;
+  apiKeyHint?: string;
+}
+
+const AI_PROVIDER_PRESETS: {
+  value: string;
+  label: string;
+  baseUrl: string;
+  model: string;
+}[] = [
+  {
+    value: "nvidia",
+    label: "NVIDIA",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
+    model: "meta/llama-3.1-70b-instruct",
+  },
+  {
+    value: "openai",
+    label: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+  },
+  {
+    value: "openrouter",
+    label: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "openai/gpt-4o-mini",
+  },
+  {
+    value: "groq",
+    label: "Groq",
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "llama-3.1-70b-versatile",
+  },
+  {
+    value: "deepseek",
+    label: "DeepSeek",
+    baseUrl: "https://api.deepseek.com",
+    model: "deepseek-chat",
+  },
+  {
+    value: "together",
+    label: "Together",
+    baseUrl: "https://api.together.xyz/v1",
+    model: "meta-llama/Llama-3-70b-chat-hf",
+  },
+  {
+    value: "custom",
+    label: "Custom (OpenAI-compatible)",
+    baseUrl: "",
+    model: "",
+  },
+];
+
+function createEmptyAiProvider(): AiProvider {
+  const preset = AI_PROVIDER_PRESETS[0];
+  return {
+    id: `new_${Math.random().toString(36).slice(2, 12)}`,
+    label: preset.label,
+    providerType: preset.value,
+    baseUrl: preset.baseUrl,
+    model: preset.model,
+    apiKey: "",
+    hasApiKey: false,
+  };
+}
 
 function SettingsPageContent() {
   const { user, updateUserAvatar } = useAuth();
+  const searchParams = useSearchParams();
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
+  const [activeSection, setActiveSection] = useState<SettingsSection>("general");
+
+  useEffect(() => {
+    const section = searchParams?.get("section");
+    if (section && NAV_ITEMS.some((item) => item.id === section)) {
+      setActiveSection(section as SettingsSection);
+    }
+  }, [searchParams]);
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncingDatabases, setIsSyncingDatabases] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
-  const [contactSpamEvents, setContactSpamEvents] = useState<ContactSpamEvent[]>([]);
+  const [contactSpamEvents, setContactSpamEvents] = useState<ContactSpamEvent[]>(
+    []
+  );
   const [recaptchaSiteKey, setRecaptchaSiteKey] = useState("");
   const [recaptchaSecretKey, setRecaptchaSecretKey] = useState("");
   const [hasRecaptchaSecret, setHasRecaptchaSecret] = useState(false);
-  const [aiProvider, setAiProvider] = useState<"nvidia" | "openai">("nvidia");
-  const [aiApiKey, setAiApiKey] = useState("");
-  const [aiBaseUrl, setAiBaseUrl] = useState("");
-  const [aiModel, setAiModel] = useState("");
-  const [aiEnabled, setAiEnabled] = useState(true);
-  const [hasAiApiKey, setHasAiApiKey] = useState(false);
-  const [aiApiKeyHint, setAiApiKeyHint] = useState("");
-  const [isSavingAi, setIsSavingAi] = useState(false);
-  const [isTestingAi, setIsTestingAi] = useState(false);
+  const [emailTransport, setEmailTransport] = useState({
+    provider: "netlify_relay",
+    relayUrl: DEFAULT_BQITECH_RELAY_URL,
+    fromEmail: "",
+    sendgridApiKey: "",
+    relaySecret: "",
+    hasSendgridApiKey: false,
+    hasRelaySecret: false,
+    usesBqitechApiRelay: true,
+    configured: false,
+  });
+  const [isSavingEmailTransport, setIsSavingEmailTransport] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [aiProviders, setAiProviders] = useState<AiProvider[]>([]);
+  const [aiActiveProviderId, setAiActiveProviderId] = useState("");
+  const [isSavingAiProviders, setIsSavingAiProviders] = useState(false);
+  const [testingAiProviderId, setTestingAiProviderId] = useState<string | null>(
+    null
+  );
   const { setTheme } = useTheme();
   const { updateTheme, updateSettings } = useSettings();
+  const { setTheme: setAdminTheme } = useAdminTheme();
+  const { refresh: refreshAiStatus } = useAiStatus();
 
   useEffect(() => {
     loadSettings();
     loadContactAnalytics();
     loadRecaptchaSettings();
-    loadAiSettings();
+    loadEmailTransportSettings();
+    loadAiProviderSettings();
   }, []);
 
   const loadSettings = async () => {
     try {
       setIsLoading(true);
-      
-
-      
       const response = await adminApi.getSettings();
       if (response) {
         const payload = (response as any).settings ?? response;
@@ -136,9 +403,8 @@ function SettingsPageContent() {
         });
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
-      toast.error('Failed to load settings');
-      // Use default settings if loading fails
+      console.error("Failed to load settings:", error);
+      toast.error("Failed to load settings");
       setSettings(defaultSettings);
     } finally {
       setIsLoading(false);
@@ -154,7 +420,7 @@ function SettingsPageContent() {
         : { events: [] };
       setContactSpamEvents((response as any)?.events ?? []);
     } catch (error) {
-      console.error('Failed to load contact spam analytics:', error);
+      console.error("Failed to load contact spam analytics:", error);
       setContactSpamEvents([]);
     } finally {
       setIsLoadingAnalytics(false);
@@ -174,74 +440,304 @@ function SettingsPageContent() {
     }
   };
 
-  const loadAiSettings = async () => {
+  const loadEmailTransportSettings = async () => {
+    try {
+      const response = await adminApi.getEmailTransportSettings();
+      const transport = (response as any)?.transport ?? {};
+      setEmailTransport((current) => ({
+        ...current,
+        provider: transport.provider || "netlify_relay",
+        relayUrl:
+          transport.relayUrl ||
+          transport.defaultRelayUrl ||
+          DEFAULT_BQITECH_RELAY_URL,
+        fromEmail: transport.fromEmail || "",
+        hasSendgridApiKey: Boolean(transport.hasSendgridApiKey),
+        hasRelaySecret: Boolean(transport.hasRelaySecret),
+        usesBqitechApiRelay: Boolean(
+          transport.usesBqitechApiRelay ??
+            String(transport.relayUrl || transport.defaultRelayUrl || "").includes(
+              "api.bqitech.com"
+            )
+        ),
+        configured: Boolean(transport.configured),
+        sendgridApiKey: "",
+        relaySecret: "",
+      }));
+    } catch (error) {
+      console.error("Failed to load email transport settings:", error);
+    }
+  };
+
+  const handleSaveEmailTransport = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsSavingEmailTransport(true);
+    }
+    try {
+      const payload: Record<string, string> = {
+        provider: emailTransport.provider,
+        relayUrl: emailTransport.relayUrl.trim(),
+        fromEmail: emailTransport.fromEmail.trim(),
+      };
+      if (emailTransport.sendgridApiKey.trim()) {
+        payload.sendgridApiKey = emailTransport.sendgridApiKey.trim();
+      }
+      if (emailTransport.relaySecret.trim()) {
+        payload.relaySecret = emailTransport.relaySecret.trim();
+      }
+      const response = await adminApi.updateEmailTransportSettings(payload);
+      const transport = (response as any)?.transport ?? {};
+      setEmailTransport((current) => ({
+        ...current,
+        provider: transport.provider || current.provider,
+        relayUrl: transport.relayUrl || current.relayUrl,
+        fromEmail: transport.fromEmail || current.fromEmail,
+        hasSendgridApiKey: Boolean(transport.hasSendgridApiKey),
+        hasRelaySecret: Boolean(transport.hasRelaySecret),
+        usesBqitechApiRelay: Boolean(
+          transport.usesBqitechApiRelay ??
+            String(transport.relayUrl || "").includes("api.bqitech.com")
+        ),
+        configured: Boolean(transport.configured),
+        sendgridApiKey: "",
+        relaySecret: "",
+      }));
+      if (!options?.silent) {
+        toast.success("Email delivery settings saved");
+      }
+      return true;
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save email delivery settings");
+      return false;
+    } finally {
+      if (!options?.silent) {
+        setIsSavingEmailTransport(false);
+      }
+    }
+  };
+
+  const handleTestEmailTransport = async () => {
+    const relayUrl = emailTransport.relayUrl.trim();
+    const usesBqitechApiRelay =
+      emailTransport.usesBqitechApiRelay || isBqitechApiRelayUrl(relayUrl);
+    const usesLegacyNetlifyRelay = isLegacyNetlifyRelayUrl(relayUrl);
+    const needsSendgridKey =
+      emailTransport.provider === "sendgrid" ||
+      (usesLegacyNetlifyRelay &&
+        (emailTransport.provider === "netlify_relay" ||
+          emailTransport.provider === "relay"));
+
+    if (
+      (emailTransport.provider === "netlify_relay" ||
+        emailTransport.provider === "relay") &&
+      !relayUrl
+    ) {
+      toast.error("Enter a relay URL, then save, before sending a test email.");
+      return;
+    }
+
+    if (usesLegacyNetlifyRelay && !usesBqitechApiRelay) {
+      toast.error(
+        "Legacy Netlify relay requires SendGrid. Switch relay URL to api.bqitech.com (recommended) or enter a SendGrid API key."
+      );
+      return;
+    }
+
+    if (
+      needsSendgridKey &&
+      !emailTransport.hasSendgridApiKey &&
+      !emailTransport.sendgridApiKey.trim()
+    ) {
+      toast.error("Enter your SendGrid API key, then save, before sending a test email.");
+      return;
+    }
+
+    if (usesBqitechApiRelay && !emailTransport.fromEmail.trim()) {
+      toast.error("Enter a from email address, then save, before sending a test email.");
+      return;
+    }
+
+    setIsTestingEmail(true);
+    try {
+      const saved = await handleSaveEmailTransport({ silent: true });
+      if (!saved) return;
+
+      const response = await adminApi.testEmailTransport({
+        to: user?.email,
+      });
+      toast.success(
+        (response as any)?.message || "Test email sent — check your inbox"
+      );
+    } catch (error: any) {
+      toast.error(error?.message || "Test email failed");
+    } finally {
+      setIsTestingEmail(false);
+    }
+  };
+
+  const applyAiProvidersResponse = (config: any) => {
+    const incoming: AiProvider[] = ((config?.providers as any[]) ?? []).map(
+      (provider) => ({
+        id: String(provider.id),
+        label: String(provider.label ?? ""),
+        providerType: String(provider.providerType ?? "custom"),
+        baseUrl: String(provider.baseUrl ?? ""),
+        model: String(provider.model ?? ""),
+        apiKey: "",
+        hasApiKey: Boolean(provider.hasApiKey),
+        apiKeyHint: provider.apiKeyHint ?? "",
+      })
+    );
+    setAiProviders(incoming);
+    setAiActiveProviderId(
+      String(config?.activeProviderId ?? incoming[0]?.id ?? "")
+    );
+  };
+
+  const loadAiProviderSettings = async () => {
     try {
       const response = await adminApi.getAiProviderSettings();
-      const provider = (response as { provider?: string })?.provider;
-      setAiProvider(provider === "openai" ? "openai" : "nvidia");
-      setAiBaseUrl(String((response as { baseUrl?: string })?.baseUrl || ""));
-      setAiModel(String((response as { model?: string })?.model || ""));
-      setAiEnabled(Boolean((response as { enabled?: boolean })?.enabled ?? true));
-      setHasAiApiKey(Boolean((response as { hasApiKey?: boolean })?.hasApiKey));
-      setAiApiKeyHint(String((response as { apiKeyHint?: string })?.apiKeyHint || ""));
+      applyAiProvidersResponse((response as any)?.aiProviders ?? {});
     } catch (error) {
       console.error("Failed to load AI provider settings:", error);
     }
   };
 
-  const handleSaveAiSettings = async () => {
-    if (isSavingAi) return;
-    setIsSavingAi(true);
+  const updateAiProvider = (id: string, patch: Partial<AiProvider>) => {
+    setAiProviders((current) =>
+      current.map((provider) =>
+        provider.id === id ? { ...provider, ...patch } : provider
+      )
+    );
+  };
+
+  const handleAiProviderTypeChange = (id: string, providerType: string) => {
+    const preset = AI_PROVIDER_PRESETS.find((p) => p.value === providerType);
+    setAiProviders((current) =>
+      current.map((provider) => {
+        if (provider.id !== id) return provider;
+        const next: AiProvider = { ...provider, providerType };
+        if (preset && preset.value !== "custom") {
+          next.baseUrl = preset.baseUrl;
+          next.model = preset.model;
+          const labelIsPreset = AI_PROVIDER_PRESETS.some(
+            (p) => p.label === provider.label
+          );
+          if (!provider.label.trim() || labelIsPreset) {
+            next.label = preset.label;
+          }
+        }
+        return next;
+      })
+    );
+  };
+
+  const handleAddAiProvider = () => {
+    const created = createEmptyAiProvider();
+    setAiProviders((current) => {
+      const next = [...current, created];
+      if (next.length === 1) {
+        setAiActiveProviderId(created.id);
+      }
+      return next;
+    });
+  };
+
+  const handleRemoveAiProvider = (id: string) => {
+    setAiProviders((current) => {
+      const next = current.filter((provider) => provider.id !== id);
+      if (aiActiveProviderId === id) {
+        setAiActiveProviderId(next[0]?.id ?? "");
+      }
+      return next;
+    });
+  };
+
+  const buildAiProvidersPayload = () => ({
+    providers: aiProviders.map((provider) => {
+      const entry: Record<string, unknown> = {
+        id: provider.id,
+        label: provider.label.trim(),
+        providerType: provider.providerType,
+        baseUrl: provider.baseUrl.trim(),
+        model: provider.model.trim(),
+      };
+      if (provider.apiKey.trim()) {
+        entry.apiKey = provider.apiKey.trim();
+      }
+      return entry;
+    }),
+    activeProviderId: aiActiveProviderId,
+  });
+
+  const handleSaveAiProviders = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setIsSavingAiProviders(true);
+    }
     try {
-      await adminApi.updateAiProviderSettings({
-        provider: aiProvider,
-        apiKey: aiApiKey.trim() || undefined,
-        baseUrl: aiBaseUrl.trim() || undefined,
-        model: aiModel.trim() || undefined,
-        enabled: aiEnabled,
-      });
-      setAiApiKey("");
-      await loadAiSettings();
-      toast.success("AI provider settings saved");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to save AI settings";
-      toast.error(message);
+      const response = await adminApi.updateAiProviderSettings(
+        buildAiProvidersPayload()
+      );
+      applyAiProvidersResponse((response as any)?.aiProviders ?? {});
+      await refreshAiStatus();
+      if (!options?.silent) {
+        toast.success("AI provider settings saved");
+      }
+      return true;
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save AI provider settings");
+      return false;
     } finally {
-      setIsSavingAi(false);
+      if (!options?.silent) {
+        setIsSavingAiProviders(false);
+      }
     }
   };
 
-  const handleTestAiConnection = async () => {
-    if (isTestingAi) return;
-    setIsTestingAi(true);
+  const handleTestAiProvider = async (provider: AiProvider) => {
+    if (!provider.baseUrl.trim() || !provider.model.trim()) {
+      toast.error("Enter a base URL and model before testing.");
+      return;
+    }
+    if (!provider.hasApiKey && !provider.apiKey.trim()) {
+      toast.error("Enter an API key before testing this provider.");
+      return;
+    }
+
+    setTestingAiProviderId(provider.id);
     try {
-      if (aiApiKey.trim()) {
-        await adminApi.updateAiProviderSettings({
-          provider: aiProvider,
-          apiKey: aiApiKey.trim(),
-          baseUrl: aiBaseUrl.trim() || undefined,
-          model: aiModel.trim() || undefined,
-          enabled: aiEnabled,
-        });
-        setAiApiKey("");
-        await loadAiSettings();
+      if (provider.apiKey.trim()) {
+        const saved = await handleSaveAiProviders({ silent: true });
+        if (!saved) return;
       }
-      const result = await adminApi.testAiProviderSettings();
-      toast.success(`AI connection OK: ${(result as { message?: string })?.message || "OK"}`);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "AI connection test failed";
-      toast.error(message);
+
+      const payload: Record<string, unknown> = {
+        baseUrl: provider.baseUrl.trim(),
+        model: provider.model.trim(),
+      };
+      if (provider.apiKey.trim()) {
+        payload.apiKey = provider.apiKey.trim();
+      } else {
+        payload.id = provider.id;
+      }
+      const response = await adminApi.testAiProvider(payload);
+      const result = response as { message?: string; sampleReply?: string };
+      const successMessage = result.sampleReply
+        ? `Connection successful — model replied: "${result.sampleReply}"`
+        : result.message || "Connection successful — provider is reachable";
+      toast.success(successMessage);
+    } catch (error: any) {
+      toast.error(error?.message || "Provider test failed");
     } finally {
-      setIsTestingAi(false);
+      setTestingAiProviderId(null);
     }
   };
 
   const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
-    
+
     try {
-      // Persist only known fields
       const payload = {
         emailNotifications: settings.emailNotifications,
         pushNotifications: settings.pushNotifications,
@@ -255,9 +751,9 @@ function SettingsPageContent() {
         avatar: settings.avatar,
       };
       await adminApi.updateSettings(payload);
-      // Save reCAPTCHA settings if provided
       if (recaptchaSiteKey.trim() || recaptchaSecretKey.trim()) {
-        const updateRecaptchaSettingsApi = (adminApi as any).updateRecaptchaSettings;
+        const updateRecaptchaSettingsApi = (adminApi as any)
+          .updateRecaptchaSettings;
         if (updateRecaptchaSettingsApi) {
           await updateRecaptchaSettingsApi({
             siteKey: recaptchaSiteKey.trim() || undefined,
@@ -270,14 +766,13 @@ function SettingsPageContent() {
           });
         }
       }
-      // Reload from server to confirm persistence
       await loadSettings();
       await loadRecaptchaSettings();
       setRecaptchaSecretKey("");
-      toast.success('Settings saved successfully');
-    } catch (error) {
-      console.error('Save error:', error);
-      toast.error(error.message || 'Failed to save settings');
+      toast.success("Settings saved successfully");
+    } catch (error: any) {
+      console.error("Save error:", error);
+      toast.error(error?.message || "Failed to save settings");
     } finally {
       setIsSaving(false);
     }
@@ -302,8 +797,9 @@ function SettingsPageContent() {
       return;
     }
 
-    const container = (document.querySelector("main.overflow-y-auto") as HTMLElement | null)
-      || (document.scrollingElement as HTMLElement | null);
+    const container =
+      (document.querySelector("main.overflow-y-auto") as HTMLElement | null) ||
+      (document.scrollingElement as HTMLElement | null);
     const previousScrollTop = container?.scrollTop ?? window.scrollY;
 
     updateFn();
@@ -318,11 +814,11 @@ function SettingsPageContent() {
   };
 
   const updateSetting = <K extends keyof AdminSettings>(
-    key: K, 
+    key: K,
     value: AdminSettings[K]
   ) => {
     preserveScrollPosition(() => {
-      setSettings(prev => ({ ...prev, [key]: value }));
+      setSettings((prev) => ({ ...prev, [key]: value }));
     });
   };
 
@@ -346,14 +842,15 @@ function SettingsPageContent() {
     min: number,
     max?: number
   ) => {
-    // Allow manual typing while avoiding NaN resets.
     if (value.trim() === "") return;
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return;
     let normalized = Math.trunc(parsed);
     if (normalized < min) normalized = min;
     if (typeof max === "number" && normalized > max) normalized = max;
-    updateContactProtection({ [key]: normalized } as Partial<AdminSettings["contactProtection"]>);
+    updateContactProtection({
+      [key]: normalized,
+    } as Partial<AdminSettings["contactProtection"]>);
   };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -361,71 +858,903 @@ function SettingsPageContent() {
     if (!file) return;
 
     try {
-      // Create form data
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append("file", file);
 
-      // Upload avatar
-      const response = await fetch(`${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/upload/avatar`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-        headers: {
-          'Authorization': `Bearer ${authService.getSession()?.token}`
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_PYTHON_API_URL}/api/upload/avatar`,
+        {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+          headers: {
+            Authorization: `Bearer ${authService.getSession()?.token}`,
+          },
         }
-      });
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to upload avatar');
+        throw new Error("Failed to upload avatar");
       }
 
       const data = await response.json();
-      
-      // Update local state with new avatar URL
-      setSettings(prev => ({
+      setSettings((prev) => ({
         ...prev,
-        avatar: data.url
+        avatar: data.url,
       }));
-
-      // Update auth context to sync avatar across components
       updateUserAvatar(data.url);
-
-      toast.success('Avatar updated successfully');
+      toast.success("Avatar updated successfully");
     } catch (error) {
-      console.error('Avatar upload error:', error);
-      toast.error('Failed to upload avatar');
+      console.error("Avatar upload error:", error);
+      toast.error("Failed to upload avatar");
     }
   };
 
-  const SettingCard = ({ 
-    icon: Icon, 
-    title, 
-    description, 
-    children 
-  }: { 
-    icon: any, 
-    title: string, 
-    description: string, 
-    children: React.ReactNode 
-  }) => (
-    <motion.div
-      initial={false}
-      className="bg-background p-6 rounded-xl shadow-sm border border-muted/50 hover:border-primary/20 transition-all"
-    >
-      <div className="flex items-start gap-4">
-        <div className="p-3 rounded-lg bg-primary/10">
-          <Icon className="w-6 h-6 text-primary" />
-        </div>
-        <div className="flex-1 space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold">{title}</h3>
-            <p className="text-sm text-muted-foreground">{description}</p>
+  const displayName = user
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Admin User"
+    : "Admin User";
+  const initials =
+    [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join("") || "A";
+
+  const renderSectionContent = () => {
+    switch (activeSection) {
+      case "general":
+        return (
+          <SettingsPanel
+            title="Appearance & layout"
+            description="Personalize how the admin dashboard looks and behaves"
+          >
+            <div className="grid gap-6 sm:grid-cols-2">
+              <SettingsField label="Table density">
+                <Select
+                  value={settings.tableRowsPerPage.toString()}
+                  onValueChange={(value) =>
+                    updateSetting("tableRowsPerPage", Number(value))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Rows per page" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10 rows per page</SelectItem>
+                    <SelectItem value="25">25 rows per page</SelectItem>
+                    <SelectItem value="50">50 rows per page</SelectItem>
+                  </SelectContent>
+                </Select>
+              </SettingsField>
+
+              <SettingsField label="Color theme">
+                <Select
+                  value={settings.theme}
+                  onValueChange={(value) => {
+                    updateSetting("theme", value);
+                    setAdminTheme(value as AdminTheme);
+                    if (value !== "studio") {
+                      try {
+                        setTheme(value);
+                      } catch {}
+                    }
+                    updateTheme(value as AdminTheme);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Theme" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="studio">Studio</SelectItem>
+                    <SelectItem value="system">System</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Studio keeps dashboard pages light with a premium dark sidebar.
+                </p>
+              </SettingsField>
+            </div>
+
+            <Separator />
+
+            <SettingsToggleRow
+              label="Compact sidebar"
+              description="Collapse the navigation sidebar to maximize workspace"
+              checked={settings.sidebarCollapsed}
+              onCheckedChange={async (checked) => {
+                updateSetting("sidebarCollapsed", checked);
+                try {
+                  await updateSettings({ sidebarCollapsed: checked } as any);
+                } catch {}
+              }}
+            />
+          </SettingsPanel>
+        );
+
+      case "notifications":
+        return (
+          <SettingsPanel
+            title="Notification preferences"
+            description="Choose how you receive alerts and updates"
+          >
+            <div className="space-y-3">
+              <SettingsToggleRow
+                label="Email notifications"
+                description="Receive important updates and alerts via email"
+                checked={settings.emailNotifications}
+                onCheckedChange={(checked) =>
+                  updateSetting("emailNotifications", checked)
+                }
+              />
+              <SettingsToggleRow
+                label="Push notifications"
+                description="Receive real-time browser push notifications"
+                checked={settings.pushNotifications}
+                onCheckedChange={(checked) =>
+                  updateSetting("pushNotifications", checked)
+                }
+              />
+            </div>
+          </SettingsPanel>
+        );
+
+      case "security":
+        return (
+          <SettingsPanel
+            title="Session security"
+            description="Control automatic logout and session duration"
+          >
+            <SettingsField
+              label="Auto logout"
+              hint="Automatically sign out after a period of inactivity"
+            >
+              <Select
+                value={settings.autoLogout.toString()}
+                onValueChange={(value) =>
+                  updateSetting("autoLogout", Number(value))
+                }
+              >
+                <SelectTrigger className="max-w-xs">
+                  <SelectValue placeholder="Auto logout time" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">15 minutes</SelectItem>
+                  <SelectItem value="30">30 minutes</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                  <SelectItem value="0">Never</SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsField>
+          </SettingsPanel>
+        );
+
+      case "contact":
+        return (
+          <div className="space-y-6">
+            <SettingsPanel
+              title="Public contact form"
+              description="Control visitor submissions and anti-spam protection"
+            >
+              <SettingsToggleRow
+                label="Enable contact form"
+                description="Allow visitors to send messages through the public site"
+                checked={settings.contactFormEnabled}
+                onCheckedChange={(checked) =>
+                  updateSetting("contactFormEnabled", checked)
+                }
+              />
+
+              <Separator />
+
+              <div>
+                <p className="mb-4 text-sm font-medium">Rate limiting</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SettingsField label="Min message length">
+                    <Input
+                      type="number"
+                      min={5}
+                      inputMode="numeric"
+                      value={settings.contactProtection.minMessageChars}
+                      onChange={(e) =>
+                        updateContactProtectionNumber(
+                          "minMessageChars",
+                          e.target.value,
+                          5,
+                          10000
+                        )
+                      }
+                    />
+                  </SettingsField>
+                  <SettingsField label="Max message length">
+                    <Input
+                      type="number"
+                      min={10}
+                      inputMode="numeric"
+                      value={settings.contactProtection.maxMessageChars}
+                      onChange={(e) =>
+                        updateContactProtectionNumber(
+                          "maxMessageChars",
+                          e.target.value,
+                          10,
+                          50000
+                        )
+                      }
+                    />
+                  </SettingsField>
+                  <SettingsField label="Max submissions per IP">
+                    <Input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={settings.contactProtection.maxSubmissionsPerIp}
+                      onChange={(e) =>
+                        updateContactProtectionNumber(
+                          "maxSubmissionsPerIp",
+                          e.target.value,
+                          1,
+                          100000
+                        )
+                      }
+                    />
+                  </SettingsField>
+                  <SettingsField label="IP window (minutes)">
+                    <Input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={settings.contactProtection.ipWindowMinutes}
+                      onChange={(e) =>
+                        updateContactProtectionNumber(
+                          "ipWindowMinutes",
+                          e.target.value,
+                          1,
+                          10080
+                        )
+                      }
+                    />
+                  </SettingsField>
+                  <SettingsField label="Block duration (minutes)">
+                    <Input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={settings.contactProtection.blockWindowMinutes}
+                      onChange={(e) =>
+                        updateContactProtectionNumber(
+                          "blockWindowMinutes",
+                          e.target.value,
+                          1,
+                          10080
+                        )
+                      }
+                    />
+                  </SettingsField>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="mb-4 text-sm font-medium">Captcha & scoring</p>
+                <div className="space-y-4">
+                  <SettingsToggleRow
+                    label="Captcha fallback"
+                    description="Challenge borderline suspicious submissions"
+                    checked={settings.contactProtection.captchaEnabled}
+                    onCheckedChange={(checked) =>
+                      updateContactProtection({ captchaEnabled: checked })
+                    }
+                  />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <SettingsField label="Captcha score threshold">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        inputMode="numeric"
+                        value={settings.contactProtection.captchaScoreThreshold}
+                        onChange={(e) =>
+                          updateContactProtectionNumber(
+                            "captchaScoreThreshold",
+                            e.target.value,
+                            1,
+                            100
+                          )
+                        }
+                      />
+                    </SettingsField>
+                    <SettingsField label="Block score threshold">
+                      <Input
+                        type="number"
+                        min={0}
+                        max={99}
+                        inputMode="numeric"
+                        value={settings.contactProtection.blockScoreThreshold}
+                        onChange={(e) =>
+                          updateContactProtectionNumber(
+                            "blockScoreThreshold",
+                            e.target.value,
+                            0,
+                            99
+                          )
+                        }
+                      />
+                    </SettingsField>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <p className="mb-4 text-sm font-medium">Google reCAPTCHA</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SettingsField label="Site key">
+                    <Input
+                      type="text"
+                      value={recaptchaSiteKey}
+                      onChange={(e) =>
+                        preserveScrollPosition(() =>
+                          setRecaptchaSiteKey(e.target.value)
+                        )
+                      }
+                      placeholder="Enter site key"
+                    />
+                  </SettingsField>
+                  <SettingsField
+                    label="Secret key"
+                    hint={
+                      hasRecaptchaSecret
+                        ? "Secret is configured. Enter a new value only to rotate."
+                        : "No secret key configured yet."
+                    }
+                  >
+                    <Input
+                      type="password"
+                      value={recaptchaSecretKey}
+                      onChange={(e) =>
+                        preserveScrollPosition(() =>
+                          setRecaptchaSecretKey(e.target.value)
+                        )
+                      }
+                      placeholder={
+                        hasRecaptchaSecret
+                          ? "Leave blank to keep current secret"
+                          : "Enter secret key"
+                      }
+                    />
+                  </SettingsField>
+                </div>
+              </div>
+            </SettingsPanel>
+
+            <SettingsPanel
+              title="Spam analytics"
+              description="Recent blocked and challenged submissions"
+              badge={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadContactAnalytics}
+                  disabled={isLoadingAnalytics}
+                >
+                  {isLoadingAnalytics ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Refresh
+                </Button>
+              }
+            >
+              <p className="text-sm text-muted-foreground">
+                Last 7 days · latest 20 events
+              </p>
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableHead className="font-semibold">IP</TableHead>
+                      <TableHead className="font-semibold">Reason</TableHead>
+                      <TableHead className="font-semibold">Event</TableHead>
+                      <TableHead className="font-semibold text-right">
+                        Time
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contactSpamEvents.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="py-8 text-center text-muted-foreground"
+                        >
+                          No spam events recorded yet.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      contactSpamEvents.map((event, index) => (
+                        <TableRow key={event.id || `${event.ip}-${index}`}>
+                          <TableCell className="font-mono text-xs">
+                            {event.ip || "unknown"}
+                          </TableCell>
+                          <TableCell className="max-w-[180px] truncate">
+                            {event.reason || "unknown"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-normal">
+                              {event.eventType || "unknown"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">
+                            {event.createdAt
+                              ? new Date(event.createdAt).toLocaleString()
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </SettingsPanel>
           </div>
-          {children}
-        </div>
-      </div>
-    </motion.div>
-  );
+        );
+
+      case "email":
+        return (
+          <SettingsPanel
+            title="Email delivery"
+            description="Configure outbound email for invites and notifications without SMTP on Render"
+            badge={
+              emailTransport.configured ? (
+                <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Configured
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 text-amber-600">
+                  <AlertCircle className="h-3 w-3" />
+                  Not configured
+                </Badge>
+              )
+            }
+          >
+            <SettingsField label="Provider">
+              <Select
+                value={emailTransport.provider}
+                onValueChange={(value) =>
+                  setEmailTransport((current) => {
+                    const next = { ...current, provider: value };
+                    if (value === "netlify_relay" || value === "relay") {
+                      next.relayUrl = DEFAULT_BQITECH_RELAY_URL;
+                      next.usesBqitechApiRelay = true;
+                    }
+                    return next;
+                  })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="netlify_relay">
+                    BQI API relay (api.bqitech.com — recommended)
+                  </SelectItem>
+                  <SelectItem value="sendgrid">SendGrid API (direct)</SelectItem>
+                  <SelectItem value="smtp">SMTP (Office 365)</SelectItem>
+                </SelectContent>
+              </Select>
+            </SettingsField>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {(emailTransport.provider === "netlify_relay" ||
+                emailTransport.provider === "relay") && (
+                <SettingsField
+                  label="Relay URL"
+                  hint={
+                    isBqitechApiRelayUrl(emailTransport.relayUrl)
+                      ? "Production API on paid Render — sends via Office 365 SMTP"
+                      : isLegacyNetlifyRelayUrl(emailTransport.relayUrl)
+                        ? "Legacy Netlify relay — requires SendGrid API key below"
+                        : "HTTP relay endpoint"
+                  }
+                  className="sm:col-span-2"
+                >
+                  <Input
+                    value={emailTransport.relayUrl}
+                    onChange={(e) =>
+                      setEmailTransport((current) => ({
+                        ...current,
+                        relayUrl: e.target.value,
+                        usesBqitechApiRelay: isBqitechApiRelayUrl(e.target.value),
+                      }))
+                    }
+                    placeholder={DEFAULT_BQITECH_RELAY_URL}
+                  />
+                </SettingsField>
+              )}
+
+              {isLegacyNetlifyRelayUrl(emailTransport.relayUrl) && (
+                <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  This URL points at Netlify. For dev on Render, use{" "}
+                  <button
+                    type="button"
+                    className="font-medium underline"
+                    onClick={() =>
+                      setEmailTransport((current) => ({
+                        ...current,
+                        relayUrl: DEFAULT_BQITECH_RELAY_URL,
+                        usesBqitechApiRelay: true,
+                      }))
+                    }
+                  >
+                    {DEFAULT_BQITECH_RELAY_URL}
+                  </button>{" "}
+                  — no SendGrid required.
+                </div>
+              )}
+
+              {isBqitechApiRelayUrl(emailTransport.relayUrl) && (
+                <SettingsField
+                  label="Relay secret"
+                  hint={
+                    emailTransport.hasRelaySecret
+                      ? "Secret is saved. Enter a new value only to replace it."
+                      : "Must match EMAIL_RELAY_SECRET on api.bqitech.com (Render)"
+                  }
+                  className="sm:col-span-2"
+                >
+                  <Input
+                    type="password"
+                    value={emailTransport.relaySecret}
+                    onChange={(e) =>
+                      setEmailTransport((current) => ({
+                        ...current,
+                        relaySecret: e.target.value,
+                      }))
+                    }
+                    placeholder={
+                      emailTransport.hasRelaySecret
+                        ? "••••••••••••••••"
+                        : "Shared relay key"
+                    }
+                  />
+                </SettingsField>
+              )}
+
+              <SettingsField label="From email" hint="Sender address for outbound mail">
+                <Input
+                  type="email"
+                  value={emailTransport.fromEmail}
+                  onChange={(e) =>
+                    setEmailTransport((current) => ({
+                      ...current,
+                      fromEmail: e.target.value,
+                    }))
+                  }
+                  placeholder="hr@bqitech.com"
+                />
+              </SettingsField>
+
+              {(emailTransport.provider === "sendgrid" ||
+                isLegacyNetlifyRelayUrl(emailTransport.relayUrl)) && (
+                <SettingsField
+                  label="SendGrid API key"
+                  hint={
+                    emailTransport.hasSendgridApiKey
+                      ? "API key is saved. Enter a new value only to replace it."
+                      : "From your SendGrid dashboard → Settings → API Keys"
+                  }
+                >
+                  <Input
+                    type="password"
+                    value={emailTransport.sendgridApiKey}
+                    onChange={(e) =>
+                      setEmailTransport((current) => ({
+                        ...current,
+                        sendgridApiKey: e.target.value,
+                      }))
+                    }
+                    placeholder={
+                      emailTransport.hasSendgridApiKey
+                        ? "••••••••••••••••"
+                        : "SG.xxxxxxxxxxxx"
+                    }
+                  />
+                </SettingsField>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">BQI production relay</p>
+              <p className="mt-1">
+                Dev backends POST to{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  {DEFAULT_BQITECH_RELAY_URL}
+                </code>
+                . Production sends mail via Office 365 SMTP — no SendGrid required.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                type="button"
+                onClick={() => handleSaveEmailTransport()}
+                disabled={isSavingEmailTransport}
+              >
+                {isSavingEmailTransport ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Save email settings
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleTestEmailTransport}
+                disabled={isTestingEmail}
+              >
+                {isTestingEmail ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="mr-2 h-4 w-4" />
+                )}
+                Send test email
+              </Button>
+            </div>
+          </SettingsPanel>
+        );
+
+      case "ai":
+        return (
+          <SettingsPanel
+            title="AI providers"
+            description="Configure OpenAI-compatible AI providers, models and API keys. The active provider powers AI ranking, survey and email generation."
+            badge={
+              aiProviders.some((provider) => provider.hasApiKey) ? (
+                <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Configured
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 text-amber-600">
+                  <AlertCircle className="h-3 w-3" />
+                  Not configured
+                </Badge>
+              )
+            }
+          >
+            {aiProviders.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                No AI providers configured yet. Add one to get started.
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {aiProviders.map((provider) => {
+                  const isActive = aiActiveProviderId === provider.id;
+                  const isTesting = testingAiProviderId === provider.id;
+                  return (
+                    <div
+                      key={provider.id}
+                      className={cn(
+                        "rounded-xl border p-5 transition-colors",
+                        isActive
+                          ? "border-primary/40 bg-primary/[0.04]"
+                          : "border-border/60 bg-muted/20"
+                      )}
+                    >
+                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setAiActiveProviderId(provider.id)}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                              isActive
+                                ? "border-primary/40 bg-primary/10 text-primary"
+                                : "border-border/60 text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <Star
+                              className={cn(
+                                "h-3.5 w-3.5",
+                                isActive && "fill-current"
+                              )}
+                            />
+                            {isActive ? "Active" : "Set active"}
+                          </button>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveAiProvider(provider.id)}
+                        >
+                          <Trash2 className="mr-1.5 h-4 w-4" />
+                          Remove
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <SettingsField label="Display name">
+                          <Input
+                            value={provider.label}
+                            onChange={(e) =>
+                              updateAiProvider(provider.id, {
+                                label: e.target.value,
+                              })
+                            }
+                            placeholder="e.g. NVIDIA production"
+                          />
+                        </SettingsField>
+
+                        <SettingsField label="Provider type">
+                          <Select
+                            value={provider.providerType}
+                            onValueChange={(value) =>
+                              handleAiProviderTypeChange(provider.id, value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {AI_PROVIDER_PRESETS.map((preset) => (
+                                <SelectItem
+                                  key={preset.value}
+                                  value={preset.value}
+                                >
+                                  {preset.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </SettingsField>
+
+                        <SettingsField
+                          label="Base URL"
+                          hint="OpenAI-compatible endpoint (without /chat/completions)"
+                          className="sm:col-span-2"
+                        >
+                          <Input
+                            value={provider.baseUrl}
+                            onChange={(e) =>
+                              updateAiProvider(provider.id, {
+                                baseUrl: e.target.value,
+                              })
+                            }
+                            placeholder="https://api.openai.com/v1"
+                          />
+                        </SettingsField>
+
+                        <SettingsField label="Model">
+                          <Input
+                            value={provider.model}
+                            onChange={(e) =>
+                              updateAiProvider(provider.id, {
+                                model: e.target.value,
+                              })
+                            }
+                            placeholder="gpt-4o-mini"
+                          />
+                        </SettingsField>
+
+                        <SettingsField
+                          label="API key"
+                          hint={
+                            provider.hasApiKey
+                              ? "Key is saved. Enter a new value only to replace it."
+                              : "Bearer token for this provider"
+                          }
+                        >
+                          <Input
+                            type="password"
+                            autoComplete="new-password"
+                            value={provider.apiKey}
+                            onChange={(e) =>
+                              updateAiProvider(provider.id, {
+                                apiKey: e.target.value,
+                              })
+                            }
+                            placeholder={
+                              provider.hasApiKey
+                                ? provider.apiKeyHint || "••••••••••••••••"
+                                : "sk-..."
+                            }
+                          />
+                        </SettingsField>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleTestAiProvider(provider)}
+                          disabled={isTesting}
+                        >
+                          {isTesting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Bot className="mr-2 h-4 w-4" />
+                          )}
+                          Test connection
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={handleAddAiProvider}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add provider
+              </Button>
+              <Button
+                type="button"
+                onClick={() => handleSaveAiProviders()}
+                disabled={isSavingAiProviders}
+              >
+                {isSavingAiProviders ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Save AI settings
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-4 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">Shared across admins</p>
+              <p className="mt-1">
+                AI providers are stored centrally, so a key saved by any admin
+                enables AI features for every admin. AI stays off until a
+                provider with an API key is saved here.
+              </p>
+            </div>
+          </SettingsPanel>
+        );
+
+      case "system":
+        return (
+          <SettingsPanel
+            title="Database sync"
+            description="Manually synchronize database replicas and connected stores"
+          >
+            <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Run database sync</p>
+                <p className="text-sm text-muted-foreground">
+                  Triggers an immediate sync between configured database targets.
+                  Use after configuration changes or data migrations.
+                </p>
+              </div>
+              <Button
+                onClick={handleManualDatabaseSync}
+                disabled={isSyncingDatabases}
+                variant="outline"
+                className="shrink-0"
+              >
+                {isSyncingDatabases ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Syncing…
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Sync now
+                  </>
+                )}
+              </Button>
+            </div>
+          </SettingsPanel>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   if (isLoading) {
     return (
@@ -435,35 +1764,37 @@ function SettingsPageContent() {
     );
   }
 
+  const showGlobalSave =
+    activeSection !== "email" &&
+    activeSection !== "ai" &&
+    activeSection !== "system";
+
   return (
-    <AdminPageLayout
-      title="Settings"
-      showSearch={false}
-      className="mx-auto px-4 md:px-6 lg:px-8"
-    >
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Profile Header */}
-        <motion.div 
+    <AdminPageLayout title="Settings" showSearch={false}>
+      <div className="mx-auto max-w-6xl space-y-8">
+        {/* Profile hero */}
+        <motion.div
           initial={false}
-          className="p-6 rounded-2xl shadow-sm border border-border bg-card"
+          className="relative overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
         >
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <div className="relative group shrink-0">
-              <Avatar className="h-32 w-32 md:h-40 md:w-40 ring-4 ring-white/80 shadow-lg">
-                <AvatarImage 
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.07] via-transparent to-primary/[0.03]" />
+          <div className="relative flex flex-col items-center gap-6 p-6 md:flex-row md:p-8">
+            <div className="group relative shrink-0">
+              <Avatar className="h-28 w-28 ring-4 ring-background shadow-lg md:h-32 md:w-32">
+                <AvatarImage
                   src={user?.avatar}
-                  alt={user?.name || 'Admin User'}
+                  alt={displayName}
                   className="object-cover"
                 />
-                <AvatarFallback>
-                  {[user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('') || 'A'}
+                <AvatarFallback className="text-xl font-semibold">
+                  {initials}
                 </AvatarFallback>
               </Avatar>
-              <label 
+              <label
                 htmlFor="avatarUpload"
-                className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full cursor-pointer"
+                className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
               >
-                <Camera className="h-8 w-8 text-white" />
+                <Camera className="h-7 w-7 text-white" />
               </label>
               <input
                 id="avatarUpload"
@@ -473,517 +1804,109 @@ function SettingsPageContent() {
                 onChange={handleAvatarUpload}
               />
             </div>
-            
-            <div className="space-y-2 text-center md:text-left">
-              <h2 className="text-2xl md:text-3xl font-bold">
-                {user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Admin User' : 'Admin User'}
-              </h2>
-              <p className="text-muted-foreground text-sm md:text-base">
-                {user?.email}
-              </p>
-              <div className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                {user?.role || 'admin'}
+
+            <div className="flex-1 space-y-3 text-center md:text-left">
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+                  {displayName}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground md:text-base">
+                  {user?.email}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2 md:justify-start">
+                <Badge variant="secondary" className="capitalize">
+                  {user?.role || "admin"}
+                </Badge>
+                <Badge variant="outline" className="gap-1">
+                  <Layout className="h-3 w-3" />
+                  Admin settings
+                </Badge>
               </div>
             </div>
           </div>
         </motion.div>
 
-        {/* Settings Cards */}
-        <div className="flex flex-col gap-6">
-          <SettingCard
-            icon={Layout}
-            title="Interface Preferences"
-            description="Customize your dashboard appearance and layout"
-          >
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Table Density</Label>
-                <Select
-                  value={settings.tableRowsPerPage.toString()}
-                  onValueChange={(value) => 
-                    updateSetting('tableRowsPerPage', Number(value))
-                  }
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Rows per page" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="10">10 rows</SelectItem>
-                    <SelectItem value="25">25 rows</SelectItem>
-                    <SelectItem value="50">50 rows</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Theme</Label>
-                <Select
-                  value={settings.theme}
-                  onValueChange={(value) => {
-                    updateSetting('theme', value);
-                    try {
-                      setTheme(value);
-                    } catch {}
-                    updateTheme(value as any);
-                  }}
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Theme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div>
-                  <Label className="font-medium">Compact Sidebar</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Collapse sidebar navigation
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.sidebarCollapsed}
-                  onCheckedChange={async (checked) => {
-                    updateSetting('sidebarCollapsed', checked)
-                    try {
-                      await updateSettings({ sidebarCollapsed: checked } as any)
-                    } catch {}
-                  }}
-                />
-              </div>
-            </div>
-          </SettingCard>
-
-          <SettingCard
-            icon={Bell}
-            title="Notifications"
-            description="Manage your notification preferences"
-          >
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div>
-                  <Label className="font-medium">Email Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications via email
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.emailNotifications}
-                  onCheckedChange={(checked) => 
-                    updateSetting('emailNotifications', checked)
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div>
-                  <Label className="font-medium">Push Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive browser push notifications
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.pushNotifications}
-                  onCheckedChange={(checked) => 
-                    updateSetting('pushNotifications', checked)
-                  }
-                />
-              </div>
-            </div>
-          </SettingCard>
-
-          <SettingCard
-            icon={Shield}
-            title="Security"
-            description="Manage your security preferences"
-          >
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Auto Logout (minutes)</Label>
-                <Select
-                  value={settings.autoLogout.toString()}
-                  onValueChange={(value) => 
-                    updateSetting('autoLogout', Number(value))
-                  }
-                >
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Auto logout time" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="15">15 minutes</SelectItem>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                    <SelectItem value="60">1 hour</SelectItem>
-                    <SelectItem value="120">2 hours</SelectItem>
-                    <SelectItem value="0">Never</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </SettingCard>
-
-          <SettingCard
-            icon={Bell}
-            title="Public Contact Form"
-            description="Control whether website visitors can submit contact messages"
-          >
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div>
-                  <Label className="font-medium">Enable Contact Form</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Disable this to temporarily block all contact form submissions
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.contactFormEnabled}
-                  onCheckedChange={(checked) =>
-                    updateSetting('contactFormEnabled', checked)
-                  }
-                />
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-medium">Minimum Message Characters</Label>
-                  <Input
-                    type="number"
-                    min={5}
-                    inputMode="numeric"
-                    value={settings.contactProtection.minMessageChars}
-                    onChange={(e) =>
-                      updateContactProtectionNumber("minMessageChars", e.target.value, 5, 10000)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Maximum Message Characters</Label>
-                  <Input
-                    type="number"
-                    min={10}
-                    inputMode="numeric"
-                    value={settings.contactProtection.maxMessageChars}
-                    onChange={(e) =>
-                      updateContactProtectionNumber("maxMessageChars", e.target.value, 10, 50000)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Max Submissions Per IP</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={settings.contactProtection.maxSubmissionsPerIp}
-                    onChange={(e) =>
-                      updateContactProtectionNumber("maxSubmissionsPerIp", e.target.value, 1, 100000)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">IP Window (minutes)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={settings.contactProtection.ipWindowMinutes}
-                    onChange={(e) =>
-                      updateContactProtectionNumber("ipWindowMinutes", e.target.value, 1, 10080)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Block Duration (minutes)</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={settings.contactProtection.blockWindowMinutes}
-                    onChange={(e) =>
-                      updateContactProtectionNumber("blockWindowMinutes", e.target.value, 1, 10080)
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div>
-                  <Label className="font-medium">Enable Captcha Fallback</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Show captcha for borderline suspicious messages
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.contactProtection.captchaEnabled}
-                  onCheckedChange={(checked) =>
-                    updateContactProtection({ captchaEnabled: checked })
-                  }
-                />
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-medium">Captcha Score Threshold</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={100}
-                    inputMode="numeric"
-                    value={settings.contactProtection.captchaScoreThreshold}
-                    onChange={(e) =>
-                      updateContactProtectionNumber("captchaScoreThreshold", e.target.value, 1, 100)
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Block Score Threshold</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={99}
-                    inputMode="numeric"
-                    value={settings.contactProtection.blockScoreThreshold}
-                    onChange={(e) =>
-                      updateContactProtectionNumber("blockScoreThreshold", e.target.value, 0, 99)
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-medium">Google reCAPTCHA Site Key</Label>
-                <Input
-                  type="text"
-                  value={recaptchaSiteKey}
-                  onChange={(e) =>
-                    preserveScrollPosition(() => setRecaptchaSiteKey(e.target.value))
-                  }
-                  placeholder="Enter site key"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-medium">Google reCAPTCHA Secret Key</Label>
-                <Input
-                  type="password"
-                  value={recaptchaSecretKey}
-                  onChange={(e) =>
-                    preserveScrollPosition(() => setRecaptchaSecretKey(e.target.value))
-                  }
-                  placeholder={hasRecaptchaSecret ? "Secret key already set (enter new to replace)" : "Enter secret key"}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {hasRecaptchaSecret
-                    ? "Secret key is currently configured. Enter a new value only if you want to rotate it."
-                    : "No secret key configured yet."}
-                </p>
-              </div>
-            </div>
-          </SettingCard>
-
-          <SettingCard
-            icon={Shield}
-            title="Contact Spam Analytics"
-            description="Recent blocked/challenged submissions by IP, reason, and time"
-          >
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <p className="text-sm text-muted-foreground">
-                  Last 7 days, latest 20 events
-                </p>
-                <Button variant="outline" size="sm" onClick={loadContactAnalytics} disabled={isLoadingAnalytics}>
-                  {isLoadingAnalytics ? "Refreshing..." : "Refresh"}
-                </Button>
-              </div>
-
-              <div className="border rounded-lg overflow-hidden">
-                <div className="grid grid-cols-4 gap-2 px-3 py-2 text-xs font-semibold bg-muted/50">
-                  <span>IP</span>
-                  <span>Reason</span>
-                  <span>Event</span>
-                  <span>Time</span>
-                </div>
-                {contactSpamEvents.length === 0 ? (
-                  <div className="px-3 py-4 text-sm text-muted-foreground">
-                    No spam events recorded yet.
-                  </div>
-                ) : (
-                  contactSpamEvents.map((event, index) => (
-                    <div key={event.id || `${event.ip}-${index}`} className="grid grid-cols-4 gap-2 px-3 py-2 text-xs border-t">
-                      <span className="truncate">{event.ip || "unknown"}</span>
-                      <span className="truncate">{event.reason || "unknown"}</span>
-                      <span className="truncate">{event.eventType || "unknown"}</span>
-                      <span className="truncate">
-                        {event.createdAt ? new Date(event.createdAt).toLocaleString() : "-"}
-                      </span>
+        {/* Main layout: sidebar + content */}
+        <div className="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <nav className="lg:sticky lg:top-24 lg:self-start">
+            <p className="mb-3 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Sections
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setActiveSection(item.id)}
+                    className={cn(
+                      "flex min-w-[200px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all lg:min-w-0 lg:w-full",
+                      isActive
+                        ? "border-primary/30 bg-primary/10 text-primary shadow-sm"
+                        : "border-transparent bg-muted/30 text-muted-foreground hover:border-border/60 hover:bg-muted/50 hover:text-foreground"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                        isActive ? "bg-primary/15" : "bg-background"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
                     </div>
-                  ))
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-none">
+                        {item.label}
+                      </p>
+                      <p className="mt-1 truncate text-xs opacity-80">
+                        {item.description}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+
+          <motion.div
+            key={activeSection}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="min-w-0"
+          >
+            {renderSectionContent()}
+          </motion.div>
+        </div>
+
+        {/* Sticky action bar */}
+        {showGlobalSave ? (
+          <div className="sticky bottom-0 z-10 -mx-4 border-t border-border/60 bg-background/90 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/75 sm:-mx-6 sm:px-6">
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <p className="text-center text-xs text-muted-foreground sm:mr-auto sm:text-left">
+                Changes apply after you save settings.
+              </p>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                size="lg"
+                className="min-w-[140px]"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save settings"
                 )}
-              </div>
+              </Button>
             </div>
-          </SettingCard>
-
-          <SettingCard
-            icon={Sparkles}
-            title="AI Provider"
-            description="API key and model used for blog AI, email generation, surveys, and contact spam detection"
-          >
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div>
-                  <Label className="font-medium">Enable AI features</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Turn off to disable all AI-powered tools across the app
-                  </p>
-                </div>
-                <Switch checked={aiEnabled} onCheckedChange={setAiEnabled} />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-medium">Provider</Label>
-                <Select
-                  value={aiProvider}
-                  onValueChange={(v) => setAiProvider(v as "nvidia" | "openai")}
-                >
-                  <SelectTrigger className="w-[220px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nvidia">NVIDIA (build.nvidia.com)</SelectItem>
-                    <SelectItem value="openai">OpenAI-compatible</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="font-medium">API Key</Label>
-                <Input
-                  type="password"
-                  value={aiApiKey}
-                  onChange={(e) =>
-                    preserveScrollPosition(() => setAiApiKey(e.target.value))
-                  }
-                  placeholder={
-                    hasAiApiKey
-                      ? `Key configured ${aiApiKeyHint} — enter new to replace`
-                      : aiProvider === "nvidia"
-                        ? "nvapi-..."
-                        : "sk-..."
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  {hasAiApiKey
-                    ? `A key is saved ${aiApiKeyHint}. Leave blank to keep it when saving other fields.`
-                    : "No API key saved yet. Falls back to NVIDIA_API_KEY in Backend/.env if unset."}
-                </p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="font-medium">Base URL</Label>
-                  <Input
-                    value={aiBaseUrl}
-                    onChange={(e) =>
-                      preserveScrollPosition(() => setAiBaseUrl(e.target.value))
-                    }
-                    placeholder={
-                      aiProvider === "nvidia"
-                        ? "https://integrate.api.nvidia.com/v1"
-                        : "https://api.openai.com/v1"
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="font-medium">Model</Label>
-                  <Input
-                    value={aiModel}
-                    onChange={(e) =>
-                      preserveScrollPosition(() => setAiModel(e.target.value))
-                    }
-                    placeholder={
-                      aiProvider === "nvidia"
-                        ? "meta/llama-3.1-70b-instruct"
-                        : "gpt-4o-mini"
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleTestAiConnection}
-                  disabled={isTestingAi || isSavingAi}
-                >
-                  {isTestingAi ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Testing...
-                    </>
-                  ) : (
-                    "Test connection"
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleSaveAiSettings}
-                  disabled={isSavingAi || isTestingAi}
-                >
-                  {isSavingAi ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save AI settings"
-                  )}
-                </Button>
-              </div>
-            </div>
-          </SettingCard>
-        </div>
-
-        {/* Save Button */}
-        <div className="flex justify-end pt-6">
-          <Button
-            onClick={handleManualDatabaseSync}
-            disabled={isSyncingDatabases}
-            variant="outline"
-            size="lg"
-            className="mr-3 min-w-[170px]"
-          >
-            {isSyncingDatabases ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Sync Databases
-              </>
-            )}
-          </Button>
-          <Button 
-            onClick={handleSave} 
-            disabled={isSaving}
-            size="lg"
-            className="min-w-[120px]"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              'Save Settings'
-            )}
-          </Button>
-        </div>
+          </div>
+        ) : null}
       </div>
     </AdminPageLayout>
   );
@@ -992,7 +1915,9 @@ function SettingsPageContent() {
 export default function SettingsPage() {
   return (
     <ProtectedRoute requireAdmin>
-      <SettingsPageContent />
+      <Suspense fallback={null}>
+        <SettingsPageContent />
+      </Suspense>
     </ProtectedRoute>
   );
-} 
+}

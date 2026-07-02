@@ -39,6 +39,10 @@ export default function ArchivedApplicationsPage() {
     handleEdit,
     handleDelete,
     handleSaveEdit,
+    handleSaveFromView,
+    handleRankApplication,
+    aiRankProgress,
+    rankingApplicationId,
     handleConfirmDelete,
     handleBulkUnarchive,
   } = useAdminApplicationPage({
@@ -109,6 +113,8 @@ export default function ArchivedApplicationsPage() {
         onEdit={handleEdit}
         onDelete={handleDelete}
         onBulkUnarchive={handleBulkUnarchive}
+        onRank={handleRankApplication}
+        rankingApplicationId={rankingApplicationId}
       />
 
       {totalPages > 1 && (
@@ -125,6 +131,9 @@ export default function ArchivedApplicationsPage() {
         isOpen={!!viewApplication}
         onClose={() => setViewApplication(null)}
         jobTitles={jobTitles}
+        onSave={handleSaveFromView}
+        onRank={handleRankApplication}
+        rankProgress={aiRankProgress}
       />
 
       <EditApplicationModal

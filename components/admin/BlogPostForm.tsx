@@ -25,8 +25,6 @@ import type { BlogPost } from "@/types/blog";
 import Image from "next/image";
 import { authService } from "@/lib/auth-backend";
 import { BACKEND_URL } from "@/lib/config";
-import { adminApi } from "@/lib/api-backend";
-import { BlogAiButton } from "@/components/admin/BlogAiButton";
 
 const formSchema = z.object({
   title: z
@@ -46,7 +44,10 @@ const formSchema = z.object({
     .min(1, "Excerpt is required")
     .max(300, "Excerpt must be less than 300 characters"),
   content: z.string().min(1, "Content is required"),
-  imageUrl: z.union([z.literal(""), z.string().url("Must be a valid URL")]),
+  imageUrl: z
+    .string()
+    .min(1, "Featured image is required")
+    .url("Must be a valid URL"),
   category: z.string().min(1, "Category is required"),
   readTime: z.string().min(1, "Read time is required"),
   published: z.boolean().default(false),
@@ -57,23 +58,20 @@ const formSchema = z.object({
     .optional(),
   authorName: z
     .string()
-    .max(100, "Author name must be less than 100 characters")
-    .optional()
-    .or(z.literal("")),
+    .min(1, "Author name is required")
+    .max(100, "Author name must be less than 100 characters"),
   authorBio: z
     .string()
-    .max(500, "Author bio must be less than 500 characters")
-    .optional()
-    .or(z.literal("")),
+    .min(1, "Author bio is required")
+    .max(500, "Author bio must be less than 500 characters"),
   authorTitle: z
     .string()
-    .max(100, "Author title must be less than 100 characters")
-    .optional()
-    .or(z.literal("")),
-  authorProfileImage: z.union([
-    z.literal(""),
-    z.string().url("Must be a valid URL"),
-  ]),
+    .min(1, "Author title is required")
+    .max(100, "Author title must be less than 100 characters"),
+  authorProfileImage: z
+    .string()
+    .min(1, "Author profile image is required")
+    .url("Must be a valid URL"),
   authorTwitter: z.string().optional(),
   authorLinkedin: z.string().optional(),
   authorGithub: z.string().optional(),
@@ -262,26 +260,10 @@ const DragDropUpload = ({
   );
 };
 
-type BlogAiTask =
-  | "excerpt"
-  | "meta_description"
-  | "author_bio"
-  | "author_title"
-  | "format_content"
-  | "suggest_tags"
-  | "read_time";
-
 export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [aiTask, setAiTask] = useState<BlogAiTask | null>(null);
   const [tagInput, setTagInput] = useState("");
-  const [includeAuthor, setIncludeAuthor] = useState(
-    Boolean(
-      initialData?.authorProfile?.name ||
-        (initialData as { authorName?: string })?.authorName
-    )
-  );
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -313,82 +295,6 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
       .trim()
       .replace(/[^\w\s-]/g, "")
       .replace(/[-\s]+/g, "-");
-  };
-
-  const buildAiContext = () => {
-    const values = form.getValues();
-    return {
-      title: values.title,
-      excerpt: values.excerpt,
-      category: values.category,
-      content: values.content,
-      authorName: values.authorName || "",
-      authorTitle: values.authorTitle || "",
-      authorBio: values.authorBio || "",
-    };
-  };
-
-  const runBlogAi = async (task: BlogAiTask) => {
-    const values = form.getValues();
-
-    if (task === "format_content" && !values.content?.trim()) {
-      toast.error("Add some content before formatting with AI");
-      return;
-    }
-    if (
-      (task === "excerpt" || task === "meta_description") &&
-      !values.title?.trim() &&
-      !values.content?.trim()
-    ) {
-      toast.error("Add a title or content first");
-      return;
-    }
-
-    setAiTask(task);
-    try {
-      const response = await adminApi.aiGenerateBlog({
-        task,
-        context: buildAiContext(),
-      });
-
-      if (task === "excerpt" && response.excerpt) {
-        form.setValue("excerpt", response.excerpt.slice(0, 300));
-        toast.success("Excerpt generated");
-      } else if (task === "meta_description" && response.metaDescription) {
-        form.setValue("metaDescription", response.metaDescription.slice(0, 160));
-        toast.success("Meta description generated");
-      } else if (task === "author_bio" && response.authorBio) {
-        form.setValue("authorBio", response.authorBio.slice(0, 500));
-        toast.success("Author bio generated");
-      } else if (task === "author_title" && response.authorTitle) {
-        form.setValue("authorTitle", response.authorTitle.slice(0, 100));
-        toast.success("Author title generated");
-      } else if (task === "format_content" && response.content) {
-        form.setValue("content", response.content);
-        toast.success("Content formatted with AI");
-      } else if (task === "suggest_tags" && Array.isArray(response.tags)) {
-        const existing = form.getValues("tags");
-        const merged = [...existing];
-        for (const tag of response.tags) {
-          if (merged.length >= 10) break;
-          if (!merged.includes(tag)) merged.push(tag);
-        }
-        form.setValue("tags", merged);
-        toast.success("Tags suggested");
-      } else if (task === "read_time" && response.readTime) {
-        form.setValue("readTime", response.readTime);
-        toast.success("Read time estimated");
-      } else {
-        toast.error("AI did not return usable content");
-      }
-    } catch (error) {
-      console.error("Blog AI error:", error);
-      toast.error(
-        error instanceof Error ? error.message : "AI generation failed"
-      );
-    } finally {
-      setAiTask(null);
-    }
   };
 
   const handleImageUpload = async (
@@ -511,38 +417,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
   const handleSubmit = async (data: FormData) => {
     try {
       setIsSubmitting(true);
-      const payload: Record<string, unknown> = { ...data };
-
-      if (!includeAuthor) {
-        delete payload.authorName;
-        delete payload.authorBio;
-        delete payload.authorTitle;
-        delete payload.authorProfileImage;
-        delete payload.authorTwitter;
-        delete payload.authorLinkedin;
-        delete payload.authorGithub;
-        delete payload.authorWebsite;
-      } else if (
-        !data.authorName?.trim() &&
-        !data.authorBio?.trim() &&
-        !data.authorTitle?.trim() &&
-        !data.authorProfileImage?.trim()
-      ) {
-        delete payload.authorName;
-        delete payload.authorBio;
-        delete payload.authorTitle;
-        delete payload.authorProfileImage;
-        delete payload.authorTwitter;
-        delete payload.authorLinkedin;
-        delete payload.authorGithub;
-        delete payload.authorWebsite;
-      }
-
-      if (!data.imageUrl?.trim()) {
-        payload.imageUrl = "";
-      }
-
-      await onSubmit(payload as FormData);
+      await onSubmit(data);
     } catch (error) {
       console.error("Form submission error:", error);
       toast.error(
@@ -624,15 +499,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
           name="excerpt"
           render={({ field }) => (
             <FormItem>
-              <div className="flex items-center justify-between gap-2">
-                <FormLabel className="!mt-0">Excerpt</FormLabel>
-                <BlogAiButton
-                  label="Generate"
-                  loading={aiTask === "excerpt"}
-                  disabled={!!aiTask}
-                  onClick={() => void runBlogAi("excerpt")}
-                />
-              </div>
+              <FormLabel>Excerpt</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Brief summary of the post"
@@ -654,15 +521,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
           name="metaDescription"
           render={({ field }) => (
             <FormItem>
-              <div className="flex items-center justify-between gap-2">
-                <FormLabel className="!mt-0">Meta Description (Optional)</FormLabel>
-                <BlogAiButton
-                  label="Generate"
-                  loading={aiTask === "meta_description"}
-                  disabled={!!aiTask}
-                  onClick={() => void runBlogAi("meta_description")}
-                />
-              </div>
+              <FormLabel>Meta Description (Optional)</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="SEO meta description"
@@ -684,13 +543,11 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
           name="imageUrl"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Featured Image (optional)</FormLabel>
-              <FormDescription>
-                Shown at the top of the post. You can also place images inside the content editor.
-              </FormDescription>
+              <FormLabel>Featured Image</FormLabel>
               <FormControl>
                 <DragDropUpload
                   onFileSelect={(file) => {
+                    console.log("Featured image file selected:", file);
                     handleImageUpload(file, "imageUrl");
                   }}
                   accept="image/jpeg,image/png,image/webp"
@@ -724,15 +581,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
           name="readTime"
           render={({ field }) => (
             <FormItem>
-              <div className="flex items-center justify-between gap-2">
-                <FormLabel className="!mt-0">Read Time</FormLabel>
-                <BlogAiButton
-                  label="Estimate"
-                  loading={aiTask === "read_time"}
-                  disabled={!!aiTask}
-                  onClick={() => void runBlogAi("read_time")}
-                />
-              </div>
+              <FormLabel>Read Time</FormLabel>
               <FormControl>
                 <Input placeholder="e.g., 5 min read" {...field} />
               </FormControl>
@@ -747,17 +596,8 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Content</FormLabel>
-              <FormDescription>
-                Rich text editor with toolbar. Use the &lt;/&gt; button for HTML source, or AI buttons on other fields.
-              </FormDescription>
               <FormControl>
-                <Editor
-                  value={field.value}
-                  onChange={field.onChange}
-                  variant="blog"
-                  onAiFormat={() => runBlogAi("format_content")}
-                  aiFormatting={aiTask === "format_content"}
-                />
+                <Editor value={field.value} onChange={field.onChange} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -770,15 +610,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
             name="tags"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-2">
-                  <FormLabel className="!mt-0">Tags</FormLabel>
-                  <BlogAiButton
-                    label="Suggest"
-                    loading={aiTask === "suggest_tags"}
-                    disabled={!!aiTask}
-                    onClick={() => void runBlogAi("suggest_tags")}
-                  />
-                </div>
+                <FormLabel>Tags</FormLabel>
                 <FormControl>
                   <div className="space-y-3">
                     <Input
@@ -815,22 +647,8 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
         </div>
 
         <div className="space-y-6 border-t pt-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-semibold">Author Profile</h3>
-              <p className="text-sm text-muted-foreground">
-                Optional — turn off to hide the author card on the published post.
-              </p>
-            </div>
-            <Switch
-              checked={includeAuthor}
-              onCheckedChange={setIncludeAuthor}
-              aria-label="Include author profile"
-            />
-          </div>
+          <h3 className="text-lg font-semibold">Author Profile</h3>
 
-          {includeAuthor && (
-          <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
               control={form.control}
@@ -842,7 +660,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
                     <Input placeholder="Full name" {...field} maxLength={100} />
                   </FormControl>
                   <FormDescription>
-                    {(field.value ?? "").length}/100 characters
+                    {field.value.length}/100 characters
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -854,15 +672,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
               name="authorTitle"
               render={({ field }) => (
                 <FormItem>
-                  <div className="flex items-center justify-between gap-2">
-                    <FormLabel className="!mt-0">Author Title</FormLabel>
-                    <BlogAiButton
-                      label="Suggest"
-                      loading={aiTask === "author_title"}
-                      disabled={!!aiTask}
-                      onClick={() => void runBlogAi("author_title")}
-                    />
-                  </div>
+                  <FormLabel>Author Title</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Job title or role"
@@ -871,7 +681,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
                     />
                   </FormControl>
                   <FormDescription>
-                    {(field.value ?? "").length}/100 characters
+                    {field.value.length}/100 characters
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -884,15 +694,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
             name="authorBio"
             render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between gap-2">
-                  <FormLabel className="!mt-0">Author Bio</FormLabel>
-                  <BlogAiButton
-                    label="Generate"
-                    loading={aiTask === "author_bio"}
-                    disabled={!!aiTask}
-                    onClick={() => void runBlogAi("author_bio")}
-                  />
-                </div>
+                <FormLabel>Author Bio</FormLabel>
                 <FormControl>
                   <Textarea
                     placeholder="Brief bio about the author"
@@ -902,7 +704,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
                   />
                 </FormControl>
                 <FormDescription>
-                  {(field.value ?? "").length}/500 characters
+                  {field.value.length}/500 characters
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -1003,8 +805,6 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
               />
             </div>
           </div>
-          </>
-          )}
         </div>
 
         <FormField

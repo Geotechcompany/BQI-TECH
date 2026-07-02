@@ -12,6 +12,7 @@ import {
   Sun,
   Moon,
   Laptop,
+  Sparkles,
   Trash2,
   Check,
   LogOut,
@@ -30,7 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
-import { useAdminTheme } from "@/contexts/AdminThemeContext";
+import { useAdminTheme, type AdminTheme } from "@/contexts/AdminThemeContext";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { adminApi } from "@/lib/api-backend";
@@ -134,6 +135,11 @@ export default function AdminPageHeader({
     user?.name?.slice(0, 2).toUpperCase() ||
     "A";
 
+  const applyAdminTheme = (next: AdminTheme) => {
+    setTheme(next);
+    void adminApi.updateSettings({ theme: next }).catch(() => {});
+  };
+
   return (
     <div 
       className="bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 z-50 flex h-16 items-center border-b border-border/60 w-full fixed left-0 right-0 transition-all duration-300 ease-in-out shadow-sm"
@@ -183,19 +189,37 @@ export default function AdminPageHeader({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
-                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                {theme === "studio" ? (
+                  <Sparkles className="h-4 w-4 text-[#31CDFF]" />
+                ) : (
+                  <>
+                    <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                    <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                  </>
+                )}
                 <span className="sr-only">Toggle theme</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setTheme("light")}>
+              <DropdownMenuItem onClick={() => applyAdminTheme("light")}>
                 <Sun className="mr-2 h-4 w-4" />
                 Light
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("dark")}>
+              <DropdownMenuItem onClick={() => applyAdminTheme("dark")}>
                 <Moon className="mr-2 h-4 w-4" />
                 Dark
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => applyAdminTheme("studio")}
+                className="flex items-center justify-between gap-4"
+              >
+                <span className="flex items-center">
+                  <Sparkles className="mr-2 h-4 w-4 shrink-0 text-[#31CDFF]" />
+                  Studio
+                </span>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                  Dark sidebar
+                </span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setGlobalTheme("system")}>
                 <Laptop className="mr-2 h-4 w-4" />

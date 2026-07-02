@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Download, FileText, X } from "lucide-react";
+import { CVPreviewFrame } from "./CVPreviewFrame";
 
 interface SimpleCVModalProps {
   isOpen: boolean;
@@ -12,58 +13,23 @@ interface SimpleCVModalProps {
 }
 
 export function SimpleCVModal({ isOpen, onClose, cvUrl, candidateName }: SimpleCVModalProps) {
-  const [previewError, setPreviewError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Handle escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         onClose();
       }
     };
 
     if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
+      document.addEventListener("keydown", handleEscape);
+      document.body.style.overflow = "hidden";
     }
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "unset";
     };
   }, [isOpen, onClose]);
-
-  // Reset states when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setPreviewError(false);
-      setIsLoading(true);
-    }
-  }, [isOpen]);
-
-  const getPreviewUrl = useCallback((url: string): string => {
-    if (!url) return '';
-    
-    try {
-      const parsed = new URL(url);
-      const isPdfPath = /\.pdf($|\?)/i.test(parsed.pathname + parsed.search);
-      const isDropbox = parsed.hostname.includes('dropbox.com') || parsed.hostname.includes('dropboxusercontent.com');
-
-      // Route through our proxy to bypass X-Frame-Options and CORS for allowed hosts
-      const proxied = `/api/proxy?url=${encodeURIComponent(parsed.toString())}`;
-      
-      // Add zoom parameter for PDF files to set a better default view
-      if (isPdfPath || isDropbox) {
-        return proxied + '#zoom=75&toolbar=1&navpanes=0';
-      }
-      
-      return proxied;
-    } catch (error) {
-      console.error('Error processing preview URL:', error);
-      return url;
-    }
-  }, []);
 
   const getDownloadUrl = useCallback((url: string): string => {
     if (!url) return '';
@@ -126,8 +92,6 @@ export function SimpleCVModal({ isOpen, onClose, cvUrl, candidateName }: SimpleC
 
   if (!isOpen || !cvUrl) return null;
 
-  const previewUrl = getPreviewUrl(cvUrl);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div 
@@ -168,55 +132,13 @@ export function SimpleCVModal({ isOpen, onClose, cvUrl, candidateName }: SimpleC
         
         {/* Content */}
         <div className="flex-1 p-6 overflow-hidden">
-          {!previewError ? (
-            <div className="w-full h-full bg-white border border-gray-300 rounded-lg overflow-hidden">
-              {isLoading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white z-10">
-                  <div className="text-center space-y-2">
-                    <div className="animate-spin h-8 w-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
-                    <p className="text-sm text-gray-600">Loading CV...</p>
-                  </div>
-                </div>
-              )}
-              <iframe
-                title={`CV - ${candidateName || 'Candidate'}`}
-                src={previewUrl}
-                className="w-full h-full"
-                referrerPolicy="no-referrer"
-                allow="fullscreen"
-                style={{
-                  border: 'none',
-                  minHeight: '500px'
-                }}
-                onLoad={() => {
-                  setIsLoading(false);
-                  setPreviewError(false);
-                }}
-                onError={() => {
-                  setIsLoading(false);
-                  setPreviewError(true);
-                }}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
-              <FileText className="h-16 w-16 text-gray-400" />
-              <div className="space-y-2">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Unable to preview this document
-                </h3>
-                <p className="text-gray-600 max-w-md">
-                  The document cannot be displayed in this preview. You can download it or open it in a new tab.
-                </p>
-              </div>
-              <div className="flex gap-3 flex-wrap justify-center">
-                <Button onClick={handleDownload}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download CV
-                </Button>
-              </div>
-            </div>
-          )}
+          <div className="h-full min-h-[500px] rounded-lg border border-gray-300 bg-white">
+            <CVPreviewFrame
+              cvUrl={cvUrl}
+              title={`CV - ${candidateName || "Candidate"}`}
+              className="h-full min-h-[500px]"
+            />
+          </div>
         </div>
       </div>
     </div>

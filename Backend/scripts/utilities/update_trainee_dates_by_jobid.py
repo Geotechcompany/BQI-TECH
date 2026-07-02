@@ -33,14 +33,14 @@ for env_file in env_files:
 def get_database():
     """Get database connection with multiple fallback options"""
     # Try different environment variable names
-    mongo_uri_options = [
+    MONGODB_URI_options = [
         os.getenv('MONGODB_URI'),
-        os.getenv('MONGO_URI'), 
+        os.getenv('MONGODB_URI'), 
         os.getenv('DATABASE_URL'),
         'mongodb://localhost:27017/bqi_database'  # fallback
     ]
     
-    for uri in mongo_uri_options:
+    for uri in MONGODB_URI_options:
         if uri:
             try:
                 print(f"🔌 Attempting connection with URI: {uri[:20]}...")

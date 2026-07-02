@@ -81,6 +81,14 @@ export interface Application {
     isArchived?: boolean;
     archivedAt?: Date | string;
     archivedBy?: string;
+
+    // AI ranking (admin)
+    aiRankScore?: number;
+    aiRankSummary?: string;
+    aiRankStrengths?: string[];
+    aiRankGaps?: string[];
+    aiRankRecommendation?: string;
+    aiRankedAt?: Date | string;
 }
 
 export interface ShortlistedCandidate extends Application {

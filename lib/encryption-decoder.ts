@@ -30,8 +30,10 @@ class ResponseDecryption {
         return await this.decryptWithMasterKey(response);
       }
     } catch (error) {
-      console.error('Decryption failed:', error);
-      // Fallback to original response if decryption fails
+      // Let callers fall back to ResponseDecoder when session-key decryption fails.
+      if (this.isEncryptedResponse(response)) {
+        throw error;
+      }
       return response;
     }
   }
@@ -119,7 +121,6 @@ class ResponseDecryption {
       return JSON.parse(decryptedText);
       
     } catch (error) {
-      console.error('Decryption operation failed:', error);
       throw error;
     }
   }

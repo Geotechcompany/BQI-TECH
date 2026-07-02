@@ -15,8 +15,37 @@ from pathlib import Path
 import os
 import re
 from typing import Dict, Any, List
-from app.lib.email import send_bulk_emails_backend, send_admin_privilege_upgrade_email
+from app.lib.email import (
+    send_bulk_emails_backend,
+    send_admin_privilege_upgrade_email,
+    send_admin_invite_email,
+)
+from app.lib.email_transport import is_email_configured
 from app.lib.roles import is_admin_role, normalize_role, was_promoted_to_admin
+from app.lib.admin_permissions import (
+    ADMIN_MODULE_LABELS,
+    can_manage_admin_users,
+    can_manage_backup,
+    get_effective_admin_modules,
+    list_admin_modules_catalog,
+    normalize_admin_modules,
+)
+from app.lib.applicant_ranking import rank_application_by_id
+from app.lib.admin_audit import (
+    log_blog_created,
+    log_blog_updated,
+    log_blog_deleted,
+    log_bulk_operation,
+    log_custom_action,
+    log_resource_created,
+    log_resource_deleted,
+    log_resource_updated,
+    safe_record_admin_activity,
+)
+from app.lib.nvidia_ai import test_nvidia_connection
+from app.lib.error_utils import format_exception_message
+from app.auth import get_password_hash
+import secrets
 
 router = APIRouter(tags=["admin"])
 
@@ -62,30 +91,19 @@ def generate_slug(title: str) -> str:
     return slug
 
 
-def parse_blog_datetime(value: Any) -> datetime:
-    """Parse createdAt/updatedAt from admin UI (ISO string or YYYY-MM-DD)."""
-    if isinstance(value, datetime):
-        return value
-    if not isinstance(value, str):
-        raise ValueError("Date must be a string (YYYY-MM-DD or ISO)")
-    text = value.strip()
-    if not text:
-        raise ValueError("Date cannot be empty")
-    if len(text) == 10 and text[4] == "-" and text[7] == "-":
-        return datetime.strptime(text, "%Y-%m-%d")
-    normalized = text.replace("Z", "+00:00")
-    try:
-        return datetime.fromisoformat(normalized)
-    except ValueError as exc:
-        raise ValueError(f"Invalid date format: {value}") from exc
-
-
-def _normalize_blog_date_fields(update_data: Dict[str, Any]) -> None:
-    """Convert createdAt from JSON strings to datetime for MongoDB."""
-    if "createdAt" in update_data and update_data["createdAt"] is not None:
-        update_data["createdAt"] = parse_blog_datetime(update_data["createdAt"])
-    if "updatedAt" in update_data and update_data["updatedAt"] is not None:
-        update_data["updatedAt"] = parse_blog_datetime(update_data["updatedAt"])
+def _normalize_text_value(value: Any) -> str:
+    """Coerce mixed DB values (str, list, None) into a stripped string."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        for item in value:
+            normalized = _normalize_text_value(item)
+            if normalized:
+                return normalized
+        return ""
+    return str(value).strip()
 
 # ---------------------- Admin Email Broadcast ----------------------
 @router.post("/emails/broadcast")
@@ -137,6 +155,16 @@ async def admin_email_broadcast(
             sent_by=str(current_user.get("_id")),
             campaign_name=payload.get("campaign_name"),
         )
+
+        if not dry_run:
+            await log_custom_action(
+                db,
+                current_user,
+                action="sent",
+                resource_type="email_broadcast",
+                detail=f"{result.get('sent', len(recipients))} recipients — subject: {subject[:80]}",
+                resource_title=subject,
+            )
 
         return JSONResponse(content=result)
     except HTTPException:
@@ -515,6 +543,10 @@ async def create_job_posting(
     result = await db.jobpostings.insert_one(job_data)
     job_data["_id"] = str(result.inserted_id)
     job_data["id"] = str(result.inserted_id)
+
+    await log_resource_created(
+        db, current_user, resource_type="job_posting", doc=job_data, title_field="title"
+    )
     
     return job_data
 
@@ -548,6 +580,10 @@ async def update_job_posting(
     db = get_database()
     
     try:
+        existing = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Job posting not found")
+
         # Remove immutable and server-managed fields if present in payload
         for key in ["_id", "id", "createdAt", "updatedAt"]:
             if key in update_data:
@@ -572,6 +608,16 @@ async def update_job_posting(
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Job posting not found")
+
+        await log_resource_updated(
+            db,
+            current_user,
+            resource_type="job_posting",
+            existing=existing,
+            updates=update_data,
+            resource_id=job_id,
+            title_field="title",
+        )
         
         # Return the updated document for UI freshness
         updated = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
@@ -592,9 +638,22 @@ async def delete_job_posting(
     db = get_database()
     
     try:
+        existing = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Job posting not found")
+
         result = await db.jobpostings.delete_one({"_id": ObjectId(job_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Job posting not found")
+
+        await log_resource_deleted(
+            db,
+            current_user,
+            resource_type="job_posting",
+            doc=existing,
+            title_field="title",
+            resource_id=job_id,
+        )
         
         return {"message": "Job posting deleted successfully"}
     except Exception as e:
@@ -610,6 +669,10 @@ async def toggle_job_posting_status(
     db = get_database()
     
     try:
+        existing = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Job posting not found")
+
         is_active = status_data.get("isActive", True)
         update_data = {
             "isActive": is_active,
@@ -623,12 +686,592 @@ async def toggle_job_posting_status(
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Job posting not found")
+
+        await log_custom_action(
+            db,
+            current_user,
+            action="activated" if is_active else "deactivated",
+            resource_type="job_posting",
+            resource_id=job_id,
+            resource_title=str(existing.get("title") or ""),
+        )
         
         return {"message": f"Job posting {'activated' if is_active else 'deactivated'} successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 # User Management endpoints
+
+def _format_admin_user(user: dict) -> dict:
+    """Normalize a user document for admin API responses."""
+    if isinstance(user.get("_id"), ObjectId):
+        user["_id"] = str(user["_id"])
+    user["id"] = str(user.get("_id", user.get("id", "")))
+    user["role"] = normalize_role(user.get("role"))
+    user["adminModules"] = get_effective_admin_modules(user)
+    user["invitePending"] = bool(user.get("invitePending", False))
+    user["isEmailVerified"] = bool(
+        user.get("isEmailVerified") or user.get("emailVerified")
+    )
+    for field in ["createdAt", "updatedAt", "lastLoginAt"]:
+        if field in user and isinstance(user[field], datetime):
+            user[field] = user[field].isoformat()
+    user.pop("password", None)
+    return user
+
+
+def _generate_invite_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+async def _revoke_pending_invites(
+    db, email: str, *, except_id: ObjectId | None = None
+) -> None:
+    query: dict[str, Any] = {"email": email, "status": "pending"}
+    if except_id is not None:
+        query["_id"] = {"$ne": except_id}
+    await db.admin_invites.update_many(
+        query,
+        {"$set": {"status": "revoked", "revokedAt": datetime.utcnow()}},
+    )
+
+
+async def _log_admin_invite_action(
+    db, current_user: dict, *, email: str, action: str = "invited"
+) -> None:
+    await log_custom_action(
+        db,
+        current_user,
+        action=action,
+        resource_type="admin_invite",
+        resource_title=email,
+        detail=email,
+    )
+
+
+async def _upsert_password_reset_token(
+    db, email: str, user_id: str
+) -> tuple[str, datetime]:
+    token = _generate_invite_token()
+    expires_at = datetime.utcnow() + timedelta(days=7)
+    now = datetime.utcnow()
+    await db.password_resets.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email": email,
+                "userId": user_id,
+                "token": token,
+                "expiresAt": expires_at,
+                "createdAt": now,
+            }
+        },
+        upsert=True,
+    )
+    return token, expires_at
+
+
+async def _deliver_admin_invite_email(
+    *,
+    email: str,
+    recipient_name: str,
+    role: str,
+    module_labels: list[str],
+    action_link: str,
+    invited_by: str,
+    frontend_url: str | None = None,
+) -> None:
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Email service is not configured. Open Admin → Settings → Email delivery "
+                "and configure the Netlify relay (or another provider)."
+            ),
+        )
+
+    sent = await send_admin_invite_email(
+        email=email,
+        recipient_name=recipient_name,
+        role=role,
+        module_labels=module_labels,
+        action_link=action_link,
+        invited_by=invited_by,
+        frontend_url=frontend_url,
+    )
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Could not send the invitation email. "
+                "Verify SMTP credentials on Render and try again."
+            ),
+        )
+
+
+@router.get("/permissions/modules")
+async def get_admin_permission_modules(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List assignable admin modules for the permissions UI."""
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to manage users",
+        )
+    return {"modules": list_admin_modules_catalog()}
+
+
+@router.get("/users/invites")
+async def list_admin_invites(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List pending admin invitations."""
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to manage users",
+        )
+    db = get_database()
+    cursor = db.admin_invites.find({"status": "pending"}).sort("createdAt", -1).limit(100)
+    invites = []
+    async for invite in cursor:
+        invite["_id"] = str(invite["_id"])
+        invite["id"] = str(invite["_id"])
+        if isinstance(invite.get("createdAt"), datetime):
+            invite["createdAt"] = invite["createdAt"].isoformat()
+        if isinstance(invite.get("expiresAt"), datetime):
+            invite["expiresAt"] = invite["expiresAt"].isoformat()
+        invites.append(invite)
+    return {"invites": invites}
+
+
+@router.delete("/users/invites/{invite_id}")
+async def revoke_admin_invite(
+    invite_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to manage users",
+        )
+    db = get_database()
+    result = await db.admin_invites.update_one(
+        {"_id": ObjectId(invite_id), "status": "pending"},
+        {"$set": {"status": "revoked", "revokedAt": datetime.utcnow()}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Invite not found")
+
+    invite = await db.admin_invites.find_one({"_id": ObjectId(invite_id)})
+    await log_custom_action(
+        db,
+        current_user,
+        action="revoked",
+        resource_type="admin_invite",
+        resource_id=invite_id,
+        resource_title=str((invite or {}).get("email") or ""),
+    )
+    return {"message": "Invitation revoked"}
+
+
+async def _resend_pending_admin_invite(
+    db,
+    invite: dict,
+    current_user: dict,
+    origin: str | None = None,
+) -> dict[str, Any]:
+    from app.lib.cors import resolve_frontend_url
+
+    frontend_url = resolve_frontend_url(origin)
+
+    if invite.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Only pending invitations can be resent")
+
+    email = str(invite.get("email", "")).strip().lower()
+    name = str(invite.get("name", "")).strip() or email
+    role = normalize_role(invite.get("role", "ADMIN"))
+    admin_modules = normalize_admin_modules(invite.get("adminModules"), role)
+    module_labels = [ADMIN_MODULE_LABELS.get(key, key) for key in admin_modules]
+    inviter_name = current_user.get("name") or current_user.get("email") or "Admin"
+
+    user = None
+    user_id = invite.get("userId")
+    if user_id:
+        try:
+            user = await db.users.find_one({"_id": ObjectId(user_id)})
+        except Exception:
+            user = None
+    if not user and email:
+        user = await db.users.find_one(
+            {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+        )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Invited user account not found. Revoke and send a new invitation.",
+        )
+
+    now = datetime.utcnow()
+    token, expires_at = await _upsert_password_reset_token(db, email, str(user["_id"]))
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"invitePending": True, "updatedAt": now}},
+    )
+    await db.admin_invites.update_one(
+        {"_id": invite["_id"]},
+        {
+            "$set": {
+                "expiresAt": expires_at,
+                "updatedAt": now,
+                "invitedBy": str(current_user["_id"]),
+                "invitedByName": inviter_name,
+            }
+        },
+    )
+
+    action_link = f"{frontend_url}/reset-password?token={token}&invite=1"
+    await _deliver_admin_invite_email(
+        email=email,
+        recipient_name=name,
+        role=role,
+        module_labels=module_labels,
+        action_link=action_link,
+        invited_by=inviter_name,
+        frontend_url=frontend_url,
+    )
+
+    return {
+        "message": "Invitation email resent",
+        "email": email,
+        "emailSent": True,
+        "resent": True,
+        "userId": str(user["_id"]),
+        "inviteId": str(invite["_id"]),
+    }
+
+
+@router.post("/users/invites/{invite_id}/resend")
+async def resend_admin_invite(
+    invite_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Resend the invitation email for a pending admin invite."""
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to manage users",
+        )
+
+    db = get_database()
+    invite = await db.admin_invites.find_one(
+        {"_id": ObjectId(invite_id), "status": "pending"}
+    )
+    if not invite:
+        raise HTTPException(status_code=404, detail="Pending invitation not found")
+
+    result = await _resend_pending_admin_invite(
+        db, invite, current_user, request.headers.get("origin")
+    )
+    await _log_admin_invite_action(
+        db, current_user, email=str(invite.get("email") or ""), action="resent"
+    )
+    return result
+
+
+@router.post("/users/{user_id}/resend-invite")
+async def resend_admin_invite_for_user(
+    user_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Resend the invitation email for a user with a pending invite."""
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to manage users",
+        )
+
+    db = get_database()
+    invite = await db.admin_invites.find_one(
+        {"userId": user_id, "status": "pending"}
+    )
+    if not invite:
+        user = await db.users.find_one({"_id": ObjectId(user_id)}, {"email": 1})
+        if user and user.get("email"):
+            email = str(user["email"]).strip().lower()
+            invite = await db.admin_invites.find_one(
+                {"email": email, "status": "pending"}
+            )
+
+    if not invite:
+        raise HTTPException(
+            status_code=404,
+            detail="No pending invitation found for this user",
+        )
+
+    result = await _resend_pending_admin_invite(
+        db, invite, current_user, request.headers.get("origin")
+    )
+    await _log_admin_invite_action(
+        db, current_user, email=str(invite.get("email") or ""), action="resent"
+    )
+    return result
+
+
+@router.post("/users/invite")
+async def invite_admin_user(
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Invite a user to the admin workspace with scoped module permissions."""
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to invite users",
+        )
+
+    email = str(payload.get("email", "")).strip().lower()
+    name = str(payload.get("name", "")).strip()
+    role = normalize_role(payload.get("role", "ADMIN"))
+    admin_modules = normalize_admin_modules(payload.get("adminModules"), role)
+
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email is required")
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if not is_admin_role(role):
+        raise HTTPException(
+            status_code=400,
+            detail="Invited users must have ADMIN or SUPER_ADMIN role",
+        )
+
+    from app.lib.cors import resolve_frontend_url
+
+    frontend_url = resolve_frontend_url(request.headers.get("origin"))
+    db = get_database()
+    inviter_name = current_user.get("name") or current_user.get("email") or "Admin"
+    module_labels = [
+        ADMIN_MODULE_LABELS.get(key, key) for key in admin_modules
+    ]
+
+    existing = await db.users.find_one(
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+    )
+    pending_invite = await db.admin_invites.find_one(
+        {"email": email, "status": "pending"}
+    )
+
+    if pending_invite:
+        user = existing
+        user_id = pending_invite.get("userId")
+        if not user and user_id:
+            try:
+                user = await db.users.find_one({"_id": ObjectId(user_id)})
+            except Exception:
+                user = None
+
+        if not user:
+            await _revoke_pending_invites(db, email)
+        else:
+            if str(user["_id"]) == str(current_user["_id"]) and role != normalize_role(
+                user.get("role")
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="You cannot change your own role via invite",
+                )
+
+            now = datetime.utcnow()
+            token, expires_at = await _upsert_password_reset_token(
+                db, email, str(user["_id"])
+            )
+            await db.users.update_one(
+                {"_id": user["_id"]},
+                {
+                    "$set": {
+                        "name": name,
+                        "role": role,
+                        "adminModules": admin_modules,
+                        "invitePending": True,
+                        "updatedAt": now,
+                    }
+                },
+            )
+            await db.admin_invites.update_one(
+                {"_id": pending_invite["_id"]},
+                {
+                    "$set": {
+                        "name": name,
+                        "role": role,
+                        "adminModules": admin_modules,
+                        "invitedBy": str(current_user["_id"]),
+                        "invitedByName": inviter_name,
+                        "userId": str(user["_id"]),
+                        "expiresAt": expires_at,
+                        "updatedAt": now,
+                    }
+                },
+            )
+            action_link = f"{frontend_url}/reset-password?token={token}&invite=1"
+            await _deliver_admin_invite_email(
+                email=email,
+                recipient_name=name,
+                role=role,
+                module_labels=module_labels,
+                action_link=action_link,
+                invited_by=inviter_name,
+                frontend_url=frontend_url,
+            )
+            await _log_admin_invite_action(db, current_user, email=email, action="invited")
+            return {
+                "message": "Pending invitation updated and resent",
+                "userId": str(user["_id"]),
+                "existingUser": True,
+                "resent": True,
+                "email": email,
+                "emailSent": True,
+            }
+
+    if existing:
+        if str(existing["_id"]) == str(current_user["_id"]) and role != normalize_role(
+            existing.get("role")
+        ):
+            raise HTTPException(
+                status_code=400, detail="You cannot change your own role via invite"
+            )
+
+        update_fields = {
+            "name": name,
+            "role": role,
+            "adminModules": admin_modules,
+            "updatedAt": datetime.utcnow(),
+        }
+        await db.users.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+
+        previous_role = existing.get("role")
+        promoted = was_promoted_to_admin(previous_role, role)
+        login_url = f"{frontend_url}/admin/login"
+        needs_password_setup = promoted or bool(
+            existing.get("invitePending")
+        ) or not existing.get("password")
+
+        if needs_password_setup:
+            token, expires_at = await _upsert_password_reset_token(
+                db, email, str(existing["_id"])
+            )
+            action_link = f"{frontend_url}/reset-password?token={token}&invite=1"
+            await db.users.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {"invitePending": True}},
+            )
+            now = datetime.utcnow()
+            await _revoke_pending_invites(db, email)
+            await db.admin_invites.insert_one(
+                {
+                    "email": email,
+                    "name": name,
+                    "role": role,
+                    "adminModules": admin_modules,
+                    "invitedBy": str(current_user["_id"]),
+                    "invitedByName": inviter_name,
+                    "userId": str(existing["_id"]),
+                    "status": "pending",
+                    "createdAt": now,
+                    "expiresAt": expires_at,
+                }
+            )
+        else:
+            action_link = login_url
+
+        await _deliver_admin_invite_email(
+            email=email,
+            recipient_name=name,
+            role=role,
+            module_labels=module_labels,
+            action_link=action_link,
+            invited_by=inviter_name,
+            frontend_url=frontend_url,
+        )
+        await _log_admin_invite_action(db, current_user, email=email, action="invited")
+
+        return {
+            "message": "Existing user updated and notified",
+            "userId": str(existing["_id"]),
+            "existingUser": True,
+            "email": email,
+            "emailSent": True,
+        }
+
+    # New user — create account and send set-password invite
+    temp_password = secrets.token_urlsafe(24)
+    now = datetime.utcnow()
+    hashed_password = await asyncio.to_thread(get_password_hash, temp_password)
+    user_doc = {
+        "email": email,
+        "name": name,
+        "password": hashed_password,
+        "role": role,
+        "adminModules": admin_modules,
+        "isEmailVerified": True,
+        "invitePending": True,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    insert_result = await db.users.insert_one(user_doc)
+    user_id = str(insert_result.inserted_id)
+
+    token, expires_at = await _upsert_password_reset_token(db, email, user_id)
+
+    await _revoke_pending_invites(db, email)
+    await db.admin_invites.insert_one(
+        {
+            "email": email,
+            "name": name,
+            "role": role,
+            "adminModules": admin_modules,
+            "invitedBy": str(current_user["_id"]),
+            "invitedByName": inviter_name,
+            "userId": user_id,
+            "status": "pending",
+            "createdAt": now,
+            "expiresAt": expires_at,
+        }
+    )
+
+    action_link = f"{frontend_url}/reset-password?token={token}&invite=1"
+    try:
+        await _deliver_admin_invite_email(
+            email=email,
+            recipient_name=name,
+            role=role,
+            module_labels=module_labels,
+            action_link=action_link,
+            invited_by=inviter_name,
+            frontend_url=frontend_url,
+        )
+    except HTTPException:
+        await db.admin_invites.delete_many(
+            {"email": email, "status": "pending", "userId": user_id}
+        )
+        await db.users.delete_one({"_id": ObjectId(user_id)})
+        await db.password_resets.delete_one({"email": email})
+        raise
+
+    await _log_admin_invite_action(db, current_user, email=email, action="invited")
+    return {
+        "message": "Invitation sent successfully",
+        "userId": user_id,
+        "existingUser": False,
+        "email": email,
+        "emailSent": True,
+    }
+
+
 @router.get("/users")
 async def get_users(
     current_user: dict = Depends(get_current_admin_user),
@@ -641,12 +1284,10 @@ async def get_users(
     users_cursor = db.users.find({}, {"password": 0}).skip(skip).limit(limit).sort("createdAt", -1)
     users = await users_cursor.to_list(length=limit)
     total = await db.users.count_documents({})
-    
-    for user in users:
-        user["_id"] = str(user["_id"])
-        user["id"] = str(user["_id"])
-    
-    return {"users": users, "total": total}
+
+    formatted = [_format_admin_user(user) for user in users]
+
+    return {"users": formatted, "total": total}
 
 @router.get("/users/count")
 async def get_users_count(
@@ -679,6 +1320,10 @@ async def update_user(
         update_data.pop("password", None)
         if "role" in update_data and update_data["role"] is not None:
             update_data["role"] = normalize_role(str(update_data["role"]))
+        if "adminModules" in update_data:
+            update_data["adminModules"] = normalize_admin_modules(
+                update_data.get("adminModules"), update_data.get("role", previous_role)
+            )
         new_role = update_data.get("role", previous_role)
         update_data["updatedAt"] = datetime.utcnow()
         
@@ -700,6 +1345,16 @@ async def update_user(
                         role=new_role,
                     )
                 )
+
+        await log_resource_updated(
+            db,
+            current_user,
+            resource_type="user",
+            existing=existing_user,
+            updates=update_data,
+            resource_id=user_id,
+            title_field="email",
+        )
         
         return {"message": "User updated successfully"}
     except Exception as e:
@@ -717,10 +1372,32 @@ async def delete_user(
         # Don't allow deleting self
         if str(current_user["_id"]) == user_id:
             raise HTTPException(status_code=400, detail="Cannot delete your own account")
-        
+
+        target = await db.users.find_one({"_id": ObjectId(user_id)})
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        normalized_email = str(target.get("email", "")).strip().lower()
+        await db.admin_invites.update_many(
+            {
+                "status": "pending",
+                "$or": [{"userId": user_id}, {"email": normalized_email}],
+            },
+            {"$set": {"status": "revoked", "revokedAt": datetime.utcnow()}},
+        )
+
         result = await db.users.delete_one({"_id": ObjectId(user_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="User not found")
+
+        await log_resource_deleted(
+            db,
+            current_user,
+            resource_type="user",
+            doc=target,
+            title_field="email",
+            resource_id=user_id,
+        )
         
         return {"message": "User deleted successfully"}
     except Exception as e:
@@ -924,13 +1601,7 @@ async def update_blog_post(
         if "title" in update_data and update_data["title"]:
             update_data["slug"] = generate_slug(update_data["title"])
 
-        try:
-            _normalize_blog_date_fields(update_data)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        if "createdAt" not in update_data:
-            update_data["updatedAt"] = datetime.utcnow()
+        update_data["updatedAt"] = datetime.utcnow()
         
         result = await db.blogposts.update_one(
             {"_id": ObjectId(post_id)},
@@ -1000,13 +1671,7 @@ async def patch_blog_post(
             except Exception:
                 pass
 
-        try:
-            _normalize_blog_date_fields(update_data)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        if "createdAt" not in update_data:
-            update_data["updatedAt"] = datetime.utcnow()
+        update_data["updatedAt"] = datetime.utcnow()
 
         existing = await db.blogposts.find_one({"_id": ObjectId(post_id)})
         if not existing:
@@ -1070,184 +1735,6 @@ async def delete_blog_post(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-@router.post("/blog-posts/ai/generate")
-async def ai_generate_blog_content(
-    payload: Dict[str, Any] = Body(...),
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Generate blog fields or format content with AI (NVIDIA API)."""
-    from app.lib.ai_client import chat_completion, extract_json_object, strip_html_tags
-
-    task = (payload.get("task") or "").strip()
-    context = payload.get("context") or {}
-    if not isinstance(context, dict):
-        context = {}
-
-    instructions = (context.get("instructions") or "").strip()
-    title = (context.get("title") or "").strip()
-    excerpt = (context.get("excerpt") or "").strip()
-    category = (context.get("category") or "").strip()
-    author_name = (context.get("authorName") or "").strip()
-    author_title = (context.get("authorTitle") or "").strip()
-    author_bio = (context.get("authorBio") or "").strip()
-    content_html = (context.get("content") or "").strip()
-
-    valid_tasks = {
-        "excerpt",
-        "meta_description",
-        "author_bio",
-        "author_title",
-        "format_content",
-        "suggest_tags",
-        "read_time",
-    }
-    if task not in valid_tasks:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid task. Use one of: {', '.join(sorted(valid_tasks))}",
-        )
-
-    brand = "BQI Technologies (BQI Tech) — GovTech and enterprise digital transformation"
-
-    # Keep prompts small for fast field-generation tasks; use more context only when needed.
-    content_limits: dict[str, int] = {
-        "excerpt": 1200,
-        "meta_description": 1200,
-        "author_bio": 800,
-        "author_title": 600,
-        "suggest_tags": 1500,
-        "format_content": 8000,
-    }
-    plain_content = strip_html_tags(
-        content_html, max_len=content_limits.get(task, 1200)
-    )
-
-    def build_context(*, include_body: bool = True) -> str:
-        lines = [
-            f"Blog title: {title or '(untitled)'}",
-            f"Category: {category or 'Technology'}",
-            f"Current excerpt: {excerpt or '(none)'}",
-            f"Author name: {author_name or '(not set)'}",
-            f"Author title: {author_title or '(not set)'}",
-            f"Extra instructions: {instructions or '(none)'}",
-        ]
-        if include_body:
-            lines.append(f"\nArticle body (plain text excerpt):\n{plain_content or '(empty)'}")
-        return "\n".join(lines)
-
-    try:
-        if task == "excerpt":
-            system = (
-                f"You write compelling blog excerpts for {brand}. "
-                "Return ONLY valid JSON: {\"excerpt\": \"...\"}. "
-                "Max 280 characters. No markdown."
-            )
-            user = f"{build_context()}\n\nWrite a concise, engaging excerpt for this blog post."
-            raw = await chat_completion(user, system_prompt=system, max_tokens=256)
-            parsed = extract_json_object(raw) or {}
-            excerpt_text = (parsed.get("excerpt") or raw).strip()[:300]
-            return {"excerpt": excerpt_text}
-
-        if task == "meta_description":
-            system = (
-                "You are an SEO specialist. Return ONLY valid JSON: "
-                '{"metaDescription": "..."}. Max 160 characters. Include primary keyword. No markdown.'
-            )
-            user = f"{build_context()}\n\nWrite an SEO meta description for search results."
-            raw = await chat_completion(user, system_prompt=system, max_tokens=200)
-            parsed = extract_json_object(raw) or {}
-            meta = (parsed.get("metaDescription") or parsed.get("meta_description") or raw).strip()[:160]
-            return {"metaDescription": meta}
-
-        if task == "author_bio":
-            system = (
-                f"You write professional author bios for {brand} blog contributors. "
-                'Return ONLY valid JSON: {"authorBio": "..."}. '
-                "Max 500 characters. Third person. Professional tone. No markdown."
-            )
-            user = (
-                f"{build_context(include_body=False)}\n"
-                f"Existing author bio: {author_bio or '(none)'}\n\n"
-                f"Write an author bio for {author_name or 'the author'}."
-            )
-            raw = await chat_completion(user, system_prompt=system, max_tokens=400)
-            parsed = extract_json_object(raw) or {}
-            bio = (parsed.get("authorBio") or parsed.get("author_bio") or raw).strip()[:500]
-            return {"authorBio": bio}
-
-        if task == "author_title":
-            system = (
-                'Return ONLY valid JSON: {"authorTitle": "..."}. '
-                "Max 100 characters. Job title or role at BQI Tech. No markdown."
-            )
-            user = f"{build_context(include_body=False)}\n\nSuggest a professional author title/role."
-            raw = await chat_completion(user, system_prompt=system, max_tokens=120)
-            parsed = extract_json_object(raw) or {}
-            atitle = (parsed.get("authorTitle") or parsed.get("author_title") or raw).strip()[:100]
-            return {"authorTitle": atitle}
-
-        if task == "suggest_tags":
-            system = (
-                'Return ONLY valid JSON: {"tags": ["tag1", "tag2"]}. '
-                "3 to 8 lowercase tags, hyphenated where needed. No markdown."
-            )
-            user = f"{build_context()}\n\nSuggest relevant blog tags."
-            raw = await chat_completion(user, system_prompt=system, max_tokens=256)
-            parsed = extract_json_object(raw) or {}
-            tags = parsed.get("tags") or []
-            if not isinstance(tags, list):
-                tags = []
-            cleaned = [str(t).strip().lower()[:50] for t in tags if str(t).strip()][:10]
-            return {"tags": cleaned}
-
-        if task == "read_time":
-            words = len(plain_content.split()) if plain_content else 0
-            minutes = max(1, round(words / 200)) if words else 5
-            return {"readTime": f"{minutes} min Read"}
-
-        if task == "format_content":
-            system = (
-                f"You format long-form BQI Tech blog articles as clean HTML for a rich text editor. "
-                "Use <h2> for major sections, <h3> for subsections, <p> for paragraphs, "
-                "<ul><li> for bullet lists. Do NOT include <h1>. "
-                "Preserve all factual content and improve structure, headings, and paragraph breaks. "
-                "Do not invent new facts. Return ONLY valid JSON: "
-                '{"content": "<h2>...</h2><p>...</p>..."}'
-            )
-            user = (
-                f"Title: {title}\nCategory: {category}\n\n"
-                f"Format this HTML content with clear sections:\n\n{content_html or plain_content}"
-            )
-            raw = await chat_completion(
-                user,
-                system_prompt=system,
-                max_tokens=4000,
-                temperature=0.4,
-                timeout=180.0,
-            )
-            parsed = extract_json_object(raw) or {}
-            formatted = parsed.get("content") or raw
-            formatted = formatted.strip()
-            if formatted.startswith("```"):
-                formatted = re.sub(r"^```[a-z]*\n?", "", formatted)
-                formatted = re.sub(r"\n?```$", "", formatted).strip()
-            return {"content": formatted}
-
-        raise HTTPException(status_code=400, detail="Unknown task")
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("Blog AI generation failed")
-        detail = str(exc)
-        if "timeout" in detail.lower() or "timed out" in detail.lower():
-            raise HTTPException(
-                status_code=504,
-                detail="AI request timed out. Try again or use a shorter article.",
-            ) from exc
-        raise HTTPException(status_code=500, detail=detail) from exc
-
 
 @router.options("/blog-posts/{post_id}", include_in_schema=False)
 async def options_blog_post_by_id(request: Request, post_id: str):
@@ -1380,6 +1867,107 @@ def _archived_application_filter() -> Dict[str, Any]:
     return {"isArchived": True}
 
 
+def _append_ai_score_filter(pipeline: list, ai_score_filter: Optional[str]) -> None:
+    """Append a $match stage for AI score bucket filters."""
+    if not ai_score_filter or ai_score_filter == "all":
+        return
+
+    if ai_score_filter == "not_ranked":
+        pipeline.append({
+            "$match": {
+                "$or": [
+                    {"aiRankScore": {"$exists": False}},
+                    {"aiRankScore": None},
+                ]
+            }
+        })
+        return
+
+    if ai_score_filter == "ranked":
+        pipeline.append({
+            "$match": {
+                "aiRankScore": {"$exists": True, "$ne": None, "$type": "number"}
+            }
+        })
+        return
+
+    score_ranges = {
+        "strong": {"aiRankScore": {"$gte": 85}},
+        "good": {"aiRankScore": {"$gte": 70, "$lt": 85}},
+        "moderate": {"aiRankScore": {"$gte": 50, "$lt": 70}},
+        "weak": {"aiRankScore": {"$lt": 50, "$gte": 0}},
+    }
+    match_query = score_ranges.get(ai_score_filter)
+    if match_query:
+        pipeline.append({"$match": match_query})
+
+
+def _parse_iso_date(value: Optional[str]) -> Optional[datetime]:
+    """Parse a YYYY-MM-DD (or ISO) date string into a datetime, ignoring invalid input."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _build_applied_date_range(
+    date_from: Optional[str], date_to: Optional[str]
+) -> Optional[Dict[str, Any]]:
+    """Build a Mongo range filter for appliedDate from inclusive from/to date strings."""
+    from_dt = _parse_iso_date(date_from)
+    to_dt = _parse_iso_date(date_to)
+    range_filter: Dict[str, Any] = {}
+    if from_dt:
+        range_filter["$gte"] = from_dt
+    if to_dt:
+        range_filter["$lt"] = to_dt + timedelta(days=1)
+    return range_filter or None
+
+
+def _job_posting_lookup_stage() -> Dict[str, Any]:
+    """Join jobpostings when application.jobId is stored as a string or ObjectId."""
+    return {
+        "$lookup": {
+            "from": "jobpostings",
+            "let": {"jobId": "$jobId"},
+            "pipeline": [
+                {
+                    "$match": {
+                        "$expr": {
+                            "$eq": [
+                                "$_id",
+                                {
+                                    "$cond": {
+                                        "if": {"$eq": [{"$type": "$$jobId"}, "objectId"]},
+                                        "then": "$$jobId",
+                                        "else": {
+                                            "$convert": {
+                                                "input": "$$jobId",
+                                                "to": "objectId",
+                                                "onError": None,
+                                                "onNull": None,
+                                            }
+                                        },
+                                    }
+                                },
+                            ]
+                        }
+                    }
+                },
+                {"$project": {"password": 0}},
+            ],
+            "as": "jobDetails",
+        }
+    }
+
+
+def _active_job_posting_filter() -> Dict[str, Any]:
+    """Currently posted jobs (active or legacy records without isActive set)."""
+    return {"$or": [{"isActive": True}, {"isActive": {"$exists": False}}]}
+
+
 @router.get("/applications")
 async def get_admin_applications(
     current_user: dict = Depends(get_current_admin_user),
@@ -1391,7 +1979,17 @@ async def get_admin_applications(
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
     search: Optional[str] = Query(None, description="Search term for name, email, or position"),
     position: Optional[str] = Query(None, description="Filter by position/job title"),
-    jobId: Optional[str] = Query(None, description="Filter by specific job ID")
+    jobId: Optional[str] = Query(None, description="Filter by specific job ID"),
+    ai_score_filter: Optional[str] = Query(
+        None,
+        description="Filter by AI rank score bucket (not_ranked, strong, good, moderate, weak)",
+    ),
+    date_from: Optional[str] = Query(
+        None, description="Filter applications applied on/after this date (YYYY-MM-DD)"
+    ),
+    date_to: Optional[str] = Query(
+        None, description="Filter applications applied on/before this date (YYYY-MM-DD)"
+    ),
 ):
     """Get all applications for admin with optimized aggregation and filtering"""
     try:
@@ -1410,26 +2008,33 @@ async def get_admin_applications(
                 match_query["jobId"] = ObjectId(jobId)
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid job ID format")
+
+        # Add applied-date range filtering
+        applied_date_range = _build_applied_date_range(date_from, date_to)
+        if applied_date_range:
+            match_query["appliedDate"] = applied_date_range
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
-        allowed_sort_fields = ["appliedDate", "status", "createdAt", "updatedAt", "archivedAt"]
+        # Map FE-facing sort fields to sortable document fields. "name"/"position"
+        # resolve to computed keys added later in the pipeline.
+        sort_field_map = {
+            "appliedDate": "appliedDate",
+            "name": "_sortName",
+            "position": "_sortPosition",
+            "status": "status",
+            "aiRankScore": "aiRankScore",
+            "createdAt": "createdAt",
+            "updatedAt": "updatedAt",
+            "archivedAt": "archivedAt",
+        }
         default_sort = "archivedAt" if archived else "appliedDate"
-        sort_field = sort_by if sort_by in allowed_sort_fields else default_sort
+        requested_sort = sort_by if sort_by in sort_field_map else default_sort
+        sort_field = sort_field_map[requested_sort]
         
         pipeline = [
             {"$match": match_query},
-            {
-                "$lookup": {
-                    "from": "jobpostings",
-                    "localField": "jobId",
-                    "foreignField": "_id",
-                    "as": "jobDetails",
-                    "pipeline": [
-                        {"$project": {"password": 0}}  # Exclude sensitive fields
-                    ]
-                }
-            },
+            _job_posting_lookup_stage(),
             {
                 "$lookup": {
                     "from": "users",
@@ -1484,6 +2089,20 @@ async def get_admin_applications(
                     }
                 }
             })
+
+        # Computed keys so name/position sort by their resolved display values
+        pipeline.append({
+            "$addFields": {
+                "_sortName": {
+                    "$toLower": {"$ifNull": ["$name", {"$ifNull": ["$userDetails.name", ""]}]}
+                },
+                "_sortPosition": {
+                    "$toLower": {"$ifNull": ["$jobTitle", {"$ifNull": ["$position", ""]}]}
+                }
+            }
+        })
+
+        _append_ai_score_filter(pipeline, ai_score_filter)
         
         # Add sorting and pagination
         pipeline.extend([
@@ -1507,6 +2126,8 @@ async def get_admin_applications(
         # Process results efficiently
         for app in applications:
             app["id"] = str(app.pop("_id"))
+            app.pop("_sortName", None)
+            app.pop("_sortPosition", None)
             
             # Convert datetime fields
             for field in ["createdAt", "updatedAt", "appliedDate", "shortlistedDate", "disqualifiedDate", "archivedAt"]:
@@ -1521,10 +2142,14 @@ async def get_admin_applications(
                 for field in ["createdAt", "updatedAt", "postedDate"]:
                     if field in job and isinstance(job[field], datetime):
                         job[field] = job[field].isoformat()
-                app["position"] = job.get("title", "Position Not Available").strip()
+                app["position"] = _normalize_text_value(
+                    job.get("title", "Position Not Available")
+                ) or "Position Not Available"
             else:
                 app["jobDetails"] = None
-                app["position"] = app.get("position", "Position Not Available")
+                app["position"] = _normalize_text_value(
+                    app.get("position", "Position Not Available")
+                ) or "Position Not Available"
             
             # Process user details
             if app.get("userDetails"):
@@ -1548,7 +2173,7 @@ async def get_admin_applications(
             "applications": applications,
             "total": total,
             "sort": {
-                "field": sort_field,
+                "field": requested_sort,
                 "order": sort_order
             }
         }
@@ -1577,6 +2202,10 @@ async def get_archived_applications(
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
     search: Optional[str] = Query(None, description="Search term for name, email, or position"),
     position: Optional[str] = Query(None, description="Filter by position/job title"),
+    ai_score_filter: Optional[str] = Query(
+        None,
+        description="Filter by AI rank score bucket (not_ranked, strong, good, moderate, weak)",
+    ),
 ):
     """Get archived applications for admin."""
     return await get_admin_applications(
@@ -1590,6 +2219,7 @@ async def get_archived_applications(
         search=search,
         position=position,
         jobId=None,
+        ai_score_filter=ai_score_filter,
     )
 
 
@@ -1613,24 +2243,24 @@ async def get_application_positions(
         # Aggregation pipeline to get unique positions from applications
         pipeline = [
             {"$match": match_query},
-            {
-                "$lookup": {
-                    "from": "jobpostings",
-                    "localField": "jobId",
-                    "foreignField": "_id",
-                    "as": "jobDetails"
-                }
-            },
+            _job_posting_lookup_stage(),
             {
                 "$addFields": {
+                    "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
                     "jobTitle": {"$arrayElemAt": ["$jobDetails.title", 0]},
                     "effectivePosition": {
                         "$cond": {
-                            "if": {"$and": [{"$ne": ["$jobDetails", []]}, {"$ne": [{"$arrayElemAt": ["$jobDetails.title", 0]}, None]}]},
-                            "then": {"$arrayElemAt": ["$jobDetails.title", 0]},
-                            "else": "$position"
+                            "if": {
+                                "$and": [
+                                    {"$ne": ["$jobDetails", None]},
+                                    {"$ne": ["$jobDetails.title", None]},
+                                    {"$ne": ["$jobDetails.title", ""]},
+                                ]
+                            },
+                            "then": "$jobDetails.title",
+                            "else": "$position",
                         }
-                    }
+                    },
                 }
             },
             {
@@ -1641,7 +2271,7 @@ async def get_application_positions(
             },
             {
                 "$match": {
-                    "_id": {"$ne": None, "$ne": "", "$ne": "Position Not Available"}
+                    "_id": {"$nin": [None, "", "Position Not Available"]}
                 }
             },
             {
@@ -1652,27 +2282,27 @@ async def get_application_positions(
         cursor = db.applications.aggregate(pipeline)
         positions_from_apps = await cursor.to_list(length=None)
 
-        # Also include ALL job titles from jobpostings (even without applications)
-        job_titles = []
+        # Include all currently posted (active) job titles
+        job_titles: list[str] = []
         try:
-            async for job in db.jobpostings.find({}, {"title": 1}):
-                title = job.get("title")
+            async for job in db.jobpostings.find(_active_job_posting_filter(), {"title": 1}):
+                title = _normalize_text_value(job.get("title"))
                 if title:
                     job_titles.append(title)
         except Exception as e:
             logger.error(f"Failed to load job titles for positions list: {e}")
 
-        # Merge: map title -> count (default 0), then overlay counts from applications
+        # Merge: active job titles + application-derived titles with counts
         title_to_count: dict[str, int] = {t: 0 for t in job_titles}
         for pos in positions_from_apps:
-            title = pos.get("_id")
+            title = _normalize_text_value(pos.get("_id"))
             if title:
                 title_to_count[title] = title_to_count.get(title, 0) + int(pos.get("count", 0))
 
-        # Build sorted list
+        # Build sorted list (include all active postings, even with 0 applications)
         position_options = [
             {"value": title, "label": title, "count": count}
-            for title, count in sorted(title_to_count.items(), key=lambda x: x[0])
+            for title, count in sorted(title_to_count.items(), key=lambda x: x[0].lower())
             if title not in (None, "", "Position Not Available")
         ]
         
@@ -1698,7 +2328,11 @@ async def get_shortlisted_applications(
     sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
     search: Optional[str] = Query(None, description="Search term for name, email, or position"),
-    position: Optional[str] = Query(None, description="Filter by position/job title")
+    position: Optional[str] = Query(None, description="Filter by position/job title"),
+    ai_score_filter: Optional[str] = Query(
+        None,
+        description="Filter by AI rank score bucket (not_ranked, strong, good, moderate, weak)",
+    ),
 ):
     """Get shortlisted applications for admin with optimized aggregation and filtering"""
     try:
@@ -1715,17 +2349,7 @@ async def get_shortlisted_applications(
         
         pipeline = [
             {"$match": match_query},
-            {
-                "$lookup": {
-                    "from": "jobpostings",
-                    "localField": "jobId",
-                    "foreignField": "_id",
-                    "as": "jobDetails",
-                    "pipeline": [
-                        {"$project": {"password": 0}}  # Exclude sensitive fields
-                    ]
-                }
-            },
+            _job_posting_lookup_stage(),
             {
                 "$lookup": {
                     "from": "users",
@@ -1780,6 +2404,8 @@ async def get_shortlisted_applications(
                     }
                 }
             })
+
+        _append_ai_score_filter(pipeline, ai_score_filter)
         
         # Add sorting and pagination
         pipeline.extend([
@@ -1817,10 +2443,14 @@ async def get_shortlisted_applications(
                 for field in ["createdAt", "updatedAt", "postedDate"]:
                     if field in job and isinstance(job[field], datetime):
                         job[field] = job[field].isoformat()
-                app["position"] = job.get("title", "Position Not Available").strip()
+                app["position"] = _normalize_text_value(
+                    job.get("title", "Position Not Available")
+                ) or "Position Not Available"
             else:
                 app["jobDetails"] = None
-                app["position"] = app.get("position", "Position Not Available")
+                app["position"] = _normalize_text_value(
+                    app.get("position", "Position Not Available")
+                ) or "Position Not Available"
             
             # Process user details
             if app.get("userDetails"):
@@ -1872,7 +2502,11 @@ async def get_disqualified_applications(
     sort_by: Optional[str] = Query("appliedDate", description="Field to sort by"),
     sort_order: Optional[str] = Query("desc", description="Sort order (asc, desc)"),
     search: Optional[str] = Query(None, description="Search term for name, email, or position"),
-    position: Optional[str] = Query(None, description="Filter by position/job title")
+    position: Optional[str] = Query(None, description="Filter by position/job title"),
+    ai_score_filter: Optional[str] = Query(
+        None,
+        description="Filter by AI rank score bucket (not_ranked, strong, good, moderate, weak)",
+    ),
 ):
     """Get disqualified applications for admin with optimized aggregation and filtering"""
     try:
@@ -1889,17 +2523,7 @@ async def get_disqualified_applications(
         
         pipeline = [
             {"$match": match_query},
-            {
-                "$lookup": {
-                    "from": "jobpostings",
-                    "localField": "jobId",
-                    "foreignField": "_id",
-                    "as": "jobDetails",
-                    "pipeline": [
-                        {"$project": {"password": 0}}  # Exclude sensitive fields
-                    ]
-                }
-            },
+            _job_posting_lookup_stage(),
             {
                 "$lookup": {
                     "from": "users",
@@ -1954,6 +2578,8 @@ async def get_disqualified_applications(
                     }
                 }
             })
+
+        _append_ai_score_filter(pipeline, ai_score_filter)
         
         # Add sorting and pagination
         pipeline.extend([
@@ -1991,10 +2617,14 @@ async def get_disqualified_applications(
                 for field in ["createdAt", "updatedAt", "postedDate"]:
                     if field in job and isinstance(job[field], datetime):
                         job[field] = job[field].isoformat()
-                app["position"] = job.get("title", "Position Not Available").strip()
+                app["position"] = _normalize_text_value(
+                    job.get("title", "Position Not Available")
+                ) or "Position Not Available"
             else:
                 app["jobDetails"] = None
-                app["position"] = app.get("position", "Position Not Available")
+                app["position"] = _normalize_text_value(
+                    app.get("position", "Position Not Available")
+                ) or "Position Not Available"
             
             # Process user details
             if app.get("userDetails"):
@@ -2063,6 +2693,15 @@ async def archive_all_applications(
             },
         )
 
+        await log_bulk_operation(
+            db,
+            current_user,
+            action="archived",
+            resource_type="application",
+            count=result.modified_count,
+            detail=f"{result.modified_count} applications",
+        )
+
         return {
             "message": f"Successfully archived {result.modified_count} application(s)",
             "archived_count": result.modified_count,
@@ -2118,6 +2757,15 @@ async def bulk_archive_applications(
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="No active applications found to archive")
 
+        await log_bulk_operation(
+            db,
+            current_user,
+            action="archived",
+            resource_type="application",
+            count=result.modified_count,
+            detail=f"{result.modified_count} applications",
+        )
+
         return {
             "message": f"Successfully archived {result.modified_count} application(s)",
             "archived_count": result.modified_count,
@@ -2166,6 +2814,15 @@ async def bulk_unarchive_applications(
 
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="No archived applications found to restore")
+
+        await log_bulk_operation(
+            db,
+            current_user,
+            action="restored",
+            resource_type="application",
+            count=result.modified_count,
+            detail=f"{result.modified_count} applications",
+        )
 
         return {
             "message": f"Successfully restored {result.modified_count} application(s)",
@@ -2308,6 +2965,15 @@ async def bulk_update_application_status(
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="No applications found to update")
+
+        await log_bulk_operation(
+            db,
+            current_user,
+            action="updated",
+            resource_type="application",
+            count=result.modified_count,
+            detail=f"{result.modified_count} applications set to status '{status}'",
+        )
             
         return {
             "message": f"Successfully updated {result.modified_count} applications to status '{status}'",
@@ -2321,6 +2987,88 @@ async def bulk_update_application_status(
     except Exception as e:
         logger.error(f"Error in bulk update application status: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/ai/test")
+async def test_admin_ai_connection(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Verify NVIDIA API key and model access (admin only)."""
+    result = await test_nvidia_connection()
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=503 if result.get("status") == "not_configured" else 502,
+            detail=result,
+        )
+    return result
+
+
+@router.post("/applications/ai-rank")
+async def ai_rank_applications(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Rank one or more applications using AI based on CV and application data."""
+    try:
+        db = get_database()
+        ids = payload.get("ids") or []
+        limit = int(payload.get("limit") or 25)
+        limit = max(1, min(limit, 50))
+
+        if not isinstance(ids, list):
+            raise HTTPException(status_code=400, detail="ids must be an array")
+
+        if not ids:
+            query: Dict[str, Any] = {"isArchived": {"$ne": True}}
+            if payload.get("position"):
+                query["position"] = payload["position"]
+            if payload.get("status"):
+                query["status"] = payload["status"]
+            if payload.get("jobId"):
+                try:
+                    query["jobId"] = ObjectId(str(payload["jobId"]))
+                except Exception:
+                    query["jobId"] = str(payload["jobId"])
+
+            cursor = db.applications.find(query).sort("createdAt", -1).limit(limit)
+            applications = await cursor.to_list(length=limit)
+            ids = [str(app["_id"]) for app in applications]
+
+        if not ids:
+            return {"ranked": 0, "results": [], "errors": []}
+
+        results = []
+        errors = []
+        for application_id in ids[:limit]:
+            try:
+                result = await rank_application_by_id(db, str(application_id))
+                results.append(result)
+            except Exception as error:
+                error_message = format_exception_message(error)
+                logger.exception("AI rank failed for %s: %s", application_id, error_message)
+                errors.append({"id": str(application_id), "error": error_message})
+
+        results.sort(key=lambda item: item.get("aiRankScore", 0), reverse=True)
+
+        if results:
+            await log_custom_action(
+                db,
+                current_user,
+                action="ranked",
+                resource_type="application",
+                detail=f"AI-ranked {len(results)} application(s)",
+            )
+
+        return {
+            "ranked": len(results),
+            "results": results,
+            "errors": errors,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in ai_rank_applications: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/applications/{application_id}")
@@ -2337,12 +3085,34 @@ async def update_admin_application(
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid application ID format")
 
+        existing = await db.applications.find_one({"_id": obj_id})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Application not found")
+
         update_data = dict(update_data or {})
         update_data["updatedAt"] = datetime.utcnow()
 
         result = await db.applications.update_one({"_id": obj_id}, {"$set": update_data})
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Application not found")
+
+        applicant = (
+            existing.get("fullName")
+            or existing.get("name")
+            or existing.get("email")
+            or existing.get("position")
+            or application_id
+        )
+        await log_resource_updated(
+            db,
+            current_user,
+            resource_type="application",
+            existing=existing,
+            updates=update_data,
+            resource_id=application_id,
+            title_field="fullName",
+            detail=str(applicant),
+        )
 
         application = await db.applications.find_one({"_id": obj_id})
         if not application:
@@ -2377,9 +3147,22 @@ async def delete_admin_application(
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid application ID format")
 
+        existing = await db.applications.find_one({"_id": obj_id})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Application not found")
+
         result = await db.applications.delete_one({"_id": obj_id})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Application not found")
+
+        await log_resource_deleted(
+            db,
+            current_user,
+            resource_type="application",
+            doc=existing,
+            title_field="fullName",
+            resource_id=application_id,
+        )
         return {"message": "Application deleted successfully"}
     except HTTPException:
         raise
@@ -2666,6 +3449,14 @@ async def create_question(
     doc["id"] = str(result.inserted_id)
     convert_objectids_to_strings(doc)
 
+    await log_resource_created(
+        db,
+        current_user,
+        resource_type="question",
+        doc=doc,
+        title_field="question",
+    )
+
     return doc
 
 @router.get("/questions/{question_id}")
@@ -2728,6 +3519,10 @@ async def update_question(
     db = get_database()
     
     try:
+        existing = await db.jobquestions.find_one({"_id": ObjectId(question_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Question not found")
+
         doc = _build_question_document(update_data, is_create=False)
         if len(doc) <= 1:
             raise HTTPException(status_code=400, detail="No valid fields to update")
@@ -2739,6 +3534,16 @@ async def update_question(
         
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Question not found")
+
+        await log_resource_updated(
+            db,
+            current_user,
+            resource_type="question",
+            existing=existing,
+            updates=doc,
+            resource_id=question_id,
+            title_field="question",
+        )
         
         return {"message": "Question updated successfully"}
     except InvalidId:
@@ -2753,9 +3558,22 @@ async def delete_question(
     db = get_database()
     
     try:
+        existing = await db.jobquestions.find_one({"_id": ObjectId(question_id)})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Question not found")
+
         result = await db.jobquestions.delete_one({"_id": ObjectId(question_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Question not found")
+
+        await log_resource_deleted(
+            db,
+            current_user,
+            resource_type="question",
+            doc=existing,
+            title_field="question",
+            resource_id=question_id,
+        )
         
         return {"message": "Question deleted successfully"}
     except InvalidId:
@@ -2856,6 +3674,14 @@ async def reorder_questions(
         
         # Convert any remaining ObjectIds to strings
         convert_objectids_to_strings(response_data)
+
+        await log_custom_action(
+            db,
+            current_user,
+            action="reordered",
+            resource_type="question",
+            detail=f"{len(updates)} screening questions",
+        )
         
         return JSONResponse(
             content=response_data,
@@ -2971,6 +3797,8 @@ async def update_admin_settings(
     try:
         db = get_database()
         
+        existing_settings = await db.settings.find_one({"type": "admin"}) or {}
+
         # Sanitize incoming payload to avoid immutable fields updates
         settings_data = dict(settings_data or {})
         settings_data.pop("_id", None)
@@ -2997,6 +3825,15 @@ async def update_admin_settings(
                 del updated_settings["_id"]
             except Exception:
                 pass
+
+        await log_resource_updated(
+            db,
+            current_user,
+            resource_type="settings",
+            existing=existing_settings,
+            updates=settings_data,
+            title_field="siteName",
+        )
         
         return {"settings": updated_settings, "message": "Settings updated successfully"}
     except Exception as e:
@@ -3010,7 +3847,7 @@ async def sync_databases_manual(
     payload: Dict[str, Any] = Body(default={}),
     current_user: dict = Depends(get_current_admin_user)
 ):
-    """Manual trigger: copy operational DB (BACKUP_MONGO_URL) to DB_SYNC_TARGET_URI when set."""
+    """Manual trigger: copy operational DB (MONGO_URL) to DB_SYNC_TARGET_URI when set."""
     try:
         collections = payload.get("collections")
         if collections is not None and not isinstance(collections, list):
@@ -3022,6 +3859,14 @@ async def sync_databases_manual(
             status_code = 503 if "not" in message.lower() else 500
             raise HTTPException(status_code=status_code, detail=message)
 
+        await log_custom_action(
+            get_database(),
+            current_user,
+            action="synced",
+            resource_type="database_sync",
+            detail="Manual database sync completed",
+        )
+
         return {"message": "Database sync completed", "result": result}
     except HTTPException:
         raise
@@ -3029,6 +3874,377 @@ async def sync_databases_manual(
         logger.error(f"Error in sync_databases_manual: {str(e)}")
         logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail="Failed to sync databases")
+
+
+@router.get("/settings/backup")
+async def get_backup_settings(current_user: dict = Depends(get_current_admin_user)):
+    """Get off-site backup configuration and environment readiness."""
+    if not can_manage_backup(current_user):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage backups")
+    try:
+        from app.lib.backup_service import get_backup_config, SCHEDULE_PRESETS
+
+        config = await get_backup_config()
+        return {
+            "config": config,
+            "schedulePresets": [
+                {"key": key, **value} for key, value in SCHEDULE_PRESETS.items()
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Error in get_backup_settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load backup settings")
+
+
+@router.put("/settings/backup")
+async def update_backup_settings(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Update off-site backup schedule and destinations."""
+    if not can_manage_backup(current_user):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage backups")
+    try:
+        from app.lib.backup_service import update_backup_config
+
+        config = await update_backup_config(payload)
+
+        await log_resource_updated(
+            get_database(),
+            current_user,
+            resource_type="backup",
+            existing={},
+            updates=payload,
+            title_field="schedule",
+        )
+
+        return {"message": "Backup settings saved", "config": config}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in update_backup_settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save backup settings")
+
+
+@router.post("/settings/backup/run")
+async def run_backup_now(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Manually trigger an off-site backup run."""
+    if not can_manage_backup(current_user):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage backups")
+    try:
+        from app.lib.backup_service import execute_backup_run
+
+        result = await execute_backup_run(
+            trigger="manual",
+            triggered_by=str(current_user.get("_id") or current_user.get("id") or ""),
+        )
+
+        await log_custom_action(
+            get_database(),
+            current_user,
+            action="executed",
+            resource_type="backup",
+            detail=result.get("message") or "Manual backup run",
+        )
+
+        return {"message": result.get("message"), "result": result}
+    except Exception as e:
+        logger.error(f"Error in run_backup_now: {e}")
+        raise HTTPException(status_code=500, detail="Failed to run backup")
+
+
+@router.get("/settings/backup/runs")
+async def list_backup_runs(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List recent backup run history."""
+    if not can_manage_backup(current_user):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage backups")
+    try:
+        from app.lib.backup_service import list_backup_runs as fetch_runs
+
+        runs = await fetch_runs(limit=limit)
+        return {"runs": runs}
+    except Exception as e:
+        logger.error(f"Error in list_backup_runs: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load backup history")
+
+
+@router.get("/settings/backup/credentials")
+async def get_backup_credentials_settings(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Get admin-managed backup integration credentials (secrets are never returned)."""
+    if not can_manage_backup(current_user):
+        raise HTTPException(
+            status_code=403, detail="You do not have permission to manage backups"
+        )
+    try:
+        from app.lib.integration_credentials import get_backup_credentials_public
+
+        credentials = await get_backup_credentials_public()
+        return {"credentials": credentials}
+    except Exception as e:
+        logger.error(f"Error in get_backup_credentials_settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load backup credentials")
+
+
+@router.put("/settings/backup/credentials")
+async def update_backup_credentials_settings(
+    payload: Dict[str, Any],
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Save backup integration credentials from the admin panel."""
+    if not can_manage_backup(current_user):
+        raise HTTPException(
+            status_code=403, detail="You do not have permission to manage backups"
+        )
+    try:
+        from app.lib.integration_credentials import update_backup_credentials
+
+        credentials = await update_backup_credentials(payload)
+
+        await log_custom_action(
+            get_database(),
+            current_user,
+            action="updated",
+            resource_type="backup",
+            detail="Backup integration credentials updated",
+        )
+
+        return {
+            "message": "Backup credentials updated",
+            "credentials": credentials,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in update_backup_credentials_settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save backup credentials")
+
+
+@router.get("/settings/email-transport")
+async def get_email_transport_settings(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Get admin-managed email delivery settings (secrets are never returned)."""
+    try:
+        from app.lib.email_transport_settings import get_email_transport_public
+
+        transport = await get_email_transport_public()
+        return {"transport": transport}
+    except Exception as e:
+        logger.error(f"Error in get_email_transport_settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load email transport settings")
+
+
+@router.put("/settings/email-transport")
+async def update_email_transport_settings_endpoint(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Save email delivery settings (Netlify relay, SendGrid, or SMTP)."""
+    try:
+        from app.lib.email_transport_settings import update_email_transport_settings
+
+        transport = await update_email_transport_settings(payload)
+
+        await log_resource_updated(
+            get_database(),
+            current_user,
+            resource_type="email_transport",
+            existing={},
+            updates=payload,
+            title_field="provider",
+        )
+
+        return {"message": "Email transport settings updated", "transport": transport}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in update_email_transport_settings_endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save email transport settings")
+
+
+@router.post("/settings/email-transport/test")
+async def test_email_transport_settings(
+    request: Request,
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Send a test email using the configured transport."""
+    from app.lib.cors import resolve_frontend_url
+    from app.lib.email_transport import deliver_html_email_with_detail, is_email_configured
+    from app.lib.email_transport_settings import get_email_transport_config
+
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email transport is not fully configured",
+        )
+
+    recipient = str(payload.get("to") or current_user.get("email") or "").strip()
+    if not recipient:
+        raise HTTPException(status_code=400, detail="No recipient email available")
+
+    await get_email_transport_config(force_reload=True)
+    creds = await get_email_transport_config()
+    provider = (creds.get("provider") or "smtp").strip()
+
+    html = f"""
+        <p>Hi,</p>
+        <p>This is a test email from the BQI Tech admin panel.</p>
+        <p>Transport: <strong>{provider}</strong></p>
+        <p>If you received this message, outbound email is working.</p>
+    """
+    sent, error = deliver_html_email_with_detail(
+        recipient,
+        "BQI Tech — test email",
+        html,
+        frontend_url=resolve_frontend_url(request.headers.get("origin")),
+    )
+    if not sent:
+        detail = error or "Unknown email delivery error"
+        raise HTTPException(
+            status_code=502,
+            detail=f"Test email could not be sent: {detail}",
+        )
+
+    return {
+        "message": f"Test email sent to {recipient}",
+        "emailSent": True,
+        "email": recipient,
+        "provider": provider,
+    }
+
+
+@router.get("/settings/ai-providers")
+async def get_ai_provider_settings(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Get admin-managed AI providers (API keys are never returned)."""
+    try:
+        from app.lib.ai_provider_settings import get_ai_providers_public
+
+        config = await get_ai_providers_public()
+        return {"aiProviders": config}
+    except Exception as e:
+        logger.error(f"Error in get_ai_provider_settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load AI provider settings")
+
+
+@router.get("/ai/status")
+async def get_ai_status(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Lightweight AI configuration check (no live provider network call)."""
+    try:
+        from app.lib.ai_provider_settings import get_ai_providers_public
+
+        config = await get_ai_providers_public()
+        active = next(
+            (p for p in config.get("providers", []) if p.get("isActive")),
+            None,
+        )
+        configured = (
+            bool(active.get("hasApiKey"))
+            if active
+            else bool(config.get("configured"))
+        )
+        return {
+            "configured": configured,
+            "source": config.get("source"),
+            "activeProviderLabel": active.get("label") if active else None,
+            "model": active.get("model") if active else None,
+        }
+    except Exception as e:
+        logger.error(f"Error in get_ai_status: {e}")
+        return {
+            "configured": False,
+            "source": None,
+            "activeProviderLabel": None,
+            "model": None,
+        }
+
+
+@router.put("/settings/ai-providers")
+async def update_ai_provider_settings_endpoint(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Add, update, or remove AI providers and set the active provider."""
+    try:
+        from app.lib.ai_provider_settings import update_ai_providers_settings
+
+        config = await update_ai_providers_settings(payload)
+
+        active = next(
+            (p for p in config.get("providers", []) if p.get("isActive")),
+            None,
+        )
+        await log_custom_action(
+            get_database(),
+            current_user,
+            action="updated",
+            resource_type="settings",
+            resource_title="AI providers",
+            resource_path="/admin/settings",
+            detail=(
+                f"active provider: {active.get('label')}"
+                if active
+                else "AI providers updated"
+            ),
+        )
+
+        return {"message": "AI provider settings updated", "aiProviders": config}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in update_ai_provider_settings_endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save AI provider settings")
+
+
+@router.post("/settings/ai-providers/test")
+async def test_ai_provider_settings(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Test an AI provider by id, or by inline {baseUrl, apiKey, model}."""
+    from app.lib.ai_provider_settings import (
+        _resolve_provider_api_key,
+        get_active_ai_config,
+        get_provider_by_id,
+    )
+    from app.lib.nvidia_ai import test_ai_provider_connection
+
+    provider_id = str(payload.get("id") or payload.get("providerId") or "").strip()
+    base_url = str(payload.get("baseUrl") or "").strip()
+    model = str(payload.get("model") or "").strip()
+
+    if provider_id:
+        stored = await get_provider_by_id(provider_id)
+        if stored is None:
+            raise HTTPException(status_code=404, detail="Provider not found")
+        api_key = _resolve_provider_api_key(payload, stored, provider_id)
+        base_url = base_url or stored.get("baseUrl") or ""
+        model = model or stored.get("model") or ""
+    elif not (base_url and model):
+        base_url, api_key, model = await get_active_ai_config()
+    else:
+        api_key = str(payload.get("apiKey") or "").strip()
+
+    result = await test_ai_provider_connection(
+        {"baseUrl": base_url, "apiKey": api_key, "model": model}
+    )
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=503 if result.get("status") == "not_configured" else 502,
+            detail=result,
+        )
+    return result
 
 
 @router.get("/settings/recaptcha")
@@ -3051,131 +4267,6 @@ async def get_recaptcha_settings(
         logger.error(f"Error in get_recaptcha_settings: {str(e)}")
         logger.exception("Full traceback:")
         raise HTTPException(status_code=500, detail="Failed to load reCAPTCHA settings")
-
-
-@router.get("/settings/ai")
-async def get_ai_provider_settings(
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Get AI provider settings (API key is never returned in full)."""
-    try:
-        from app.lib.ai_client import PROVIDER_DEFAULTS, mask_api_key
-
-        db = get_database()
-        settings_doc = await db.settings.find_one({"type": "admin"}, {"aiProvider": 1})
-        ai = (settings_doc or {}).get("aiProvider") or {}
-
-        provider = str(ai.get("provider") or "nvidia").lower()
-        if provider not in PROVIDER_DEFAULTS:
-            provider = "nvidia"
-        defaults = PROVIDER_DEFAULTS[provider]
-
-        api_key = str(ai.get("apiKey") or "")
-        masked = mask_api_key(api_key)
-
-        return {
-            "provider": provider,
-            "baseUrl": str(ai.get("baseUrl") or defaults["baseUrl"]),
-            "model": str(ai.get("model") or defaults["model"]),
-            "enabled": bool(ai.get("enabled", True)),
-            **masked,
-        }
-    except Exception as e:
-        logger.error(f"Error in get_ai_provider_settings: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to load AI provider settings")
-
-
-@router.put("/settings/ai")
-async def update_ai_provider_settings(
-    payload: Dict[str, Any],
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Update AI provider settings stored in admin settings."""
-    try:
-        from app.lib.ai_client import PROVIDER_DEFAULTS, clear_ai_config_cache
-
-        db = get_database()
-        provider = str(payload.get("provider") or "nvidia").strip().lower()
-        if provider not in PROVIDER_DEFAULTS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid provider. Use one of: {', '.join(PROVIDER_DEFAULTS)}",
-            )
-
-        defaults = PROVIDER_DEFAULTS[provider]
-        update_fields: Dict[str, Any] = {
-            "updatedAt": datetime.utcnow(),
-            "type": "admin",
-            "aiProvider.provider": provider,
-        }
-
-        if "baseUrl" in payload:
-            base_url = str(payload.get("baseUrl") or "").strip()
-            update_fields["aiProvider.baseUrl"] = base_url or defaults["baseUrl"]
-        if "model" in payload:
-            model = str(payload.get("model") or "").strip()
-            update_fields["aiProvider.model"] = model or defaults["model"]
-        if "enabled" in payload:
-            update_fields["aiProvider.enabled"] = bool(payload.get("enabled"))
-
-        api_key = str(payload.get("apiKey") or "").strip()
-        if api_key:
-            update_fields["aiProvider.apiKey"] = api_key
-
-        if len(update_fields) <= 3 and not api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Provide at least one field to update (provider, apiKey, baseUrl, model, enabled)",
-            )
-
-        await db.settings.update_one(
-            {"type": "admin"},
-            {"$set": update_fields},
-            upsert=True,
-        )
-        clear_ai_config_cache()
-
-        updated = await db.settings.find_one({"type": "admin"}, {"aiProvider": 1})
-        ai = (updated or {}).get("aiProvider") or {}
-        from app.lib.ai_client import mask_api_key
-
-        masked = mask_api_key(str(ai.get("apiKey") or ""))
-        return {
-            "message": "AI provider settings updated",
-            "provider": str(ai.get("provider") or provider),
-            "baseUrl": str(ai.get("baseUrl") or defaults["baseUrl"]),
-            "model": str(ai.get("model") or defaults["model"]),
-            "enabled": bool(ai.get("enabled", True)),
-            **masked,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in update_ai_provider_settings: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to update AI provider settings")
-
-
-@router.post("/settings/ai/test")
-async def test_ai_provider_settings(
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Test the configured AI provider with a minimal completion request."""
-    try:
-        from app.lib.ai_client import chat_completion, clear_ai_config_cache
-
-        clear_ai_config_cache()
-        reply = await chat_completion(
-            "Reply with exactly: OK",
-            system_prompt="You are a test assistant. Reply with one word only.",
-            max_tokens=16,
-            temperature=0,
-        )
-        return {"success": True, "message": reply[:200]}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("AI provider test failed")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/settings/recaptcha")
@@ -3209,6 +4300,21 @@ async def update_recaptcha_settings(
 
         updated = await db.settings.find_one({"type": "admin"}, {"contactRecaptcha": 1})
         recaptcha = (updated or {}).get("contactRecaptcha", {}) if updated else {}
+
+        changed: list[str] = []
+        if site_key:
+            changed.append("site key")
+        if secret_key:
+            changed.append("secret key")
+        await log_custom_action(
+            db,
+            current_user,
+            action="updated",
+            resource_type="recaptcha",
+            changes=changed,
+            detail="reCAPTCHA keys updated" if changed else None,
+        )
+
         return {
             "message": "reCAPTCHA settings updated",
             "siteKey": str(recaptcha.get("siteKey", "") or ""),
@@ -3323,6 +4429,14 @@ async def create_admin_notification(
     result = await db.notifications.insert_one(notification_data)
     notification_data["_id"] = str(result.inserted_id)
     notification_data["id"] = str(result.inserted_id)
+
+    await log_resource_created(
+        db,
+        current_user,
+        resource_type="notification",
+        doc=notification_data,
+        title_field="title",
+    )
     
     return notification_data
 
@@ -3381,6 +4495,15 @@ async def delete_notification(
     """Delete notification"""
     db = get_database()
     
+    existing = await db.notifications.find_one({
+        "_id": ObjectId(notification_id),
+        "$or": [
+            {"userId": str(current_user["_id"])},
+            {"userId": {"$in": [None, ""]}},
+            {"userId": {"$exists": False}}
+        ]
+    })
+
     # Allow deleting user-specific notifications OR system-wide notifications
     result = await db.notifications.delete_one({
         "_id": ObjectId(notification_id),
@@ -3393,6 +4516,16 @@ async def delete_notification(
     
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Notification not found")
+
+    if existing:
+        await log_resource_deleted(
+            db,
+            current_user,
+            resource_type="notification",
+            doc=existing,
+            title_field="title",
+            resource_id=notification_id,
+        )
     
     return {"message": "Notification deleted successfully"}
 
@@ -3458,7 +4591,7 @@ async def seed_notifications(
         "ids": [str(id) for id in result.inserted_ids]
     }
 
-# Audit Logs endpoints
+# Admin Activity endpoints
 @router.get("/audit-logs")
 async def get_audit_logs(
     current_user: dict = Depends(get_current_admin_user),
@@ -3636,6 +4769,15 @@ async def bulk_delete_applications(
         
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="No applications found to delete")
+
+        await log_bulk_operation(
+            db,
+            current_user,
+            action="deleted",
+            resource_type="application",
+            count=result.deleted_count,
+            detail=f"{result.deleted_count} applications",
+        )
             
         return {
             "message": f"Successfully deleted {result.deleted_count} applications",
@@ -3700,16 +4842,8 @@ async def search_users(
         
         users = []
         async for user in users_cursor:
-            # Convert ObjectId to string
-            user["_id"] = str(user["_id"])
-            
-            # Convert datetime fields
-            for field in ["createdAt", "updatedAt", "lastLoginAt"]:
-                if field in user and isinstance(user[field], datetime):
-                    user[field] = user[field].isoformat()
-            
-            users.append(user)
-        
+            users.append(_format_admin_user(user))
+
         return {"users": users}
         
     except Exception as e:
@@ -3723,15 +4857,26 @@ async def ai_generate_email(
 ):
     """Generate email content using AI based on a prompt"""
     try:
+        import os
+        import httpx
         import json
         import re
-
-        from app.lib.ai_client import chat_completion, extract_json_object
 
         prompt = (payload.get("prompt") or "").strip()
         if not prompt:
             raise HTTPException(status_code=400, detail="Prompt is required")
 
+        from app.lib.ai_provider_settings import get_active_ai_config
+
+        base_url, api_key, model = await get_active_ai_config()
+
+        if not api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="AI service not configured — add a provider in Admin → Settings → AI providers",
+            )
+
+        # Create the system prompt for email generation
         system_prompt = """You are an expert email marketing specialist. Generate professional email content based on the user's prompt.
 
 CRITICAL: You MUST return ONLY valid JSON in this exact format. Do not include any text before or after the JSON.
@@ -3761,17 +4906,71 @@ Where:
 
 Generate an email based on this prompt:"""
 
-        content = await chat_completion(
-            prompt,
-            system_prompt=system_prompt,
-            max_tokens=2000,
-            temperature=0.7,
+        user_prompt = f"{system_prompt}\n\n{prompt}"
+
+        # Make request to NVIDIA API
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 2000,
+                },
+                timeout=30.0,
+            )
+
+        if resp.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"AI service error: {resp.status_code}")
+
+        data = resp.json()
+        content = (
+            data.get("choices", [{}])[0].get("message", {}).get("content", "")
         )
+
+        # Log the AI response for debugging
         logger.info(f"AI Response: {content[:500]}...")
 
-        parsed = extract_json_object(content)
-        if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
-            return parsed
+        # Parse JSON response from AI
+        json_patterns = [
+            r'```json\s*(\{[\s\S]*?\})\s*```',  # JSON in code blocks
+            r'```\s*(\{[\s\S]*?\})\s*```',      # JSON in generic code blocks
+            r'(\{[\s\S]*?\})',                   # Any JSON object
+        ]
+
+        for pattern in json_patterns:
+            match = re.search(pattern, content.strip(), re.DOTALL)
+            if match:
+                try:
+                    json_str = match.group(1)
+                    logger.info(f"Found JSON pattern: {json_str[:200]}...")
+                    parsed = json.loads(json_str)
+                    # Validate the structure
+                    if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
+                        logger.info("Successfully parsed AI response")
+                        return parsed
+                    else:
+                        logger.warning(f"Invalid JSON structure: {parsed}")
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"JSON parsing error: {e}")
+                    continue
+
+        # Try to parse the entire response as JSON (in case AI returned clean JSON)
+        try:
+            logger.info("Attempting to parse entire response as JSON")
+            parsed = json.loads(content.strip())
+            if isinstance(parsed, dict) and "subject" in parsed and "body" in parsed:
+                logger.info("Successfully parsed entire response as JSON")
+                return parsed
+        except json.JSONDecodeError:
+            logger.warning("Entire response is not valid JSON")
 
         logger.warning("No valid JSON found in AI response, using fallback")
 
@@ -3784,3 +4983,133 @@ Generate an email based on this prompt:"""
     except Exception as e:
         logger.error(f"Error in AI email generation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/cv-vault/filters")
+async def cv_vault_filter_options(
+    current_admin: dict = Depends(get_current_admin_user),
+):
+    from app.lib.cv_vault import get_cv_vault_filter_options
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    return await get_cv_vault_filter_options(db)
+
+
+@router.get("/cv-vault")
+async def list_cv_vault(
+    current_admin: dict = Depends(get_current_admin_user),
+    search: str = Query("", description="Filter by name, email, or filename"),
+    sort: str = Query("complete_first"),
+    has_email: Optional[bool] = Query(None),
+    has_name: Optional[bool] = Query(None),
+    linked_application: Optional[bool] = Query(None),
+    source: str = Query("all"),
+    contact_filter: str = Query("all"),
+    application_status: str = Query("all"),
+    sync: bool = Query(False, description="Force sync from Dropbox before returning"),
+):
+    """CV Vault — read from MongoDB cache with sort/filter; syncs Dropbox when empty or sync=true."""
+    from app.lib.dropbox import get_dropbox_access_token
+    from app.lib.cv_vault import (
+        CV_VAULT_COLLECTION,
+        VALID_SORTS,
+        list_cv_vault_from_db,
+        sync_cv_vault_from_dropbox,
+    )
+    import dropbox
+
+    if sort not in VALID_SORTS:
+        raise HTTPException(status_code=400, detail="Invalid sort parameter")
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    list_kwargs = {
+        "search": search,
+        "sort": sort,
+        "has_email": has_email,
+        "has_name": has_name,
+        "linked_application": linked_application,
+        "source": source if source != "all" else None,
+        "contact_filter": contact_filter,
+        "application_status": application_status
+        if application_status != "all"
+        else None,
+    }
+
+    count = await db[CV_VAULT_COLLECTION].count_documents({})
+    if sync or count == 0:
+        try:
+            token = await get_dropbox_access_token()
+            dbx = dropbox.Dropbox(token)
+        except Exception as e:
+            logger.error("Dropbox client init failed: %s", e)
+            raise HTTPException(status_code=500, detail="Failed to connect to Dropbox storage")
+        return await sync_cv_vault_from_dropbox(db, dbx, extract_pdf=False, **list_kwargs)
+
+    return await list_cv_vault_from_db(db, **list_kwargs)
+
+
+@router.post("/cv-vault/sync")
+async def sync_cv_vault(
+    current_admin: dict = Depends(get_current_admin_user),
+    extract_pdf: bool = Query(False, description="Extract name/email from PDFs when missing"),
+    sort: str = Query("complete_first"),
+    search: str = Query(""),
+    has_email: Optional[bool] = Query(None),
+    has_name: Optional[bool] = Query(None),
+    linked_application: Optional[bool] = Query(None),
+    source: str = Query("all"),
+    contact_filter: str = Query("all"),
+    application_status: str = Query("all"),
+):
+    """Sync CV vault from Dropbox into MongoDB."""
+    from app.lib.dropbox import get_dropbox_access_token
+    from app.lib.cv_vault import sync_cv_vault_from_dropbox
+    import dropbox
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        token = await get_dropbox_access_token()
+        dbx = dropbox.Dropbox(token)
+    except Exception as e:
+        logger.error("Dropbox client init failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to connect to Dropbox storage")
+
+    result = await sync_cv_vault_from_dropbox(
+        db,
+        dbx,
+        extract_pdf=extract_pdf,
+        search=search,
+        sort=sort,
+        has_email=has_email,
+        has_name=has_name,
+        linked_application=linked_application,
+        source=source if source != "all" else None,
+        contact_filter=contact_filter,
+        application_status=application_status
+        if application_status != "all"
+        else None,
+    )
+
+    synced_count = (
+        result.get("synced")
+        or result.get("total")
+        or result.get("count")
+        or 0
+    )
+    await log_custom_action(
+        db,
+        current_admin,
+        action="synced",
+        resource_type="cv_vault",
+        detail=f"CV vault synced from Dropbox ({synced_count} files)" if synced_count else "CV vault synced from Dropbox",
+    )
+
+    return result

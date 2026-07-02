@@ -50,7 +50,7 @@ export function AdminPageLayout({
         {showSearch && (
           <div className="bg-card/80 backdrop-blur-sm border-b py-4">
             <div className="max-w-screen-2xl mx-auto px-4">
-              <div className="flex flex-col md:flex-row gap-3">
+              <div className="flex flex-col md:flex-row gap-3 md:items-center">
                 <div className="relative flex-1">
                   <input
                     type="text"
@@ -61,11 +61,22 @@ export function AdminPageLayout({
                   />
                   <Search className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                 </div>
+                {headerActions ? (
+                  <div className="flex shrink-0 items-center gap-2">{headerActions}</div>
+                ) : null}
                 {filters}
               </div>
             </div>
           </div>
         )}
+
+        {!showSearch && headerActions ? (
+          <div className="border-b bg-card/80 py-3">
+            <div className="mx-auto flex max-w-screen-2xl justify-end px-4">
+              {headerActions}
+            </div>
+          </div>
+        ) : null}
 
         {/* Content Area */}
         <div className="max-w-screen-2xl mx-auto px-4 py-6">

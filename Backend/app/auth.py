@@ -103,25 +103,25 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             return user
             
         except ExpiredSignatureError:
-            logger.warning("Token has expired")
-            # Generate a new token if refresh token is valid
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         except JWTError as e:
-            logger.error(f"JWT validation error: {str(e)}")
+            logger.warning("JWT validation error: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Authentication error: {str(e)}")
+        logger.error("Authentication error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
+            detail="Authentication failed",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

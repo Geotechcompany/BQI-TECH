@@ -129,6 +129,6 @@ export const config = {
      * - public folder
      */
     // Exclude common static asset extensions from middleware matching
-    "/((?!_next/static|_next/image|favicon.ico|public/|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|mp4|webm|txt|woff|woff2|ttf|otf|eot|json|xml)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|public/|api/proxy|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|mp4|webm|txt|woff|woff2|ttf|otf|eot|json|xml)$).*)",
   ],
 };

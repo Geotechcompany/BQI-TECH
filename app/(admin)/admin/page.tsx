@@ -39,6 +39,10 @@ export default function ApplicationsPage() {
     handleEdit,
     handleDelete,
     handleSaveEdit,
+    handleSaveFromView,
+    handleRankApplication,
+    aiRankProgress,
+    rankingApplicationId,
     handleConfirmDelete,
     handleBulkStatusUpdate,
   } = useAdminApplicationPage({
@@ -110,6 +114,8 @@ export default function ApplicationsPage() {
         onEdit={handleEdit}
         onDelete={handleDelete}
         onBulkStatusUpdate={handleBulkStatusUpdate}
+        onRank={handleRankApplication}
+        rankingApplicationId={rankingApplicationId}
       />
 
       {/* Pagination */}
@@ -128,6 +134,9 @@ export default function ApplicationsPage() {
         isOpen={!!viewApplication}
         onClose={() => setViewApplication(null)}
         jobTitles={jobTitles}
+        onSave={handleSaveFromView}
+        onRank={handleRankApplication}
+        rankProgress={aiRankProgress}
       />
       
       <EditApplicationModal

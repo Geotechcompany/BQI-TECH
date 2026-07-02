@@ -1,199 +1,160 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
-import { useAuth } from "@/contexts/AuthContext";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Button } from "@/components/ui/button";
-import { User, UserCog, Shield, Mail } from "lucide-react";
+import {
+  MailPlus,
+  ShieldCheck,
+  UserCheck,
+  Users,
+  Clock3,
+  Send,
+  Loader2,
+} from "lucide-react";
 import { UserManagementTable } from "@/components/admin/UserManagementTable";
+import { InviteUserModal } from "@/components/admin/InviteUserModal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { User as UserType } from "@/src/types/user";
 import { toast } from "react-hot-toast";
 import { Pagination } from "@/components/Pagination";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { EditUserModal } from "@/components/admin/EditUserModal";
 import { adminApi } from "@/lib/api-backend";
-import { authService } from "@/lib/auth-backend";
-import { BACKEND_URL } from "@/lib/config";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { isAdminRole } from "@/lib/admin-permissions";
+import {
+  showInviteEmailError,
+  showInviteEmailToast,
+} from "@/lib/admin-invite-toast";
 
 export default function UserManagementPage() {
-  const { user } = useAuth();
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
-  const [selectedBulkAction, setSelectedBulkAction] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null);
 
-  // Debounce search query to avoid too many API calls
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
-  // Reset to page 1 when search query changes
   useEffect(() => {
-    if (debouncedSearchQuery !== searchQuery) return; // Only reset after debounce
+    if (debouncedSearchQuery !== searchQuery) return;
     setCurrentPage(1);
-  }, [debouncedSearchQuery]);
+  }, [debouncedSearchQuery, searchQuery]);
 
   const { data: usersData, isLoading } = useQuery({
     queryKey: ["admin-users", currentPage, debouncedSearchQuery],
     queryFn: async () => {
-      // If searching, use search endpoint instead of paginated list
       if (debouncedSearchQuery.trim()) {
-        const session = authService.getSession();
-        const res = await fetch(
-          `${BACKEND_URL}/api/admin/users/search?q=${encodeURIComponent(
-            debouncedSearchQuery
-          )}`,
-          {
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-              Authorization: `Bearer ${session?.token}`,
-            },
-          }
-        );
-        if (!res.ok) {
-          throw new Error(
-            `Failed to search users: ${res.status} ${res.statusText}`
-          );
-        }
-        const data = await res.json();
-        return {
-          data: data.users ?? [],
-          total: data.users?.length ?? 0,
-        } as { data: UserType[]; total: number };
+        const res = await adminApi.searchUsers({
+          q: debouncedSearchQuery.trim(),
+        });
+        const users = (res as any).users ?? [];
+        return { data: users as UserType[], total: users.length };
       }
 
-      // Normal paginated fetch when not searching
       const skip = (currentPage - 1) * itemsPerPage;
       const res = await adminApi.getUsers({ skip, limit: itemsPerPage });
-      // Normalize shape for the table props
       return {
-        data: (res as any).users ?? (res as any).data ?? [],
+        data: ((res as any).users ?? []) as UserType[],
         total: (res as any).total ?? 0,
-      } as { data: UserType[]; total: number };
+      };
     },
   });
 
-  // Use the data directly (server-side filtering when searching)
-  const filteredUsers: UserType[] = usersData?.data || [];
+  const { data: invitesData } = useQuery({
+    queryKey: ["admin-invites"],
+    queryFn: () => adminApi.getAdminInvites(),
+  });
 
   const queryClient = useQueryClient();
+  const users = usersData?.data || [];
+  const pendingInvites = (invitesData as any)?.invites ?? [];
 
   const deleteUser = useMutation({
-    mutationFn: async (userId: string) => {
-      return adminApi.deleteUser(userId);
-    },
+    mutationFn: (userId: string) => adminApi.deleteUser(userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       toast.success("User deleted successfully");
+      setDeleteTarget(null);
     },
-    onError: () => {
-      toast.error("Failed to delete user");
-    },
+    onError: () => toast.error("Failed to delete user"),
   });
 
-  const handleViewProfile = (userId: string) => {
-    // Implement navigation to user profile
-    window.open(`/admin/users/${userId}`, "_blank");
-  };
-
-  const handleResetPassword = async (userId: string) => {
-    try {
-      const response = await fetch(
-        `/api/admin/users/${userId}/reset-password`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to reset password");
-      toast.success("Password reset email sent");
-    } catch (error) {
-      toast.error("Failed to reset password");
-    }
-  };
-
-  const handleDeleteUser = (userId: string) => {
-    if (confirm("Are you sure you want to delete this user?")) {
-      deleteUser.mutate(userId);
-    }
-  };
-
-  const bulkUpdate = useMutation({
-    mutationFn: async (role: string) => {
-      const response = await fetch("/api/admin/users/bulk", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userIds: selectedUsers,
-          role,
-        }),
-      });
-      if (!response.ok) throw new Error("Bulk update failed");
-      return response.json();
-    },
+  const revokeInvite = useMutation({
+    mutationFn: (inviteId: string) => adminApi.revokeAdminInvite(inviteId),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-invites"] });
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      setSelectedUsers([]);
-      toast.success("Bulk update successful");
+      toast.success("Invitation revoked");
     },
+    onError: () => toast.error("Failed to revoke invitation"),
   });
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    setSelectedUsers([]);
-  };
+  const resendInvite = useMutation({
+    mutationFn: (inviteId: string) => adminApi.resendAdminInvite(inviteId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-invites"] });
+      showInviteEmailToast(data as any);
+    },
+    onError: (error) => showInviteEmailError(error),
+  });
 
-  const bulkActions = [
-    { value: "USER", label: "Set to User" },
-    { value: "ADMIN", label: "Set to Admin" },
-    { value: "DELETE", label: "Delete Selected" },
+  const resendInviteForUser = useMutation({
+    mutationFn: (userId: string) => adminApi.resendAdminInviteForUser(userId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-invites"] });
+      showInviteEmailToast(data as any);
+    },
+    onError: (error) => showInviteEmailError(error),
+  });
+
+  const resendingInviteId = resendInvite.isPending
+    ? (resendInvite.variables as string | undefined)
+    : undefined;
+  const resendingUserId = resendInviteForUser.isPending
+    ? (resendInviteForUser.variables as string | undefined)
+    : undefined;
+
+  const adminCount = users.filter((user) => isAdminRole(user.role)).length;
+
+  const stats = [
+    {
+      label: "Total users",
+      value: usersData?.total ?? users.length,
+      icon: Users,
+      tone: "text-blue-600 bg-blue-50",
+    },
+    {
+      label: "Administrators",
+      value: adminCount,
+      icon: ShieldCheck,
+      tone: "text-violet-600 bg-violet-50",
+    },
+    {
+      label: "Verified",
+      value: users.filter((user) => user.isEmailVerified).length,
+      icon: UserCheck,
+      tone: "text-emerald-600 bg-emerald-50",
+    },
+    {
+      label: "Pending invites",
+      value: pendingInvites.length,
+      icon: Clock3,
+      tone: "text-amber-600 bg-amber-50",
+    },
   ];
-
-  const handleBulkAction = (action: string) => {
-    if (!selectedUsers.length) {
-      toast.error("Please select users first");
-      return;
-    }
-
-    if (action === "DELETE") {
-      if (
-        confirm(
-          `Are you sure you want to delete ${selectedUsers.length} users?`
-        )
-      ) {
-        bulkDelete.mutate(selectedUsers);
-      }
-    } else {
-      bulkUpdate.mutate(action);
-    }
-  };
-
-  const bulkDelete = useMutation({
-    mutationFn: async (userIds: string[]) => {
-      const response = await fetch("/api/admin/users/bulk", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userIds }),
-      });
-      if (!response.ok) throw new Error("Bulk delete failed");
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      setSelectedUsers([]);
-      toast.success("Bulk delete successful");
-    },
-  });
 
   return (
     <>
@@ -202,55 +163,163 @@ export default function UserManagementPage() {
         searchPlaceholder="Search users by name, email or role"
         onSearch={setSearchQuery}
         searchValue={searchQuery}
-        breadcrumb="User Management"
         headerActions={
-          <div className="flex gap-4">
-            <Select onValueChange={handleBulkAction}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Bulk Actions" />
-              </SelectTrigger>
-              <SelectContent>
-                {bulkActions.map((action) => (
-                  <SelectItem key={action.value} value={action.value}>
-                    {action.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button>
-              <UserCog className="mr-2 h-4 w-4" />
-              Add New User
-            </Button>
-          </div>
+          <Button onClick={() => setInviteOpen(true)} className="shadow-sm">
+            <MailPlus className="mr-2 h-4 w-4" />
+            Invite user
+          </Button>
         }
       >
-        <UserManagementTable
-          users={filteredUsers}
-          isLoading={isLoading || deleteUser.isPending}
-          selectedUsers={selectedUsers}
-          onSelectionChange={setSelectedUsers}
-          onViewProfile={handleViewProfile}
-          onResetPassword={handleResetPassword}
-          onDelete={handleDeleteUser}
-          onEdit={(user) => setEditingUser(user)}
-        />
+        <div className="mx-auto max-w-screen-2xl space-y-6 px-4 pb-8">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {stats.map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                    <p className="mt-2 text-3xl font-semibold tracking-tight">
+                      {stat.value}
+                    </p>
+                  </div>
+                  <div
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl ${stat.tone}`}
+                  >
+                    <stat.icon className="h-5 w-5" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
 
-        {/* Only show pagination when not searching */}
-        {!debouncedSearchQuery.trim() && (
-          <Pagination
-            currentPage={currentPage}
-            totalPages={Math.ceil((usersData?.total || 0) / itemsPerPage)}
-            onPageChange={handlePageChange}
-            className="mt-6"
+          {pendingInvites.length > 0 && (
+            <div className="rounded-2xl border border-amber-200/70 bg-amber-50/50 p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-foreground">
+                    Pending invitations
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Users who have not yet accepted their admin invite.
+                  </p>
+                </div>
+                <Badge variant="outline">{pendingInvites.length} pending</Badge>
+              </div>
+              <div className="space-y-3">
+                {pendingInvites.slice(0, 5).map((invite: any) => (
+                  <div
+                    key={invite.id || invite._id}
+                    className="flex flex-col gap-3 rounded-xl border bg-background/80 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-medium">{invite.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {invite.email}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge>{invite.role}</Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={resendInvite.isPending}
+                        onClick={() =>
+                          resendInvite.mutate(invite.id || invite._id)
+                        }
+                      >
+                        {resendingInviteId === (invite.id || invite._id) ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="mr-2 h-4 w-4" />
+                        )}
+                        Resend email
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={revokeInvite.isPending}
+                        onClick={() =>
+                          revokeInvite.mutate(invite.id || invite._id)
+                        }
+                      >
+                        Revoke
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Team members</h2>
+              <p className="text-sm text-muted-foreground">
+                Invite admins or edit a user to change role and module permissions.
+              </p>
+            </div>
+            <Button onClick={() => setInviteOpen(true)} className="shrink-0 shadow-sm">
+              <MailPlus className="mr-2 h-4 w-4" />
+              Invite user
+            </Button>
+          </div>
+
+          <UserManagementTable
+            users={users}
+            isLoading={isLoading || deleteUser.isPending}
+            resendingUserId={resendingUserId}
+            onResendInvite={(userId) => resendInviteForUser.mutate(userId)}
+            onEdit={setEditingUser}
+            onDelete={(userId) => {
+              const target = users.find((user) => user.id === userId) ?? null;
+              setDeleteTarget(target);
+            }}
           />
-        )}
+
+          {!debouncedSearchQuery.trim() && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={Math.ceil((usersData?.total || 0) / itemsPerPage)}
+              onPageChange={setCurrentPage}
+            />
+          )}
+        </div>
       </AdminPageLayout>
+
+      <InviteUserModal open={inviteOpen} onOpenChange={setInviteOpen} />
 
       <EditUserModal
         user={editingUser}
         open={!!editingUser}
         onOpenChange={(open) => !open && setEditingUser(null)}
       />
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove{" "}
+              <strong>{deleteTarget?.name || deleteTarget?.email}</strong> from
+              the platform. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget && deleteUser.mutate(deleteTarget.id)}
+            >
+              Delete user
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

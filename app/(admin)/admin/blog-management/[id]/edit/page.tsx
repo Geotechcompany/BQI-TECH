@@ -175,10 +175,10 @@ export default function EditBlogPost() {
           </Button>
         </div>
 
-        <div className="max-w-4xl bg-white dark:bg-gray-800 rounded-lg p-6 overflow-visible">
-          <BlogPostForm
-            initialData={blogPost}
-            onSubmit={handleSubmit}
+        <div className="max-w-4xl bg-white dark:bg-gray-800 rounded-lg p-6">
+          <BlogPostForm 
+            initialData={blogPost} 
+            onSubmit={handleSubmit} 
           />
         </div>
       </div>

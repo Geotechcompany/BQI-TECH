@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, MapPin, ChevronRight, Send, Loader2 } from 'lucide-react';
+import { Mail, Phone, MapPin, ChevronRight, Send, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { publicApi } from '@/lib/api-backend';
 import { Input } from "@/components/ui/input";
@@ -352,7 +352,12 @@ export default function ContactUsPage() {
                   {
                     icon: MapPin,
                     title: "Visit our office",
-                    content: "The Piano, Brookside Drive",
+                    content: "The Piano, 8th Floor, Brookside Drive, Westlands, Nairobi, Kenya",
+                  },
+                  {
+                    icon: Phone,
+                    title: "Call us",
+                    content: "+254 (0)11 229 5287",
                   },
                   {
                     icon: Mail,
@@ -386,7 +391,7 @@ export default function ContactUsPage() {
 
             <div className="bg-white rounded-3xl shadow-xl shadow-gray-100/50 overflow-hidden">
               <iframe 
-                src="https://www.google.com/maps?q=The+Piano,+Brookside+Drive&output=embed"
+                src="https://www.google.com/maps?q=The+Piano,+8th+Floor,+Brookside+Drive,+Westlands,+Nairobi,+Kenya&output=embed"
                 width="100%" 
                 height="300" 
                 style={{border:0}} 

@@ -5,6 +5,7 @@ from app.database import get_database
 from app.models.user import UserProfile, PasswordChange
 from app.lib.response_obfuscator import obfuscate_user_profile, ResponseObfuscator
 from app.lib.roles import normalize_role
+from app.lib.admin_permissions import get_effective_admin_modules
 from app.lib.user_verification import resolve_email_verified
 from app.lib.encryption import encrypt_user_response, should_encrypt_response
 from typing import Dict, Any, Optional
@@ -67,7 +68,8 @@ async def get_user_profile(
             "socialLinks": user.get("socialLinks", {}),
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None,
             "updatedAt": user.get("updatedAt", "").isoformat() if user.get("updatedAt") else None,
-            "isEmailVerified": is_verified
+            "isEmailVerified": is_verified,
+            "adminModules": get_effective_admin_modules(user),
         }
         
         # Apply encryption if enabled, otherwise obfuscation

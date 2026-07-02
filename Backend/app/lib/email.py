@@ -1,3 +1,4 @@
+import asyncio
 import smtplib
 import ssl
 import random
@@ -8,9 +9,69 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from app.config import settings
 from app.database import get_database
+from app.lib.runtime_environment import get_frontend_url
+from app.lib.email_brand import (
+    BQI_BRAND,
+    environment_email_styles,
+    environment_notice_html,
+    escape_email_text,
+    module_chips_html,
+    primary_button_html,
+    wrap_admin_email,
+    wrap_public_email,
+)
 import logging
 
+from app.lib.email_transport import deliver_html_email
+
 logger = logging.getLogger(__name__)
+
+
+def is_smtp_configured() -> bool:
+    """Return True when SMTP credentials are present."""
+    from app.lib.email_transport import get_email_provider, is_email_configured
+
+    if get_email_provider() != "smtp":
+        return is_email_configured()
+    return bool((settings.smtp_user or "").strip() and (settings.smtp_pass or "").strip())
+
+
+def test_smtp_connection() -> dict[str, Any]:
+    """Verify SMTP settings by connecting and logging in. Does not send mail."""
+    if not is_smtp_configured():
+        return {
+            "configured": False,
+            "connected": False,
+            "host": settings.smtp_host,
+            "port": int(settings.smtp_port),
+            "fromEmail": settings.from_email,
+            "message": "SMTP_USER or SMTP_PASS is not set",
+        }
+
+    try:
+        with get_smtp_connection():
+            pass
+        return {
+            "configured": True,
+            "connected": True,
+            "host": settings.smtp_host,
+            "port": int(settings.smtp_port),
+            "user": settings.smtp_user,
+            "fromEmail": settings.from_email,
+            "message": "SMTP login successful",
+        }
+    except Exception as e:
+        logger.warning("SMTP connection test failed: %s", e)
+        return {
+            "configured": True,
+            "connected": False,
+            "host": settings.smtp_host,
+            "port": int(settings.smtp_port),
+            "user": settings.smtp_user,
+            "fromEmail": settings.from_email,
+            "message": str(e),
+        }
+
 
 def get_smtp_connection():
     """
@@ -104,40 +165,23 @@ def send_verification_email(email: str, verification_code: str) -> bool:
         message["To"] = email
         message["Subject"] = "Email Verification Code - BQI Tech"
         
-        # Email body
-        body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <img src="https://bqitech.com/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
-                </div>
-                
-                <h2 style="color: #1f2937;">Email Verification</h2>
-                
-                <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
-                    Thank you for signing up with BQI Tech! To complete your registration, please use the verification code below:
-                </p>
-                
-                <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
-                    <h1 style="color: #1f2937; font-size: 32px; letter-spacing: 8px; margin: 0; font-family: monospace;">
-                        {verification_code}
-                    </h1>
-                </div>
-                
-                <p style="color: #4b5563; font-size: 14px;">
-                    This code will expire in 15 minutes. If you didn't request this verification, please ignore this email.
-                </p>
-                
-                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                        This email was sent by BQI Tech. If you have any questions, please contact us at {settings.hr_email}
-                    </p>
-                </div>
+        content = f"""
+            <h1 style="margin: 0 0 12px; font-size: 24px; line-height: 1.3; font-weight: 700; color: {BQI_BRAND['dark_blue']};">
+                Email Verification
+            </h1>
+            <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['body_text']};">
+                Thank you for signing up with BQI Tech! To complete your registration, please use the verification code below:
+            </p>
+            <div style="background: linear-gradient(135deg, rgba(39,32,85,0.06) 0%, rgba(49,205,255,0.1) 100%); padding: 24px; border-radius: 12px; text-align: center; margin: 20px 0; border: 1px solid rgba(49,205,255,0.25);">
+                <span style="color: {BQI_BRAND['dark_blue']}; font-size: 36px; letter-spacing: 10px; font-weight: 700; font-family: monospace;">
+                    {escape_email_text(verification_code)}
+                </span>
             </div>
-        </body>
-        </html>
+            <p style="margin: 0; font-size: 14px; line-height: 1.6; color: {BQI_BRAND['muted_text']};">
+                This code will expire in 15 minutes. If you didn't request this verification, please ignore this email.
+            </p>
         """
+        body = wrap_public_email(content=content, preheader="Your BQI Tech verification code")
         
         message.attach(MIMEText(body, "html"))
         
@@ -168,6 +212,12 @@ async def send_verification_code(email: str) -> Optional[str]:
         # Send email
         sent = send_verification_email(email, code)
         if not sent:
+            if not settings.is_production:
+                logger.warning(
+                    f"[DEV] SMTP unavailable — verification code for {email}: {code} "
+                    "(code saved in DB; use this to verify locally)"
+                )
+                return code
             logger.error("Failed to send verification email")
             return None
         
@@ -193,54 +243,45 @@ async def send_contact_form_email(
         message_obj["To"] = settings.hr_email  # Send to HR or contact email
         message_obj["Subject"] = f"New Contact Form Submission from {name}"
         
-        # Email body
-        body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
-                </div>
-                
-                <h2 style="color: #1f2937;">New Contact Form Submission</h2>
-                
-                <table style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Name:</strong></td>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{name}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Email:</strong></td>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{email}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Phone:</strong></td>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{phone}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Organization:</strong></td>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{organization}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;"><strong>Service Interest:</strong></td>
-                        <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{service}</td>
-                    </tr>
-                </table>
-                
-                <h3 style="color: #1f2937; margin-top: 20px;">Message:</h3>
-                <p style="background-color: #f3f4f6; padding: 15px; border-radius: 8px;">
-                    {message}
-                </p>
-                
-                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                        This is an automated email from the BQI Tech contact form.
-                    </p>
-                </div>
-            </div>
-        </body>
-        </html>
+        safe_name = escape_email_text(name)
+        safe_email = escape_email_text(email)
+        safe_phone = escape_email_text(phone)
+        safe_org = escape_email_text(organization)
+        safe_service = escape_email_text(service)
+        safe_message = escape_email_text(message)
+
+        content = f"""
+            <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: {BQI_BRAND['dark_blue']};">
+                New Contact Form Submission
+            </h1>
+            <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['muted_text']}; width: 38%;"><strong>Name</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['body_text']};">{safe_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['muted_text']};"><strong>Email</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['body_text']};">{safe_email}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['muted_text']};"><strong>Phone</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['body_text']};">{safe_phone}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['muted_text']};"><strong>Organization</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['body_text']};">{safe_org}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['muted_text']};"><strong>Service Interest</strong></td>
+                    <td style="padding: 10px 0; border-bottom: 1px solid {BQI_BRAND['border']}; color: {BQI_BRAND['body_text']};">{safe_service}</td>
+                </tr>
+            </table>
+            <h3 style="margin: 20px 0 10px; color: {BQI_BRAND['dark_blue']}; font-size: 16px;">Message</h3>
+            <p style="margin: 0; background: {BQI_BRAND['light_bg']}; padding: 16px; border-radius: 10px; border-left: 4px solid {BQI_BRAND['cyan']}; color: {BQI_BRAND['body_text']}; white-space: pre-wrap;">
+                {safe_message}
+            </p>
         """
+        body = wrap_public_email(content=content, preheader=f"New contact form submission from {safe_name}")
         
         message_obj.attach(MIMEText(body, "html"))
         
@@ -269,34 +310,27 @@ async def send_contact_confirmation_email(
         message_obj["To"] = email
         message_obj["Subject"] = "We received your message – BQI Tech"
 
-        body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
-                </div>
-                <h2 style="color: #1f2937;">Thanks, {name} — we’ve got your message</h2>
-                <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
-                    This is a quick confirmation that we received your inquiry.
-                    Our team will review it and get back to you shortly.
-                </p>
-                <div style="background-color: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
-                    <p style="margin: 0; color: #111827;">Service interest: <strong>{service}</strong></p>
-                    <p style="white-space: pre-wrap; margin-top: 8px; color: #374151;">{message}</p>
-                </div>
-                <p style="color: #4b5563; font-size: 14px;">
-                    If you didn’t submit this request, please ignore this email.
-                </p>
-                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                        You can also reach us at {settings.hr_email}
-                    </p>
-                </div>
+        safe_name = escape_email_text(name)
+        safe_service = escape_email_text(service)
+        safe_message = escape_email_text(message)
+
+        content = f"""
+            <h1 style="margin: 0 0 12px; font-size: 24px; font-weight: 700; color: {BQI_BRAND['dark_blue']};">
+                Thanks, {safe_name} — we've got your message
+            </h1>
+            <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['body_text']};">
+                This is a quick confirmation that we received your inquiry.
+                Our team will review it and get back to you shortly.
+            </p>
+            <div style="background: {BQI_BRAND['light_bg']}; padding: 16px; border-radius: 10px; margin: 16px 0; border-left: 4px solid {BQI_BRAND['cyan']};">
+                <p style="margin: 0; color: {BQI_BRAND['body_text']};">Service interest: <strong>{safe_service}</strong></p>
+                <p style="white-space: pre-wrap; margin: 10px 0 0; color: {BQI_BRAND['body_text']};">{safe_message}</p>
             </div>
-        </body>
-        </html>
+            <p style="margin: 0; font-size: 14px; color: {BQI_BRAND['muted_text']};">
+                If you didn't submit this request, please ignore this email.
+            </p>
         """
+        body = wrap_public_email(content=content, preheader="We received your message")
 
         message_obj.attach(MIMEText(body, "html"))
 
@@ -322,30 +356,22 @@ async def send_application_confirmation_email(
         message_obj["To"] = applicant_email
         message_obj["Subject"] = "We received your application – BQI Tech"
 
-        body = f"""
-        <html>
-        <body>
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="text-align: center; margin-bottom: 30px;">
-                    <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
-                </div>
-                <h2 style="color: #1f2937;">Thanks, {applicant_name} — your application is in!</h2>
-                <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
-                    We’ve received your application for <strong>{job_title}</strong>.
-                    Our hiring team will review your information and get back to you soon.
-                </p>
-                <p style="color: #4b5563; font-size: 14px;">
-                    You can track your application status anytime from your dashboard.
-                </p>
-                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                    <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                        If you have questions, contact us at {settings.hr_email}
-                    </p>
-                </div>
-            </div>
-        </body>
-        </html>
+        safe_name = escape_email_text(applicant_name)
+        safe_job = escape_email_text(job_title)
+
+        content = f"""
+            <h1 style="margin: 0 0 12px; font-size: 24px; font-weight: 700; color: {BQI_BRAND['dark_blue']};">
+                Thanks, {safe_name} — your application is in!
+            </h1>
+            <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['body_text']};">
+                We've received your application for <strong>{safe_job}</strong>.
+                Our hiring team will review your information and get back to you soon.
+            </p>
+            <p style="margin: 0; font-size: 14px; color: {BQI_BRAND['muted_text']};">
+                You can track your application status anytime from your dashboard.
+            </p>
         """
+        body = wrap_public_email(content=content, preheader=f"Application received for {safe_job}")
 
         message_obj.attach(MIMEText(body, "html"))
 
@@ -368,47 +394,51 @@ def build_reset_password_email(reset_link: str) -> MIMEMultipart:
     # "To" is set by the caller
     message["Subject"] = "Reset your password – BQI Tech"
 
-    body = f"""
-    <html>
-    <body>
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
-            </div>
-            <h2 style="color: #1f2937;">Reset your password</h2>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
-                We received a request to reset your password. Click the button below to set a new password. This link will expire in 60 minutes.
-            </p>
-            <p style="text-align: center; margin: 24px 0;">
-                <a href="{reset_link}" style="background: #2563eb; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Reset Password</a>
-            </p>
-            <p style="color: #6b7280; font-size: 14px;">
-                If the button doesn't work, copy and paste this URL into your browser:<br/>
-                <a href="{reset_link}">{reset_link}</a>
-            </p>
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                    If you didn't request this, you can safely ignore this email.
-                </p>
-            </div>
-        </div>
-    </body>
-    </html>
+    safe_link = escape_email_text(reset_link)
+
+    content = f"""
+        <h1 style="margin: 0 0 12px; font-size: 24px; font-weight: 700; color: {BQI_BRAND['dark_blue']};">
+            Reset your password
+        </h1>
+        <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['body_text']};">
+            We received a request to reset your password. Click the button below to set a new password. This link will expire in 60 minutes.
+        </p>
+        {primary_button_html("Reset Password", reset_link)}
+        <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.6; color: {BQI_BRAND['muted_text']}; word-break: break-all;">
+            If the button doesn't work, copy and paste this URL into your browser:<br/>
+            <a href="{safe_link}" style="color: {BQI_BRAND['cyan']}; text-decoration: underline;">{safe_link}</a>
+        </p>
+        <p style="margin: 16px 0 0; font-size: 14px; color: {BQI_BRAND['muted_text']};">
+            If you didn't request this, you can safely ignore this email.
+        </p>
     """
+    body = wrap_public_email(content=content, preheader="Reset your BQI Tech password")
     message.attach(MIMEText(body, "html"))
     return message
 
 
-async def send_password_reset_email(email: str, reset_link: str) -> bool:
+async def send_password_reset_email(
+    email: str,
+    reset_link: str,
+    frontend_url: str | None = None,
+) -> bool:
     """Send a password reset email with a secure link."""
     try:
         message = build_reset_password_email(reset_link)
         message["To"] = email
-
-        with get_smtp_connection() as server:
-            server.sendmail(settings.from_email, email, message.as_string())
-        logger.info(f"Password reset email sent to {email}")
-        return True
+        html = ""
+        for part in message.walk():
+            if part.get_content_type() == "text/html":
+                html = part.get_payload(decode=True).decode(
+                    part.get_content_charset() or "utf-8"
+                )
+                break
+        ok = deliver_html_email(
+            email, message["Subject"], html, frontend_url=frontend_url
+        )
+        if ok:
+            logger.info(f"Password reset email sent to {email}")
+        return ok
     except Exception as e:
         logger.error(f"Failed to send password reset email to {email}: {str(e)}")
         return False
@@ -426,46 +456,35 @@ def build_admin_privilege_upgrade_email(
 ) -> MIMEMultipart:
     """Create an email notifying the user that admin access was granted."""
     role_label = _admin_role_display(role)
-    display_name = (recipient_name or "").strip() or "there"
+    display_name = escape_email_text((recipient_name or "").strip() or "there")
+    safe_role = escape_email_text(role_label)
+    safe_url = escape_email_text(admin_login_url)
 
     message = MIMEMultipart()
     message["From"] = settings.from_email
     message["Subject"] = "Your BQI Tech admin access is ready"
 
-    body = f"""
-    <html>
-    <body>
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <img src="{settings.frontend_url}/bqilogo.png" alt="BQI Tech Logo" style="width: 150px; height: auto; margin: 0;">
-            </div>
-            <h2 style="color: #1f2937;">Admin access granted</h2>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
-                Hi {display_name},
-            </p>
-            <p style="color: #4b5563; font-size: 16px; line-height: 1.5;">
-                Your account has been upgraded to <strong>{role_label}</strong> on the BQI Tech platform.
-                You can now sign in to the admin portal to manage jobs, applications, and other workspace tools.
-            </p>
-            <p style="text-align: center; margin: 24px 0;">
-                <a href="{admin_login_url}" style="background: #2563eb; color: #fff; padding: 12px 20px; border-radius: 8px; text-decoration: none; display: inline-block;">Open Admin Portal</a>
-            </p>
-            <p style="color: #6b7280; font-size: 14px;">
-                If you are already signed in, log out and sign back in with this email so your session picks up the new permissions.
-            </p>
-            <p style="color: #6b7280; font-size: 14px;">
-                If the button doesn't work, copy and paste this URL into your browser:<br/>
-                <a href="{admin_login_url}">{admin_login_url}</a>
-            </p>
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-                <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                    If you believe this change was made in error, contact us at {settings.hr_email}
-                </p>
-            </div>
-        </div>
-    </body>
-    </html>
+    content = f"""
+        <h1 style="margin: 0 0 12px; font-size: 24px; font-weight: 700; color: {BQI_BRAND['admin_text']};">
+            Admin access granted
+        </h1>
+        <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['admin_muted']};">
+            Hi {display_name},
+        </p>
+        <p style="margin: 0; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['admin_muted']};">
+            Your account has been upgraded to <strong style="color: {BQI_BRAND['admin_text']};">{safe_role}</strong> on the BQI Tech platform.
+            You can now sign in to the admin portal to manage jobs, applications, and other workspace tools.
+        </p>
+        {primary_button_html("Open Admin Portal", admin_login_url, BQI_BRAND['admin_accent'])}
+        <p style="margin: 24px 0 0; font-size: 14px; color: {BQI_BRAND['admin_muted']};">
+            If you are already signed in, log out and sign back in with this email so your session picks up the new permissions.
+        </p>
+        <p style="margin: 16px 0 0; font-size: 12px; line-height: 1.6; color: #9CA3AF; word-break: break-all;">
+            If the button doesn't work, copy and paste this URL into your browser:<br/>
+            <a href="{safe_url}" style="color: {BQI_BRAND['admin_accent']}; text-decoration: underline;">{safe_url}</a>
+        </p>
     """
+    body = wrap_admin_email(content=content, preheader="Your BQI Tech admin access is ready")
     message.attach(MIMEText(body, "html"))
     return message
 
@@ -477,7 +496,7 @@ async def send_admin_privilege_upgrade_email(
 ) -> bool:
     """Notify a user that admin privileges were granted on their account."""
     try:
-        admin_login_url = f"{settings.frontend_url.rstrip('/')}/admin/login"
+        admin_login_url = f"{get_frontend_url()}/admin/login"
         message = build_admin_privilege_upgrade_email(
             recipient_name=recipient_name,
             role=role,
@@ -495,79 +514,165 @@ async def send_admin_privilege_upgrade_email(
         )
         return False
 
-# ---------------------- Generic & Bulk Email Utilities ----------------------
-from urllib.parse import urlparse
 
-_PRODUCTION_FRONTEND_ORIGINS = (
-    "https://bqitech.com",
-    "https://www.bqitech.com",
-    "http://bqitech.com",
-    "http://www.bqitech.com",
-)
+def build_admin_invite_email(
+    recipient_name: str,
+    role: str,
+    module_labels: list[str],
+    action_link: str,
+    invited_by: str = "",
+    environment_label: str = "Development",
+    database_name: str = "BQITECH-DEV",
+    environment: str = "development",
+) -> MIMEMultipart:
+    """Email inviting a user to join the admin workspace."""
+    role_label = _admin_role_display(role)
+    display_name = escape_email_text((recipient_name or "").strip() or "there")
+    safe_role = escape_email_text(role_label)
+    safe_link = escape_email_text(action_link)
+    env_styles = environment_email_styles(environment)
+    env_key = (environment or "development").lower()
 
+    inviter_html = ""
+    if invited_by:
+        inviter_html = f"""
+        <p style="margin: 16px 0 0; font-size: 14px; color: {BQI_BRAND['admin_muted']};">
+            Invited by <strong style="color: {BQI_BRAND['admin_text']};">{escape_email_text(invited_by)}</strong>
+        </p>
+        """
 
-def normalize_relay_frontend_url(value: str | None) -> str | None:
-    url = (value or "").strip().rstrip("/")
-    if not url or any(ch in url for ch in "\r\n\t"):
-        return None
-    parsed = urlparse(url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        return None
-    return url
-
-
-def rewrite_email_html_for_frontend(html: str, frontend_url: str | None) -> str:
-    """Swap production frontend URLs in relayed HTML for the caller's environment."""
-    target = normalize_relay_frontend_url(frontend_url)
-    if not target:
-        return html
-    if target in {origin.rstrip("/") for origin in _PRODUCTION_FRONTEND_ORIGINS}:
-        return html
-    result = html
-    for origin in _PRODUCTION_FRONTEND_ORIGINS:
-        result = result.replace(origin, target)
-    return result
-
-
-def smtp_send_html(
-    to: str,
-    subject: str,
-    html: str,
-    from_email: Optional[str] = None,
-) -> None:
-    """Send HTML email via configured SMTP. Raises on failure."""
-    sender = (from_email or settings.from_email or "").strip()
-    if not sender:
-        raise ValueError("from email is required")
+    subject_suffix = ""
+    if env_key != "production":
+        subject_suffix = f" - {environment_label}"
 
     message = MIMEMultipart()
-    message["From"] = sender
-    message["To"] = to
-    message["Subject"] = subject
-    message.attach(MIMEText(html, "html"))
+    message["From"] = settings.from_email
+    message["Subject"] = f"You're invited to BQI Tech Admin{subject_suffix}"
 
-    with get_smtp_connection() as server:
-        server.sendmail(sender, to, message.as_string())
-
-    logger.info("Email sent to %s", to)
-
-
-def send_generic_email(
-    to: str,
-    subject: str,
-    html: str,
-    from_email: Optional[str] = None,
-) -> bool:
-    """Send a generic HTML email via configured SMTP settings.
-
-    This is a synchronous helper designed to be used from async wrappers when needed.
+    content = f"""
+        {environment_notice_html(environment_label, database_name, environment)}
+        <h1 style="margin: 0 0 12px; font-size: 24px; line-height: 1.3; font-weight: 700; color: {BQI_BRAND['admin_text']};">
+            Admin workspace invitation
+        </h1>
+        <p style="margin: 0 0 16px; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['admin_muted']};">
+            Hi {display_name},
+        </p>
+        <p style="margin: 0; font-size: 16px; line-height: 1.6; color: {BQI_BRAND['admin_muted']};">
+            You have been invited to join the BQI Tech admin portal as
+            <strong style="color: {BQI_BRAND['admin_text']};">{safe_role}</strong>.
+            Accept below to set your password and access your assigned modules.
+        </p>
+        {module_chips_html(module_labels)}
+        {inviter_html}
+        {primary_button_html("Accept invitation", action_link, env_styles["accent"])}
+        <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.6; color: {BQI_BRAND['admin_muted']}; text-align: center;">
+            This secure link expires in <strong style="color: {BQI_BRAND['admin_text']};">7 days</strong>.
+        </p>
+        <p style="margin: 16px 0 0; font-size: 12px; line-height: 1.6; color: #9CA3AF; word-break: break-all;">
+            If the button does not work, copy and paste this URL into your browser:<br/>
+            <a href="{safe_link}" style="color: {BQI_BRAND['admin_accent']}; text-decoration: underline;">{safe_link}</a>
+        </p>
     """
+
+    body = wrap_admin_email(
+        content=content,
+        accent_color=env_styles["accent"],
+        preheader=f"Join BQI Tech Admin ({environment_label}) as {role_label}.",
+    )
+    message.attach(MIMEText(body, "html"))
+    return message
+
+
+def _send_admin_invite_email_sync(
+    email: str,
+    recipient_name: str,
+    role: str,
+    module_labels: list[str],
+    action_link: str,
+    invited_by: str,
+    resolved_label: str,
+    resolved_database: str,
+    resolved_environment: str,
+    frontend_url: str | None = None,
+) -> bool:
+    """Blocking SMTP send — run via asyncio.to_thread from async callers."""
+    message = build_admin_invite_email(
+        recipient_name=recipient_name,
+        role=role,
+        module_labels=module_labels,
+        action_link=action_link,
+        invited_by=invited_by,
+        environment_label=resolved_label,
+        database_name=resolved_database,
+        environment=resolved_environment,
+    )
+    message["To"] = email
+
+    html_body = message.as_string()
+    # Extract HTML part for HTTP transports (invite emails are HTML-only multipart)
+    for part in message.walk():
+        if part.get_content_type() == "text/html":
+            html_body = part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8")
+            break
+
+    subject = message["Subject"]
+    return deliver_html_email(email, subject, html_body, frontend_url=frontend_url)
+
+
+async def send_admin_invite_email(
+    email: str,
+    recipient_name: str,
+    role: str,
+    module_labels: list[str],
+    action_link: str,
+    invited_by: str = "",
+    environment_label: str | None = None,
+    database_name: str | None = None,
+    environment: str | None = None,
+    frontend_url: str | None = None,
+) -> bool:
+    """Send admin workspace invitation email."""
+    resolved_label = environment_label or "Development"
+    resolved_database = database_name or "BQITECH-DEV"
+    resolved_environment = environment or "development"
+
     try:
-        smtp_send_html(to, subject, html, from_email=from_email)
-        return True
+        if not environment_label or not database_name or not environment:
+            from app.lib.runtime_environment import get_runtime_environment_payload
+
+            runtime = get_runtime_environment_payload()
+            resolved_label = environment_label or runtime.get("label", "Development")
+            resolved_database = database_name or runtime.get("databaseName", "BQITECH-DEV")
+            resolved_environment = environment or runtime.get("environment", "development")
+
+        return await asyncio.to_thread(
+            _send_admin_invite_email_sync,
+            email,
+            recipient_name,
+            role,
+            module_labels,
+            action_link,
+            invited_by,
+            resolved_label,
+            resolved_database,
+            resolved_environment,
+            frontend_url,
+        )
     except Exception as e:
-        logger.error(f"Failed sending email to {to}: {e}")
+        logger.error(f"Failed to send admin invite email to {email}: {str(e)}")
+        if not settings.is_production:
+            logger.info(
+                "DEV invite link for %s (%s): %s",
+                email,
+                resolved_label,
+                action_link,
+            )
         return False
+
+# ---------------------- Generic & Bulk Email Utilities ----------------------
+def send_generic_email(to: str, subject: str, html: str) -> bool:
+    """Send a generic HTML email via the configured transport."""
+    return deliver_html_email(to, subject, html)
 
 
 async def send_bulk_emails_backend(

@@ -4,37 +4,44 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { Application, StatusHistoryEntry } from "@/types/application";
-import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "./utils/table-utils";
-import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { Application } from "@/types/application";
+import { getPositionDisplay, getCvUrl } from "./utils/table-utils";
+import { APPLICATION_STATUS_OPTIONS, getStatusColor } from "./application-status";
+import { AiRankInlineProgress, type AiRankProgressState } from "./AiRankProgress";
+import { useEffect, useState } from "react";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import {
-  getProxiedUrl,
-  getDownloadUrl,
-  getProxyFetchUrl,
-  getCvDisplayLabel,
-  isNonPreviewableDoc,
-  isPreviewableContentType,
-} from "@/lib/cv-url-utils";
-import { 
-  UserIcon, 
-  BriefcaseIcon, 
-  FileTextIcon, 
-  FileIcon, 
+  UserIcon,
+  BriefcaseIcon,
+  FileTextIcon,
+  FileIcon,
   ArrowUpRightIcon,
-  X
+  X,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CVPreviewFrame } from "./CVPreviewFrame";
+import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ViewApplicationModalProps {
   application: Application | null;
   isOpen: boolean;
   onClose: () => void;
   jobTitles?: Record<string, string>;
-  showApplicationId?: boolean;
+  onSave?: (updatedApplication: Application) => Promise<void> | void;
+  onRank?: (applicationId: string) => Promise<void> | void;
+  rankProgress?: AiRankProgressState | null;
 }
 
 export function ViewApplicationModal({
@@ -42,108 +49,46 @@ export function ViewApplicationModal({
   isOpen,
   onClose,
   jobTitles = {},
-  showApplicationId = true,
+  onSave,
+  onRank,
+  rankProgress = null,
 }: ViewApplicationModalProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [previewError, setPreviewError] = useState(false);
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
-  const previewBlobUrlRef = useRef<string | null>(null);
+  const [status, setStatus] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const { isUnconfigured: aiUnconfigured } = useAiStatus();
 
-  const cvUrl = application ? getCvUrl(application) : "";
+  const isRanking = Boolean(rankProgress?.isActive && rankProgress.mode === "single");
 
   useEffect(() => {
-    if (!isOpen || !cvUrl) {
-      if (previewBlobUrlRef.current) {
-        URL.revokeObjectURL(previewBlobUrlRef.current);
-        previewBlobUrlRef.current = null;
-      }
-      setPreviewBlobUrl(null);
-      setPreviewError(false);
-      setIsPreviewLoading(false);
-      return;
+    if (application && isOpen) {
+      setStatus(application.status || "New");
     }
-
-    let cancelled = false;
-
-    async function loadPreview() {
-      setPreviewError(false);
-      setIsPreviewLoading(true);
-
-      if (previewBlobUrlRef.current) {
-        URL.revokeObjectURL(previewBlobUrlRef.current);
-        previewBlobUrlRef.current = null;
-      }
-      setPreviewBlobUrl(null);
-
-      if (isNonPreviewableDoc(cvUrl)) {
-        setIsPreviewLoading(false);
-        return;
-      }
-
-      try {
-        const response = await fetch(getProxyFetchUrl(cvUrl));
-        if (cancelled) return;
-
-        if (!response.ok) {
-          throw new Error(`Proxy returned ${response.status}`);
-        }
-
-        const contentType = response.headers.get("content-type") || "";
-
-        if (!isPreviewableContentType(contentType, cvUrl)) {
-          setIsPreviewLoading(false);
-          return;
-        }
-
-        const blob = await response.blob();
-        if (cancelled) return;
-
-        const objectUrl = URL.createObjectURL(blob);
-        previewBlobUrlRef.current = objectUrl;
-        setPreviewBlobUrl(objectUrl);
-        setIsPreviewLoading(false);
-      } catch {
-        if (!cancelled) {
-          setPreviewError(true);
-          setIsPreviewLoading(false);
-        }
-      }
-    }
-
-    loadPreview();
-
-    return () => {
-      cancelled = true;
-      if (previewBlobUrlRef.current) {
-        URL.revokeObjectURL(previewBlobUrlRef.current);
-        previewBlobUrlRef.current = null;
-      }
-    };
-  }, [isOpen, cvUrl]);
+  }, [application, isOpen]);
 
   if (!application) return null;
 
-  const handleViewResume = () => {
-    if (application.cvUrl) {
-      setIsLoading(true);
-      const link = document.createElement("a");
-      link.href = application.cvUrl;
-      link.target = "_blank";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setIsLoading(false);
+  const isStatusDirty = status !== (application.status || "New");
+  const canEditStatus = Boolean(onSave);
+
+  const handleSaveStatus = async () => {
+    if (!onSave || !isStatusDirty) return;
+    setIsSaving(true);
+    try {
+      await onSave({ ...application, status });
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  const handleRank = async () => {
+    if (!onRank) return;
+    await onRank(application.id);
+  };
+
   const isLikelyUrl = (value: unknown) => {
-    if (typeof value !== 'string') return false;
+    if (typeof value !== "string") return false;
     try {
-      // Basic validation via URL constructor
-      // Also accept strings starting with www.
-      if (value.startsWith('www.')) return true;
-      // eslint-disable-next-line no-new
+      if (value.startsWith("www.")) return true;
       new URL(value);
       return true;
     } catch {
@@ -152,32 +97,33 @@ export function ViewApplicationModal({
   };
 
   const isResumeQuestion = (text: unknown) => {
-    const q = (typeof text === 'string' ? text : '').toLowerCase();
-    return q.includes('upload resume') || q.includes('resume/cv') || q.includes('cv');
+    const q = (typeof text === "string" ? text : "").toLowerCase();
+    return q.includes("upload resume") || q.includes("resume/cv") || q.includes("cv");
   };
 
-  function getAnswer(answers: any[] | undefined, question: string) {
-    if (!answers || !Array.isArray(answers)) return '';
-    
-    return answers.find(a => 
-      a?.questionText?.toLowerCase().includes(question.toLowerCase())
-    )?.answer || '';
+  function getAnswer(answers: Application["answers"], question: string) {
+    if (!answers || !Array.isArray(answers)) return "";
+
+    return (
+      answers.find((a) =>
+        a?.questionText?.toLowerCase().includes(question.toLowerCase())
+      )?.answer || ""
+    );
   }
+
+  const cvUrl = getCvUrl(application);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent 
-        className="w-[95vw] max-w-4xl h-[95vh] max-h-[95vh] p-0 rounded-xl sm:rounded-2xl overflow-hidden"
-      >
-        {/* Mobile-friendly header with close button */}
-        <DialogHeader className="relative p-4 sm:p-6 pb-2 sm:pb-4 border-b border-gray-100">
+      <DialogContent className="w-[95vw] max-w-4xl h-[95vh] max-h-[95vh] p-0 rounded-xl sm:rounded-2xl overflow-hidden flex flex-col">
+        <DialogHeader className="relative p-4 sm:p-6 pb-2 sm:pb-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-lg sm:text-xl lg:text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent leading-tight">
                 Application Details
               </DialogTitle>
               <DialogDescription className="text-gray-500 text-xs sm:text-sm mt-1">
-                Comprehensive overview of candidate application
+                Review candidate information and update status inline
               </DialogDescription>
             </div>
             <Button
@@ -191,19 +137,107 @@ export function ViewApplicationModal({
           </div>
         </DialogHeader>
 
-        {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-4 sm:space-y-6">
-            {showApplicationId && (
-              <div className="p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl">
-                <span className="text-xs font-medium text-gray-400">Application ID</span>
-                <p className="font-mono text-xs sm:text-sm text-gray-700 mt-1 break-all">
-                  {application.id || application._id}
-                </p>
+            <div className="p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl">
+              <span className="text-xs font-medium text-gray-400">Application ID</span>
+              <p className="font-mono text-xs sm:text-sm text-gray-700 mt-1 break-all">
+                {application.id}
+              </p>
+            </div>
+
+            {(application.aiRankScore != null || onRank) && (
+              <div className="p-4 sm:p-5 bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-lg sm:rounded-xl shadow-sm space-y-4">
+                <AiRankInlineProgress progress={rankProgress} />
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div className="flex-1">
+                    <h4 className="text-sm sm:text-base font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                      <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-violet-500 flex-shrink-0" />
+                      <span>AI Fit Score</span>
+                    </h4>
+                    {application.aiRankScore != null ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl font-bold text-violet-700">
+                            {application.aiRankScore}
+                          </span>
+                          <span className="text-sm text-gray-500">/ 100</span>
+                          {application.aiRankRecommendation && (
+                            <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-white/80 text-violet-700 border border-violet-200">
+                              {application.aiRankRecommendation}
+                            </span>
+                          )}
+                        </div>
+                        {application.aiRankSummary && (
+                          <p className="text-sm text-gray-700 leading-relaxed">
+                            {application.aiRankSummary}
+                          </p>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          {application.aiRankStrengths &&
+                            application.aiRankStrengths.length > 0 && (
+                              <div>
+                                <p className="font-medium text-green-700 mb-1">Strengths</p>
+                                <ul className="list-disc list-inside text-gray-600 space-y-0.5">
+                                  {application.aiRankStrengths.map((item, index) => (
+                                    <li key={index}>{item}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          {application.aiRankGaps && application.aiRankGaps.length > 0 && (
+                            <div>
+                              <p className="font-medium text-amber-700 mb-1">Gaps</p>
+                              <ul className="list-disc list-inside text-gray-600 space-y-0.5">
+                                {application.aiRankGaps.map((item, index) => (
+                                  <li key={index}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                        {application.aiRankedAt && (
+                          <p className="text-xs text-gray-500">
+                            Ranked {formatDate(application.aiRankedAt)}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-600">
+                        No AI score yet. Run AI ranking to evaluate this candidate against the role.
+                      </p>
+                    )}
+                  </div>
+                  {onRank && (
+                    <span
+                      title={aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined}
+                      className="inline-flex flex-shrink-0"
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRank}
+                        disabled={isRanking || aiUnconfigured}
+                        className="border-violet-200 text-violet-700 hover:bg-violet-50"
+                      >
+                        {isRanking ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Ranking...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            {application.aiRankScore != null ? "Re-rank" : "AI Rank"}
+                          </>
+                        )}
+                      </Button>
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Main Info Grid - Stack on mobile */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <div className="p-4 sm:p-5 bg-white border border-gray-100 rounded-lg sm:rounded-xl shadow-sm">
                 <h4 className="text-sm sm:text-base font-semibold text-gray-500 flex items-center gap-2 mb-3 sm:mb-4">
@@ -214,25 +248,25 @@ export function ViewApplicationModal({
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Full Name</p>
                     <p className="text-sm sm:text-base text-gray-700 font-medium break-words">
-                      {application.name || 
-                       `${getAnswer(application.answers, 'First Name')} ${getAnswer(application.answers, 'Last Name')}`.trim() || 
-                       'Not provided'}
+                      {application.name ||
+                        `${getAnswer(application.answers, "First Name")} ${getAnswer(application.answers, "Last Name")}`.trim() ||
+                        "Not provided"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Contact Email</p>
                     <p className="text-sm sm:text-base text-gray-700 font-medium break-all">
-                      {application.email?.toLowerCase() || 
-                       getAnswer(application.answers, 'Email') || 
-                       'Not provided'}
+                      {application.email?.toLowerCase() ||
+                        getAnswer(application.answers, "Email") ||
+                        "Not provided"}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Phone Number</p>
                     <p className="text-sm sm:text-base text-gray-700 font-medium break-words">
-                      {application.phoneNumber || 
-                       getAnswer(application.answers, 'Phone') || 
-                       'Not provided'}
+                      {application.phoneNumber ||
+                        getAnswer(application.answers, "Phone") ||
+                        "Not provided"}
                     </p>
                   </div>
                 </div>
@@ -257,20 +291,32 @@ export function ViewApplicationModal({
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400 mb-1">Current Status</p>
-                    <span className={`inline-flex px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium ${
-                      application.status === 'Hired' ? 'bg-green-100 text-green-700' :
-                      application.status === 'Rejected' ? 'bg-red-100 text-red-700' :
-                      'bg-blue-100 text-blue-700'
-                    }`}>
-                      {application.status}
-                    </span>
+                    <p className="text-xs text-gray-400 mb-1">Status</p>
+                    {canEditStatus ? (
+                      <Select value={status} onValueChange={setStatus}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {APPLICATION_STATUS_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span
+                        className={`inline-flex px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium ${getStatusColor(application.status || "New")}`}
+                      >
+                        {application.status}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Answers Section */}
             <div className="p-4 sm:p-5 bg-white border border-gray-100 rounded-lg sm:rounded-xl shadow-sm">
               <h4 className="text-sm sm:text-base font-semibold text-gray-500 flex items-center gap-2 mb-4 sm:mb-5">
                 <FileTextIcon className="w-4 h-4 sm:w-5 sm:h-5 text-green-500 flex-shrink-0" />
@@ -283,22 +329,22 @@ export function ViewApplicationModal({
                       <p className="text-sm sm:text-base font-medium text-gray-700 mb-2 leading-relaxed">
                         {answer.questionText}
                       </p>
-                      {!isResumeQuestion(answer?.questionText) || !isLikelyUrl(answer?.answer) ? (
+                      {!isResumeQuestion(answer?.questionText) ||
+                      !isLikelyUrl(answer?.answer) ? (
                         <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 leading-relaxed break-words">
-                          {answer.answer || 'No answer provided'}
+                          {answer.answer || "No answer provided"}
                         </div>
                       ) : (
-                        <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4">
+                        <div className="text-sm sm:text-base text-gray-600 bg-gray-50 rounded-lg p-3 sm:p-4 break-all">
                           <Link
-                            href={getProxiedUrl(String(answer.answer))}
+                            href={String(answer.answer)}
                             target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 underline font-medium"
+                            className="text-blue-600 underline"
                           >
-                            {getCvDisplayLabel(String(answer.answer))}
+                            {String(answer.answer)}
                           </Link>
                           <p className="text-xs text-gray-500 mt-2">
-                            CV preview is available in the &quot;Attached Documents&quot; section below
+                            CV preview is available in the Attached Documents section below
                           </p>
                         </div>
                       )}
@@ -325,77 +371,62 @@ export function ViewApplicationModal({
                       <FileTextIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm sm:text-base font-medium text-gray-700 truncate">Candidate CV</p>
-                      <p className="text-xs sm:text-sm text-gray-400">Uploaded {formatDate(application.appliedDate)}</p>
+                      <p className="text-sm sm:text-base font-medium text-gray-700 truncate">
+                        Candidate CV
+                      </p>
+                      <p className="text-xs sm:text-sm text-gray-400">
+                        Uploaded {formatDate(application.appliedDate)}
+                      </p>
                     </div>
                     <Link
-                      href={getProxiedUrl(cvUrl)}
+                      href={cvUrl}
                       target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
+                      className="hidden sm:inline-flex items-center gap-2 px-3 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium bg-white hover:bg-blue-50 border border-blue-200 rounded-lg transition-all duration-200"
                     >
                       <span>Open in new tab</span>
                       <ArrowUpRightIcon className="w-4 h-4" />
                     </Link>
                   </div>
 
-                  {isPreviewLoading ? (
-                    <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg flex items-center justify-center">
-                      <div className="text-center space-y-2">
-                        <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto" />
-                        <p className="text-sm text-gray-500">Loading CV preview...</p>
-                      </div>
-                    </div>
-                  ) : previewBlobUrl ? (
-                    <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
-                      <iframe
-                        title="CV Preview"
-                        src={`${previewBlobUrl}#zoom=75&toolbar=1&navpanes=0`}
-                        className="w-full h-full"
-                        referrerPolicy="no-referrer"
-                        allow="fullscreen"
-                      />
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-600 p-4 bg-white border border-gray-200 rounded-lg">
-                      {previewError ? (
-                        <p className="mb-2">Unable to preview this document inline.</p>
-                      ) : (
-                        <p className="mb-2">
-                          This document type cannot be previewed in the browser. You can open or download it instead.
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-3">
-                        <Link
-                          href={getProxiedUrl(cvUrl)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-blue-600 underline"
-                        >
-                          Open in new tab
-                          <ArrowUpRightIcon className="w-4 h-4" />
-                        </Link>
-                        <Link
-                          href={getDownloadUrl(cvUrl)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-blue-600 underline"
-                        >
-                          Download CV
-                        </Link>
-                      </div>
-                    </div>
-                  )}
+                  <div className="w-full h-[60vh] sm:h-[70vh] bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <CVPreviewFrame
+                      cvUrl={cvUrl}
+                      title="CV Preview"
+                      className="h-[60vh] sm:h-[70vh]"
+                    />
+                  </div>
                 </div>
               </div>
             ) : null}
 
-            {/* Bottom padding for mobile scroll */}
             <div className="h-4 sm:h-0" />
-            
-            
           </div>
         </div>
+
+        {canEditStatus && (
+          <DialogFooter className="flex-shrink-0 border-t border-gray-100 px-4 sm:px-6 py-3 sm:py-4 bg-gray-50/80">
+            <div className="flex w-full items-center justify-between gap-3">
+              <p className="text-xs sm:text-sm text-gray-500">
+                {isStatusDirty ? "Unsaved status change" : "Status is up to date"}
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={onClose} disabled={isSaving}>
+                  Close
+                </Button>
+                <Button onClick={handleSaveStatus} disabled={!isStatusDirty || isSaving}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Status"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

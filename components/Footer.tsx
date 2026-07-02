@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useRef } from "react";
-import { Linkedin, Twitter, Instagram, Github, Mail, MapPin, ExternalLink, ChevronRight } from "lucide-react";
+import { Linkedin, Twitter, Instagram, Github, Mail, Phone, MapPin, ExternalLink, ChevronRight } from "lucide-react";
 import { motion, useInView } from "framer-motion";
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
@@ -266,14 +266,27 @@ function Footer() {
               >
                 <MapPin className="mr-3 h-5 w-5 text-cyan-400 mt-1 flex-shrink-0" />
                 <Link 
-                  href="https://maps.google.com/?q=The+Piano,+Brookside+Drive"
+                  href="https://maps.google.com/?q=The+Piano,+Brookside+Drive,+Westlands,+Nairobi,+Kenya"
                   target="_blank"
                   className="text-gray-300 group-hover:text-white transition-colors"
                 >
-                  The Piano, Brookside Drive
+                  The Piano, 8th Floor, Brookside Drive, Westlands, Nairobi, Kenya
                   <span className="ml-1 inline-block align-text-bottom opacity-0 group-hover:opacity-100 transition-opacity">
                     <ExternalLink className="h-3 w-3" />
                   </span>
+                </Link>
+              </motion.div>
+              
+              <motion.div
+                className="flex items-center group"
+                whileHover={{ x: 5 }}
+              >
+                <Phone className="mr-3 h-5 w-5 text-pink-400 flex-shrink-0" />
+                <Link 
+                  href="tel:+254702326065"
+                  className="text-gray-300 group-hover:text-white transition-colors"
+                >
+                  +254 715 582 558
                 </Link>
               </motion.div>
 

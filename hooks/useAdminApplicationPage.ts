@@ -1,14 +1,33 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminApplicationsApi, type ApplicationFilters } from '../components/admin/utils/applications-api';
 import { Application } from '@/types/application';
 import { toast } from 'react-hot-toast';
 import { useDebounce } from './useDebounce';
+import { getNameDisplay } from '@/components/admin/utils/table-utils';
+import {
+  type AiRankProgressState,
+  cycleAiRankPhase,
+} from '@/components/admin/AiRankProgress';
+import { AI_SCORE_FILTER_OPTIONS } from '@/lib/ai-score-filter';
 
 export type StatusType = 'all' | 'shortlisted' | 'technical-assessment' | 'interviewing' | 'hired' | 'disqualified' | 'archived';
+
+export type SortOrder = 'asc' | 'desc';
+
+export const APPLICATION_SORT_OPTIONS = [
+  { label: 'Applied Date', value: 'appliedDate' },
+  { label: 'Applicant Name', value: 'name' },
+  { label: 'Position', value: 'position' },
+  { label: 'Status', value: 'status' },
+  { label: 'AI Score', value: 'aiRankScore' },
+] as const;
+
+const DEFAULT_SORT_BY = 'appliedDate';
+const DEFAULT_SORT_ORDER: SortOrder = 'desc';
 
 interface UseAdminApplicationPageOptions {
   statusType: StatusType;
@@ -16,6 +35,7 @@ interface UseAdminApplicationPageOptions {
   enableBulkUpdates?: boolean;
   enablePositionFilter?: boolean;
   enableStatusFilter?: boolean;
+  enableAiScoreFilter?: boolean;
 }
 
 export function useAdminApplicationPage({
@@ -24,6 +44,7 @@ export function useAdminApplicationPage({
   enableBulkUpdates = true,
   enablePositionFilter = true,
   enableStatusFilter = false,
+  enableAiScoreFilter = false,
 }: UseAdminApplicationPageOptions) {
   const router = useRouter();
   const { isAuthenticated, isAdmin, authLoading } = useAuth();
@@ -41,6 +62,13 @@ export function useAdminApplicationPage({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPosition, setSelectedPosition] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedAiScore, setSelectedAiScore] = useState<string>('all');
+
+  // Advanced filters: sorting + applied-date range
+  const [sortBy, setSortBy] = useState<string>(DEFAULT_SORT_BY);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(DEFAULT_SORT_ORDER);
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   
   // Debounce search term to avoid too many API calls
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -49,6 +77,8 @@ export function useAdminApplicationPage({
   const [viewApplication, setViewApplication] = useState<Application | null>(null);
   const [editApplication, setEditApplication] = useState<Application | null>(null);
   const [deleteApplicationId, setDeleteApplicationId] = useState<string | null>(null);
+  const [aiRankProgress, setAiRankProgress] = useState<AiRankProgressState | null>(null);
+  const aiRankInFlightRef = useRef(false);
 
   // Filter options for position dropdown
   const [positionFilterOptions, setPositionFilterOptions] = useState<string[]>([]);
@@ -117,6 +147,14 @@ export function useAdminApplicationPage({
         limit: pageSize,
         search: debouncedSearchTerm || undefined,
         position: selectedPosition !== 'all' ? selectedPosition : undefined,
+        aiScoreFilter:
+          enableAiScoreFilter && selectedAiScore !== 'all'
+            ? selectedAiScore
+            : undefined,
+        sortBy: sortBy || undefined,
+        sortOrder: sortOrder || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
       };
       
       let response;
@@ -155,19 +193,6 @@ export function useAdminApplicationPage({
       }
       
       const apps = response.applications || [];
-      console.log('🔍 Search Debug:', {
-        searchTerm: debouncedSearchTerm,
-        totalApplications: apps.length,
-        totalCount: response.total,
-        sampleAppData: apps.slice(0, 2).map(app => ({
-          id: app.id,
-          name: app.name,
-          email: app.email,
-          position: app.position,
-          userEmail: app.user?.email,
-          userName: app.user?.name
-        }))
-      });
       
       setApplications(apps);
       setTotal(response.total || 0);
@@ -183,7 +208,7 @@ export function useAdminApplicationPage({
     } finally {
       setIsLoading(false);
     }
-  }, [statusType, currentPage, pageSize, debouncedSearchTerm, selectedPosition, selectedStatus, enableStatusFilter]);
+  }, [statusType, currentPage, pageSize, debouncedSearchTerm, selectedPosition, selectedStatus, selectedAiScore, sortBy, sortOrder, dateFrom, dateTo, enableStatusFilter, enableAiScoreFilter]);
 
   // Load applications when dependencies change
   useEffect(() => {
@@ -192,12 +217,12 @@ export function useAdminApplicationPage({
     }
   }, [isAuthenticated, isAdmin, loadApplications]);
 
-  // Reset page when search, position filter, or status filter changes
+  // Reset page when search, filters, or sort change
   useEffect(() => {
     if (currentPage !== 1) {
       setCurrentPage(1);
     }
-  }, [debouncedSearchTerm, selectedPosition, selectedStatus]);
+  }, [debouncedSearchTerm, selectedPosition, selectedStatus, selectedAiScore, sortBy, sortOrder, dateFrom, dateTo]);
 
   // Load position filter options
   const loadPositionOptions = useCallback(async () => {
@@ -210,11 +235,14 @@ export function useAdminApplicationPage({
       }) as any;
       const positions = response.positions || [];
 
-      // Only show positions that currently have applications in this view
-      const positionOptions = positions
-        .filter((pos: any) => Number(pos?.count ?? 0) > 0)
-        .map((pos: any) => pos.value || pos.label);
-      setPositionFilterOptions(positionOptions.sort((a: string, b: string) => a.localeCompare(b)));
+      const optionSet = new Set<string>();
+      positions.forEach((pos: { value?: string; label?: string }) => {
+        const title = (pos.value || pos.label || '').trim();
+        if (title && title !== 'Position Not Available') {
+          optionSet.add(title);
+        }
+      });
+      setPositionFilterOptions(Array.from(optionSet).sort((a, b) => a.localeCompare(b)));
     } catch (error) {
       console.error('Failed to load position options:', error);
       // Fallback to the old method if the new endpoint fails
@@ -236,6 +264,22 @@ export function useAdminApplicationPage({
     }
   }, [statusType, enablePositionFilter]);
 
+  // Merge active job postings into position filter options
+  useEffect(() => {
+    if (!enablePositionFilter) return;
+
+    setPositionFilterOptions((prev) => {
+      const optionSet = new Set(prev);
+      Object.values(jobTitles).forEach((title) => {
+        const trimmed = title?.trim();
+        if (trimmed && trimmed !== 'Position Not Available') {
+          optionSet.add(trimmed);
+        }
+      });
+      return Array.from(optionSet).sort((a, b) => a.localeCompare(b));
+    });
+  }, [jobTitles, enablePositionFilter]);
+
   useEffect(() => {
     if (isAuthenticated && isAdmin) {
       loadPositionOptions();
@@ -256,6 +300,53 @@ export function useAdminApplicationPage({
   const handleStatusChange = useCallback((status: string) => {
     setSelectedStatus(status);
   }, []);
+
+  // Handle AI score filter change
+  const handleAiScoreChange = useCallback((scoreFilter: string) => {
+    setSelectedAiScore(scoreFilter);
+  }, []);
+
+  // Advanced filter handlers
+  const handleSortByChange = useCallback((field: string) => {
+    setSortBy(field);
+  }, []);
+
+  const handleSortOrderChange = useCallback((order: SortOrder) => {
+    setSortOrder(order);
+  }, []);
+
+  const toggleSortOrder = useCallback(() => {
+    setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  }, []);
+
+  const handleDateFromChange = useCallback((value: string) => {
+    setDateFrom(value);
+  }, []);
+
+  const handleDateToChange = useCallback((value: string) => {
+    setDateTo(value);
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setSearchTerm('');
+    setSelectedPosition('all');
+    setSelectedStatus('all');
+    setSelectedAiScore('all');
+    setSortBy(DEFAULT_SORT_BY);
+    setSortOrder(DEFAULT_SORT_ORDER);
+    setDateFrom('');
+    setDateTo('');
+  }, []);
+
+  const hasActiveFilters =
+    Boolean(searchTerm) ||
+    selectedPosition !== 'all' ||
+    selectedStatus !== 'all' ||
+    selectedAiScore !== 'all' ||
+    sortBy !== DEFAULT_SORT_BY ||
+    sortOrder !== DEFAULT_SORT_ORDER ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo);
 
   // Handle pagination
   const handlePageChange = useCallback((page: number) => {
@@ -284,13 +375,24 @@ export function useAdminApplicationPage({
     setDeleteApplicationId(id);
   };
 
-  const handleSaveEdit = async (updatedApplication: Application) => {
+  const handleSaveEdit = async (
+    updatedApplication: Application,
+    options?: { fromView?: boolean }
+  ) => {
     try {
       const previousApplication = applications.find(app => app.id === updatedApplication.id);
       
-      await adminApplicationsApi.updateApplication(updatedApplication.id, updatedApplication);
-      await loadApplications(); // Refresh data
-      setEditApplication(null);
+      const saved = await adminApplicationsApi.updateApplication(
+        updatedApplication.id,
+        updatedApplication
+      ) as Application;
+      await loadApplications();
+
+      if (options?.fromView) {
+        setViewApplication({ ...updatedApplication, ...saved });
+      } else {
+        setEditApplication(null);
+      }
       
       // Check if the application would still be visible with current filters
       const statusChanged = previousApplication?.status !== updatedApplication.status;
@@ -399,6 +501,182 @@ export function useAdminApplicationPage({
     }
   };
 
+  const handleSaveFromView = async (updatedApplication: Application) => {
+    await handleSaveEdit(updatedApplication, { fromView: true });
+  };
+
+  const rankApplicationsSequentially = async (
+    targetIds: string[],
+    mode: AiRankProgressState['mode']
+  ) => {
+    if (aiRankInFlightRef.current) {
+      toast.error('AI ranking is already in progress');
+      return { ranked: 0, errors: [] as Array<{ id: string; error: string }>, results: [] };
+    }
+
+    if (!targetIds.length) {
+      toast.error('No applications to rank');
+      return { ranked: 0, errors: [] as Array<{ id: string; error: string }>, results: [] };
+    }
+
+    aiRankInFlightRef.current = true;
+
+    try {
+    setAiRankProgress({
+      isActive: true,
+      current: 0,
+      total: targetIds.length,
+      phase: 'extracting',
+      mode,
+      candidateName: undefined,
+    });
+
+    let rankedCount = 0;
+    const errors: Array<{ id: string; error: string }> = [];
+    const allResults: Awaited<ReturnType<typeof adminApplicationsApi.rankApplications>>['results'] = [];
+
+    for (let index = 0; index < targetIds.length; index++) {
+      const applicationId = targetIds[index];
+      const application = applications.find((app) => app.id === applicationId);
+      const candidateName = application ? getNameDisplay(application) : 'Candidate';
+
+      setAiRankProgress({
+        isActive: true,
+        current: index,
+        total: targetIds.length,
+        phase: 'extracting',
+        mode,
+        applicationId,
+        candidateName,
+      });
+
+      const phaseInterval = window.setInterval(() => {
+        setAiRankProgress((current) =>
+          current?.isActive
+            ? { ...current, phase: cycleAiRankPhase(current.phase) }
+            : current
+        );
+      }, 1600);
+
+      try {
+        const result = await adminApplicationsApi.rankApplications({ ids: [applicationId] });
+        if (result.results?.length) {
+          allResults.push(...result.results);
+        }
+        if (result.errors?.length) {
+          errors.push(...result.errors);
+        } else {
+          rankedCount += result.ranked;
+        }
+      } catch (error) {
+        errors.push({
+          id: applicationId,
+          error: error instanceof Error ? error.message : 'AI ranking failed',
+        });
+      } finally {
+        window.clearInterval(phaseInterval);
+      }
+
+      setAiRankProgress({
+        isActive: true,
+        current: index + 1,
+        total: targetIds.length,
+        phase: 'saving',
+        mode,
+        applicationId,
+        candidateName,
+      });
+    }
+
+    setAiRankProgress(null);
+    await loadApplications();
+
+    return { ranked: rankedCount, errors, results: allResults };
+    } finally {
+      aiRankInFlightRef.current = false;
+    }
+  };
+
+  const handleRankApplication = async (applicationId: string) => {
+    try {
+      const { ranked, errors, results } = await rankApplicationsSequentially(
+        [applicationId],
+        'single'
+      );
+
+      if (errors.length) {
+        toast.error(errors[0].error || 'AI ranking failed');
+        return;
+      }
+
+      const rankedResult = results?.[0];
+      if (rankedResult && viewApplication?.id === applicationId) {
+        setViewApplication((current) =>
+          current
+            ? {
+                ...current,
+                aiRankScore: rankedResult.aiRankScore,
+                aiRankSummary: rankedResult.aiRankSummary,
+                aiRankStrengths: rankedResult.aiRankStrengths,
+                aiRankGaps: rankedResult.aiRankGaps,
+                aiRankRecommendation: rankedResult.aiRankRecommendation,
+                aiRankedAt: rankedResult.aiRankedAt,
+              }
+            : current
+        );
+      }
+
+      if (ranked > 0) {
+        toast.success('AI ranking complete');
+      }
+    } catch (error) {
+      setAiRankProgress(null);
+      console.error('Failed to rank application:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to rank application');
+    }
+  };
+
+  const handleRankApplications = async (ids?: string[]) => {
+    try {
+      const targetIds = ids?.length ? ids : applications.map((app) => app.id);
+      const { ranked, errors, results } = await rankApplicationsSequentially(
+        targetIds,
+        'batch'
+      );
+
+      if (viewApplication && results?.length) {
+        const rankedItem = results.find((item) => item.id === viewApplication.id);
+        if (rankedItem) {
+          setViewApplication({
+            ...viewApplication,
+            aiRankScore: rankedItem.aiRankScore,
+            aiRankSummary: rankedItem.aiRankSummary,
+            aiRankStrengths: rankedItem.aiRankStrengths,
+            aiRankGaps: rankedItem.aiRankGaps,
+            aiRankRecommendation: rankedItem.aiRankRecommendation,
+            aiRankedAt: rankedItem.aiRankedAt,
+          });
+        }
+      }
+
+      if (errors.length && !ranked) {
+        toast.error(errors[0].error || 'AI ranking failed');
+        return;
+      }
+
+      if (errors.length && ranked) {
+        toast.success(`Ranked ${ranked} application(s). ${errors.length} failed.`);
+        return;
+      }
+
+      toast.success(`Ranked ${ranked} application(s) with AI`);
+    } catch (error) {
+      setAiRankProgress(null);
+      console.error('Failed to rank applications:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to rank applications');
+    }
+  };
+
   return {
     // Data
     applications: filteredApplications,
@@ -422,6 +700,23 @@ export function useAdminApplicationPage({
     selectedStatus,
     setSelectedStatus: handleStatusChange,
     statusFilterOptions,
+    selectedAiScore,
+    setSelectedAiScore: handleAiScoreChange,
+    aiScoreFilterOptions: AI_SCORE_FILTER_OPTIONS,
+
+    // Advanced filters (sorting + applied-date range)
+    sortBy,
+    setSortBy: handleSortByChange,
+    sortOrder,
+    setSortOrder: handleSortOrderChange,
+    toggleSortOrder,
+    sortFieldOptions: APPLICATION_SORT_OPTIONS,
+    dateFrom,
+    setDateFrom: handleDateFromChange,
+    dateTo,
+    setDateTo: handleDateToChange,
+    resetFilters,
+    hasActiveFilters,
     
     // Pagination
     handlePageChange,
@@ -439,6 +734,12 @@ export function useAdminApplicationPage({
     handleEdit,
     handleDelete,
     handleSaveEdit,
+    handleSaveFromView,
+    handleRankApplication,
+    handleRankApplications,
+    aiRankProgress,
+    rankingApplicationId: aiRankProgress?.applicationId ?? null,
+    isAiRanking: Boolean(aiRankProgress?.isActive),
     handleConfirmDelete,
     handleBulkStatusUpdate: enableBulkUpdates ? handleBulkStatusUpdate : undefined,
     handleBulkArchive: enableBulkUpdates ? handleBulkArchive : undefined,

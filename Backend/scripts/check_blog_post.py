@@ -11,9 +11,9 @@ from datetime import datetime
 
 async def check_posts():
     # Get MongoDB URI from settings
-    mongodb_uri = settings.MONGODB_URI
+    MONGODB_URI = settings.MONGODB_URI
     print(f"Connecting to MongoDB...")
-    client = AsyncIOMotorClient(mongodb_uri)
+    client = AsyncIOMotorClient(MONGODB_URI)
     db = client["BQITECH"]
     
     # Get all blog posts

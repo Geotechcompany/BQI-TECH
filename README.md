@@ -118,7 +118,7 @@ See `Backend/scripts/` and `scripts/` for maintenance and migration helpers.
 
 ### Testing
 
-Basic endpoint tests are in the repository root: `test_endpoints.py` and under `Backend/`.
+Basic endpoint tests live in `scripts/` (e.g. `scripts/test_endpoints.py`) and under `Backend/`.
 
 ### Deployment
 

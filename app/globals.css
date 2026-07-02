@@ -1,5 +1,3 @@
-@import "react-day-picker/style.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -81,6 +79,11 @@
         padding: 0 !important;
         height: 100vh !important;
         width: 100vw !important;
+    }
+
+    /* Studio theme: dark sidebar only — main dashboard stays light */
+    [data-admin-theme="studio"] main {
+        color-scheme: light;
     }
 }
 

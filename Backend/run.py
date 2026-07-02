@@ -2,6 +2,15 @@ import pathlib
 import sys
 import subprocess
 
+from dotenv import load_dotenv
+
+load_dotenv(pathlib.Path(__file__).resolve().parent / ".env")
+
+if sys.platform == "win32":
+    from app.win_startup import patch_platform_wmi
+
+    patch_platform_wmi()
+
 import uvicorn
 
 
@@ -40,7 +49,7 @@ def main() -> None:
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=9056,
+        port=9000,
         reload=True,
         log_level="info",
         access_log=False,

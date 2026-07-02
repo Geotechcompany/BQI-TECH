@@ -14,8 +14,8 @@ def investigate_shortlisted_trainee():
     """Investigate the specific shortlisted trainee record shown by the user"""
     
     # Get MongoDB URI from environment
-    mongodb_uri = os.getenv('MONGODB_URI')
-    if not mongodb_uri:
+    MONGODB_URI = os.getenv('MONGODB_URI')
+    if not MONGODB_URI:
         print("❌ MONGODB_URI environment variable not found")
         print("Available environment variables:")
         for key in os.environ:
@@ -25,7 +25,7 @@ def investigate_shortlisted_trainee():
     
     try:
         # Connect to MongoDB
-        client = MongoClient(mongodb_uri)
+        client = MongoClient(MONGODB_URI)
         db = client['BQITECH']
         applications_collection = db['applications']
         

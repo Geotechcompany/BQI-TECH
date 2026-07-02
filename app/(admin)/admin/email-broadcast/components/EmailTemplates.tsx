@@ -22,6 +22,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import React from "react";
+import {
+  getBrandedEmailFooterBlock,
+  getBrandedEmailHeaderBlock,
+} from "@/lib/email-brand";
 
 interface EmailTemplatesProps {
   onTemplateSelect: (template: any) => void;
@@ -34,38 +38,9 @@ export function EmailTemplates({
 }: EmailTemplatesProps) {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
-  // Default header and footer components
-  const getDefaultHeader = () => {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://bqitech.com";
-    return `
-      <div style="background: linear-gradient(135deg, #272055 0%, #31CDFF 100%); padding: 30px 20px; text-align: center; margin-bottom: 30px;">
-        <img src="${baseUrl}/bqilogo-light.png" alt="BQI Tech Logo" style="max-width: 180px; height: auto; margin-bottom: 15px;">
-        <div style="color: white; font-size: 14px; opacity: 0.9;">bqitech.com</div>
-      </div>
-    `;
-  };
+  const getDefaultHeader = () => getBrandedEmailHeaderBlock();
 
-  const getDefaultFooter = () => {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://bqitech.com";
-    return `
-      <div style="background-color: #f8f9fa; padding: 30px 20px; text-align: center; margin-top: 40px; border-top: 3px solid #31CDFF;">
-        <div style="margin-bottom: 20px;">
-          <img src="${baseUrl}/bqilogo-light.png" alt="BQI Tech Logo" style="max-width: 120px; height: auto; opacity: 0.8;">
-        </div>
-        <div style="color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 15px;">
-          <strong>BQI Technologies</strong><br>
-          Empowering businesses through innovative technology solutions
-        </div>
-        <div style="color: #999; font-size: 12px; margin-bottom: 20px;">
-          Visit us at <a href="https://bqitech.com" style="color: #31CDFF; text-decoration: none;">bqitech.com</a>
-        </div>
-        <div style="color: #999; font-size: 12px;">
-          Best regards,<br>
-          <strong>The BQI Tech Team</strong>
-        </div>
-      </div>
-    `;
-  };
+  const getDefaultFooter = () => getBrandedEmailFooterBlock();
 
   const emailTemplates = [
     {

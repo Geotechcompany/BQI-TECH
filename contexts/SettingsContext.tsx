@@ -19,9 +19,9 @@ interface SettingsContextType {
     email: string;
     avatarUrl?: string;
   };
-  theme: 'light' | 'dark' | 'system';
+  theme: 'light' | 'dark' | 'system' | 'studio';
   updateSettings: (settings: Partial<SettingsContextType>) => Promise<void>;
-  updateTheme: (theme: 'light' | 'dark' | 'system') => void;
+  updateTheme: (theme: 'light' | 'dark' | 'system' | 'studio') => void;
   isLoading: boolean;
 }
 
@@ -116,7 +116,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateTheme = (theme: 'light' | 'dark' | 'system') => {
+  const updateTheme = (theme: 'light' | 'dark' | 'system' | 'studio') => {
     setSettings(prev => ({ ...prev, theme }));
     if (typeof window !== 'undefined') {
       localStorage.setItem('theme', theme);
@@ -129,13 +129,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       }
     }
     // Also update system/theme for components that rely on next-themes
-    try { setSystemTheme(theme); } catch {}
+    if (theme !== 'studio') {
+      try { setSystemTheme(theme); } catch {}
+    }
   };
 
   // Load theme from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system';
+      const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' | 'studio' | null;
       if (savedTheme) {
         setSettings(prev => ({ ...prev, theme: savedTheme }));
         const root = document.getElementById('user-root');
@@ -144,7 +146,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
           if (savedTheme === 'dark') root.classList.add('dark');
           if (savedTheme === 'light') root.classList.add('light');
         }
-        try { setSystemTheme(savedTheme); } catch {}
+        if (savedTheme !== 'studio') {
+          try { setSystemTheme(savedTheme); } catch {}
+        }
       }
     }
   }, []);

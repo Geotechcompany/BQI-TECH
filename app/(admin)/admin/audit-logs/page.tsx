@@ -27,6 +27,18 @@ type ActivityAction =
   | "deleted"
   | "published"
   | "unpublished"
+  | "invited"
+  | "revoked"
+  | "resent"
+  | "activated"
+  | "deactivated"
+  | "archived"
+  | "restored"
+  | "sent"
+  | "executed"
+  | "synced"
+  | "reordered"
+  | "ranked"
 
 interface AdminActivity {
   id: string
@@ -45,15 +57,27 @@ interface AdminActivity {
 function actionBadgeVariant(action: string) {
   switch (action) {
     case "created":
+    case "published":
+    case "activated":
+    case "invited":
+    case "sent":
       return "default"
     case "updated":
+    case "reordered":
+    case "ranked":
+    case "resent":
       return "secondary"
     case "deleted":
+    case "revoked":
+    case "deactivated":
       return "destructive"
-    case "published":
-      return "default"
     case "unpublished":
+    case "archived":
       return "outline"
+    case "restored":
+    case "synced":
+    case "executed":
+      return "default"
     default:
       return "outline"
   }
@@ -122,13 +146,14 @@ export default function AuditLogsPage() {
     <AdminPageLayout title="Admin Activity">
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Track what admins change in the dashboard — blog edits, publish status,
-          and more. New actions are recorded from now on.
+          Track every change admins make — blog posts, job postings, candidates,
+          users, settings, backups, emails, and more. New actions are recorded
+          from now on.
         </p>
 
         <div className="flex flex-wrap gap-2">
           <Input
-            placeholder="Search by admin, email, or post title..."
+            placeholder="Search by admin, email, or activity..."
             value={search}
             onChange={(e) => {
               setPage(0)
@@ -150,9 +175,15 @@ export default function AuditLogsPage() {
               <SelectItem value="ALL">All actions</SelectItem>
               <SelectItem value="created">Created</SelectItem>
               <SelectItem value="updated">Updated</SelectItem>
+              <SelectItem value="deleted">Deleted</SelectItem>
               <SelectItem value="published">Published</SelectItem>
               <SelectItem value="unpublished">Unpublished</SelectItem>
-              <SelectItem value="deleted">Deleted</SelectItem>
+              <SelectItem value="invited">Invited</SelectItem>
+              <SelectItem value="revoked">Revoked</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+              <SelectItem value="restored">Restored</SelectItem>
+              <SelectItem value="sent">Sent</SelectItem>
+              <SelectItem value="synced">Synced</SelectItem>
             </SelectContent>
           </Select>
           <Input
@@ -188,7 +219,8 @@ export default function AuditLogsPage() {
             <div className="p-8 text-center text-sm text-muted-foreground">
               <p>No admin activity recorded yet.</p>
               <p className="mt-2">
-                Edit or publish a blog post — activity will appear here with the
+                Make a change in the admin dashboard — edits to posts, jobs,
+                candidates, users, or settings will appear here with the
                 admin&apos;s email and what changed.
               </p>
             </div>
@@ -232,7 +264,7 @@ export default function AuditLogsPage() {
                     )}
                   </div>
                   <div>
-                    {item.resourcePath && item.resourceType === "blog_post" ? (
+                    {item.resourcePath ? (
                       <Link
                         href={item.resourcePath}
                         className="inline-flex items-center gap-1 text-xs text-primary hover:underline"

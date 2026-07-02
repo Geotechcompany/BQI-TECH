@@ -1,7 +1,6 @@
 "use client";
 
-import { motion } from 'framer-motion';
-import { Users, FileText, CheckCircle, XCircle, UserCheck, Code, MessageSquare, ArrowRight, BarChart, Plus, TrendingUp, Briefcase, Target, Activity } from 'lucide-react';
+import { Users, FileText, CheckCircle, XCircle, UserCheck, Code, MessageSquare, ArrowRight, BarChart, TrendingUp, Briefcase, Target, Activity } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { Doughnut } from 'react-chartjs-2';
 import {
@@ -15,7 +14,6 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Skeleton } from "@/components/ui/skeleton";
-import Link from 'next/link';
 import { adminApi } from '@/lib/api-backend';
 import { adminApplicationsApi } from '@/lib/admin-applications-api';
 import { toast } from 'react-hot-toast';
@@ -27,6 +25,8 @@ import {
   PremiumStatusCard,
 } from "@/components/admin/premium-cards";
 import { RecentApplicationsPanel } from "@/components/admin/RecentApplicationsPanel";
+import { OverviewWelcomeBanner } from "@/components/admin/OverviewWelcomeBanner";
+import { JobPostCard } from "@/components/ui/job-post-card";
 import { AdminTrendChart } from "@/components/admin/AdminTrendChart";
 import {
   normalizeTrendSeries,
@@ -234,6 +234,13 @@ export default function OverviewPage() {
       ? applicationsByJob.applicationsByJob
       : computedStats.applicationsByJobData;
 
+  const jobPostBreakdown = [...pieByJobData]
+    .map((item) => ({
+      position: item.position || "Unknown Position",
+      totalApplications: item.totalApplications || 0,
+    }))
+    .sort((a, b) => b.totalApplications - a.totalApplications);
+
   const pieChartData = {
     labels: pieByJobData.map(item => {
       const position = item.position || 'Unknown Position';
@@ -289,10 +296,8 @@ export default function OverviewPage() {
             if (data.labels.length && data.datasets.length) {
               return data.labels.map((label: string, i: number) => {
                 const value = data.datasets[0].data[i];
-                const total = data.datasets[0].data.reduce((a: number, b: number) => a + b, 0);
-                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
                 return {
-                  text: `${label} (${percentage}%)`,
+                  text: `${label} (${value})`,
                   fillStyle: data.datasets[0].backgroundColor[i],
                   strokeStyle: data.datasets[0].borderColor[i],
                   lineWidth: 0,
@@ -312,9 +317,8 @@ export default function OverviewPage() {
         borderWidth: 1,
         callbacks: {
           label: function(context: any) {
-            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-            const percentage = total > 0 ? ((context.parsed / total) * 100).toFixed(1) : "0.0";
-            return `${context.parsed} applications (${percentage}%)`;
+            const count = context.parsed;
+            return `${count} application${count === 1 ? "" : "s"}`;
           }
         }
       },
@@ -328,13 +332,14 @@ export default function OverviewPage() {
   if (isLoading) return (
     <AdminPageLayout title="Dashboard Overview" showSearch={false}>
       <div className="min-h-screen">
-        <div className="space-y-8 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+        <div className="space-y-5 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
+          <Skeleton className="h-40 sm:h-44 rounded-2xl" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <Skeleton className="h-96 lg:col-span-2 rounded-2xl" />
-            <Skeleton className="h-96 rounded-2xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <Skeleton className="h-80 lg:col-span-2 rounded-2xl" />
+            <Skeleton className="h-80 rounded-2xl" />
           </div>
         </div>
       </div>
@@ -372,27 +377,17 @@ export default function OverviewPage() {
     <AdminPageLayout
       title="Dashboard Overview"
       showSearch={false}
-      headerActions={
-        <div className="flex gap-3">
-          <Link href="/admin/applications">
-            <Button variant="outline" size="sm" className="gap-2">
-              <FileText className="h-4 w-4" />
-              View Applications
-            </Button>
-          </Link>
-          <Link href="/admin/job-postings/new">
-            <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4" />
-              New Job
-            </Button>
-          </Link>
-        </div>
-      }
     >
       <div className="min-h-screen bg-background">
-        <div className="space-y-8 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
+        <div className="space-y-5 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
+          <OverviewWelcomeBanner
+            recentApplications={effectiveStats.recent}
+            activeJobs={overviewData.jobs.active}
+            newApplications={effectiveStats.new}
+          />
+
           {/* Key Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <PremiumMetricCard
               title="Total Applications"
               value={effectiveStats.total}
@@ -431,8 +426,43 @@ export default function OverviewPage() {
             />
           </div>
 
+          {/* Applications per Job Post Breakdown */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-blue-500/10 rounded-lg ring-1 ring-blue-500/20">
+                <Briefcase className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-foreground">Applications by Job Post</h2>
+                <p className="text-xs text-muted-foreground">
+                  Total applications received per open position
+                </p>
+              </div>
+            </div>
+            {jobPostBreakdown.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {jobPostBreakdown.map((item, index) => (
+                  <JobPostCard
+                    key={item.position}
+                    title={item.position}
+                    count={item.totalApplications}
+                    subtitle={item.totalApplications === 1 ? "application" : "applications"}
+                    index={index}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border/60 bg-card py-6 flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Briefcase className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
+                  <p className="text-sm">No job application data</p>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Application Status Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <PremiumStatusCard
               title="New"
               count={effectiveStats.new}
@@ -484,7 +514,7 @@ export default function OverviewPage() {
           </div>
 
           {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
             {/* Application Trends Chart */}
             <Card className="lg:col-span-3 shadow-sm border-border/70 overflow-hidden">
               <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">

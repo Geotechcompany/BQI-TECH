@@ -195,23 +195,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const session = authService.getSession();
         if (session?.token && session?.user) {
-          // Always refresh profile from DB so role changes (e.g. admin grant) apply
-          const updatedSession = await authService.refreshUserProfile();
-          const activeUser = updatedSession?.user ?? session.user;
-          if (updatedSession) {
-            authService.setSession(updatedSession);
-          } else {
-            authService.setSession(session);
+          if (authService.isAccessTokenExpired(session.token)) {
+            const refreshed = await authService.refreshToken();
+            if (!refreshed) {
+              authService.clearSession();
+              setAuthState((prev) => ({
+                ...prev,
+                isAuthenticated: false,
+                isAdmin: false,
+                user: null,
+                userRole: undefined,
+                authLoading: false,
+              }));
+              return;
+            }
           }
-          const resolvedRole = activeUser.role;
 
+          const activeSession = authService.getSession() ?? session;
+          const resolvedRole = activeSession.user.role;
+
+          // Hydrate immediately from cached session so protected routes are not blocked
           setAuthState({
             isAuthenticated: true,
             isAdmin: roleIsAdmin(resolvedRole),
-            user: activeUser,
+            user: activeSession.user,
             userRole: resolvedRole,
             authLoading: false,
           });
+
+          // Refresh profile in the background so role/email changes still apply
+          try {
+            const updatedSession = await authService.refreshUserProfile();
+            const activeUser = updatedSession?.user ?? activeSession.user;
+            if (updatedSession) {
+              authService.setSession(updatedSession);
+            } else {
+              authService.setSession(activeSession);
+            }
+
+            setAuthState({
+              isAuthenticated: true,
+              isAdmin: roleIsAdmin(activeUser.role),
+              user: activeUser,
+              userRole: activeUser.role,
+              authLoading: false,
+            });
+          } catch (refreshError) {
+            console.warn("Background profile refresh failed:", refreshError);
+          }
         } else {
           setAuthState((prev) => ({ ...prev, authLoading: false }));
         }

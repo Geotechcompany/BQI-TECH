@@ -31,9 +31,9 @@ for env_file in env_files:
 
 def get_database():
     """Get database connection"""
-    mongo_uri = os.getenv('MONGODB_URI')
-    if mongo_uri:
-        client = MongoClient(mongo_uri)
+    MONGODB_URI = os.getenv('MONGODB_URI')
+    if MONGODB_URI:
+        client = MongoClient(MONGODB_URI)
         client.admin.command('ping')
         db = client.get_default_database()
         return db

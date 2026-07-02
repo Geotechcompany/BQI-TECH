@@ -5,5 +5,30 @@
 .env.production.local
 
 node_modules
+.DS_Store
+.cursor
+.cursorrules
+.cursorignore
+.cursorignorerules
+.cursorignorerulesrules
+.cursorignorerulesrulesrules
+.cursorignorerulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrules
+.cursorignorerulesrulesrulesrulesrulesrulesrulesrules
+.next
 
 .venv
+.vscode
+.vscodeignore
+.vscodeignorerules
+.vscodeignorerulesrules
+.vscodeignorerulesrulesrules
+.vscodeignorerulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrulesrules
+.vscodeignorerulesrulesrulesrulesrulesrulesrules
+
+scripts/seed_assets/
+logs/

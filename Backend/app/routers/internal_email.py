@@ -1,4 +1,4 @@
-"""Public email relay for dev/staging backends that cannot use SMTP directly."""
+"""Internal email relay for non-production backends (e.g. Render free tier)."""
 
 from __future__ import annotations
 
@@ -7,48 +7,29 @@ import os
 from typing import Any, Dict
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.config import settings
-from app.lib.email import (
+from app.lib.email_transport import (
     normalize_relay_frontend_url,
     rewrite_email_html_for_frontend,
     smtp_send_html,
 )
 from app.logger import logger
 
-router = APIRouter(tags=["email-relay"])
-limiter = Limiter(key_func=get_remote_address)
+router = APIRouter(tags=["internal"])
 
 
-@router.post(
-    "/internal/send-email",
-    summary="Send email via production SMTP",
-    description=(
-        "Relay endpoint for non-production backends (e.g. Render free tier). "
-        "Uses this host's Office 365 SMTP configuration. "
-        "Optional frontendUrl rewrites bqitech.com links in HTML for dev/staging. "
-        "Set EMAIL_RELAY_SECRET on this server and pass the same value in "
-        "the X-Email-Relay-Key header from calling backends."
-    ),
-)
-@limiter.limit("60/minute")
-async def public_send_email(
+@router.post("/internal/send-email")
+async def internal_send_email(
     request: Request,
-    payload: Dict[str, Any] = Body(
-        ...,
-        examples=[
-            {
-                "to": "user@example.com",
-                "subject": "BQI Tech — test email",
-                "html": "<p>Hello from the relay.</p>",
-                "from": "hr@bqitech.com",
-                "frontendUrl": "https://bqitech-hr-dev.netlify.app",
-            }
-        ],
-    ),
+    payload: Dict[str, Any] = Body(...),
 ):
+    """
+    Send email using this host's SMTP configuration (Office 365).
+
+    Used by dev/staging backends that cannot reach SMTP directly.
+    Docs: https://api.bqitech.com/docs
+    """
     expected_secret = os.getenv("EMAIL_RELAY_SECRET", "").strip()
     if expected_secret:
         provided = request.headers.get("X-Email-Relay-Key", "").strip()
@@ -75,9 +56,15 @@ async def public_send_email(
         html = rewrite_email_html_for_frontend(html, frontend_url)
 
     try:
-        await asyncio.to_thread(smtp_send_html, to, subject, html, from_email)
+        await asyncio.to_thread(
+            smtp_send_html,
+            to,
+            subject,
+            html,
+            from_email,
+        )
     except Exception as exc:
-        logger.error("Public email relay failed for %s: %s", to, exc)
+        logger.error("Internal email relay failed for %s: %s", to, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return {"ok": True, "message": f"Email sent to {to}"}

@@ -131,6 +131,9 @@ function EmailVerificationContent() {
   // Guards to prevent duplicate verification submits/toasts
   const isVerifyingRef = useRef(false);
   const hasShownSuccessRef = useRef(false);
+  const hasShownAlreadyVerifiedToastRef = useRef(false);
+  const isRedirectingRef = useRef(false);
+  const verifiedCheckEmailRef = useRef<string | null>(null);
 
   // Constants for duplicate prevention
   const RESEND_COOLDOWN = 30000; // 30 seconds cooldown between resends
@@ -192,6 +195,10 @@ function EmailVerificationContent() {
 
   const redirectIfVerified = useCallback(
     async (targetEmail: string) => {
+      if (isRedirectingRef.current) {
+        return true;
+      }
+
       try {
         const refreshed = await authService.refreshUserProfile();
         let verified = resolveEmailVerified(
@@ -216,8 +223,12 @@ function EmailVerificationContent() {
         }
 
         if (verified) {
+          isRedirectingRef.current = true;
           await updateEmailVerificationStatus(true);
-          toast.success("Email already verified. Redirecting...");
+          if (!hasShownAlreadyVerifiedToastRef.current) {
+            toast.success("Email already verified. Redirecting...");
+            hasShownAlreadyVerifiedToastRef.current = true;
+          }
           router.replace(isAdmin ? "/admin/overview" : "/dashboard");
           return true;
         }
@@ -365,9 +376,11 @@ function EmailVerificationContent() {
     }
   }, [email, isAuthenticated, router, getEmailFromSources]);
 
-  // Confirm verification status before prompting for a code
+  // Confirm verification status once per email (avoid toast/redirect loops)
   useEffect(() => {
     if (!email || authLoading) return;
+    if (verifiedCheckEmailRef.current === email) return;
+    verifiedCheckEmailRef.current = email;
     redirectIfVerified(email);
   }, [email, authLoading, redirectIfVerified]);
 
@@ -443,16 +456,16 @@ function EmailVerificationContent() {
     };
   }, []);
 
-  // Auto-submit when OTP is complete (memoized to prevent unnecessary re-renders)
-  const handleOtpSubmit = useCallback(() => {
-    if (otp.length === 6 && !isVerifyingRef.current && status !== "loading") {
+  // Auto-submit when OTP is complete (once per code entry)
+  useEffect(() => {
+    if (
+      otp.length === 6 &&
+      !isVerifyingRef.current &&
+      status === "idle"
+    ) {
       handleSubmit(onSubmit)();
     }
-  }, [otp, handleSubmit, onSubmit, status]);
-
-  useEffect(() => {
-    handleOtpSubmit();
-  }, [handleOtpSubmit]);
+  }, [otp, status, handleSubmit, onSubmit]);
 
   // Prevent rendering if authentication is loading or no email
   if (authLoading || !email) {
@@ -582,13 +595,17 @@ function EmailVerificationContent() {
                         renderInput={(props) => (
                           <input
                             {...props}
-                            className="!w-10 h-12 sm:!w-12 sm:h-14 text-center border rounded-md 
-                                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg sm:text-xl"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            className="!w-10 h-12 sm:!w-12 sm:h-14 text-center border border-gray-300 rounded-lg
+                                     bg-white text-gray-900 shadow-sm
+                                     focus:ring-2 focus:ring-[#31CDFF] focus:border-[#31CDFF] text-lg sm:text-xl
+                                     [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             disabled={status === "loading"}
                           />
                         )}
                         containerStyle="flex justify-center gap-2 sm:gap-4"
-                        inputType="number"
+                        inputType="tel"
                         shouldAutoFocus
                       />
                     )}
@@ -620,7 +637,9 @@ function EmailVerificationContent() {
                       <XCircle className="mr-2 h-4 w-4" />
                       Try Again
                     </>
-                  ) : null}
+                  ) : (
+                    "Verify Email"
+                  )}
                 </Button>
               </motion.form>
             </CardContent>

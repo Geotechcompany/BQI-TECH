@@ -3,11 +3,12 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader, User } from "lucide-react";
+import { Loader2, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { User as UserType } from "@/src/types/user";
 import { Input } from "@/components/ui/input";
@@ -20,8 +21,14 @@ import {
 } from "@/components/ui/select";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-hot-toast";
-import { authService } from "@/lib/auth-backend";
-import { BACKEND_URL } from "@/lib/config";
+import { adminApi } from "@/lib/api-backend";
+import { AdminModulePicker } from "@/components/admin/AdminModulePicker";
+import {
+  AdminModuleKey,
+  getEffectiveAdminModules,
+  isAdminRole,
+} from "@/lib/admin-permissions";
+import { useEffect, useState } from "react";
 
 interface EditUserModalProps {
   user: UserType | null;
@@ -30,6 +37,12 @@ interface EditUserModalProps {
   onSuccess?: () => void;
 }
 
+type EditUserForm = {
+  name: string;
+  email: string;
+  role: UserType["role"];
+};
+
 export function EditUserModal({
   user,
   open,
@@ -37,36 +50,35 @@ export function EditUserModal({
   onSuccess,
 }: EditUserModalProps) {
   const queryClient = useQueryClient();
-  const { register, handleSubmit, reset, setValue } = useForm<UserType>();
+  const { register, handleSubmit, reset, setValue, watch } =
+    useForm<EditUserForm>();
+  const [adminModules, setAdminModules] = useState<AdminModuleKey[]>([]);
+  const role = watch("role") ?? user?.role ?? "USER";
+
+  useEffect(() => {
+    if (user && open) {
+      reset({
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      });
+      setAdminModules(
+        getEffectiveAdminModules(user.role, user.adminModules ?? [])
+      );
+    }
+  }, [user, open, reset]);
 
   const updateUser = useMutation({
-    mutationFn: async (data: UserType) => {
-      const session = authService.getSession();
+    mutationFn: async (data: EditUserForm) => {
       const userId = user?.id || (user as any)?._id;
+      if (!userId) throw new Error("User ID is missing");
 
-      if (!userId) {
-        throw new Error("User ID is missing");
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/admin/users/${userId}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${session?.token}`,
-        },
-        body: JSON.stringify(data),
+      return adminApi.updateUser(userId, {
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        adminModules: isAdminRole(data.role) ? adminModules : [],
       });
-
-      if (!response.ok) {
-        const error = await response
-          .json()
-          .catch(() => ({ detail: "Failed to update user" }));
-        throw new Error(error.detail || "Failed to update user");
-      }
-
-      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
@@ -75,54 +87,70 @@ export function EditUserModal({
       onSuccess?.();
     },
     onError: (error: Error) => {
-      console.error("Failed to update user:", error);
       toast.error(error.message || "Failed to update user");
     },
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <User className="h-5 w-5" />
-            Edit User
+            Edit user
           </DialogTitle>
+          <DialogDescription>
+            Update profile details, role, and admin module permissions.
+          </DialogDescription>
         </DialogHeader>
 
         <form
           onSubmit={handleSubmit((data) => updateUser.mutate(data))}
-          className="space-y-4"
+          className="space-y-5"
         >
-          <Input
-            label="Name"
-            {...register("name", { required: true })}
-            defaultValue={user?.name}
-          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Name" {...register("name", { required: true })} />
+            <Input
+              label="Email"
+              type="email"
+              {...register("email", { required: true })}
+            />
+          </div>
 
-          <Input
-            label="Email"
-            type="email"
-            {...register("email", { required: true })}
-            defaultValue={user?.email}
-          />
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Role</label>
+            <Select
+              value={role}
+              onValueChange={(value) => {
+                const nextRole = value as UserType["role"];
+                setValue("role", nextRole);
+                if (isAdminRole(nextRole)) {
+                  setAdminModules(getEffectiveAdminModules(nextRole, adminModules));
+                } else {
+                  setAdminModules([]);
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="USER">User</SelectItem>
+                <SelectItem value="ADMIN">Administrator</SelectItem>
+                <SelectItem value="SUPER_ADMIN">Super Administrator</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select
-            onValueChange={(value) =>
-              setValue("role", value as "USER" | "ADMIN")
-            }
-            defaultValue={user?.role}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="USER">User</SelectItem>
-              <SelectItem value="ADMIN">Admin</SelectItem>
-            </SelectContent>
-          </Select>
+          {isAdminRole(role) && (
+            <AdminModulePicker
+              role={role}
+              selected={adminModules}
+              onChange={setAdminModules}
+            />
+          )}
 
-          <div className="flex justify-end gap-2 mt-6">
+          <div className="flex justify-end gap-2 border-t pt-4">
             <Button
               type="button"
               variant="outline"
@@ -132,9 +160,9 @@ export function EditUserModal({
             </Button>
             <Button type="submit" disabled={updateUser.isPending}>
               {updateUser.isPending ? (
-                <Loader className="animate-spin mr-2" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
-              Save Changes
+              Save changes
             </Button>
           </div>
         </form>

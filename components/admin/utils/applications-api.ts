@@ -14,6 +14,9 @@ export interface ApplicationFilters {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   jobId?: string;
+  aiScoreFilter?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface ApiResponse<T> {
@@ -36,7 +39,8 @@ class AdminApplicationsApi {
   private async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {},
-    useAdminEndpoint: boolean = true
+    useAdminEndpoint: boolean = true,
+    timeoutMs?: number
   ): Promise<T> {
     const session = authService.getSession();
     if (!session) {
@@ -62,6 +66,10 @@ class AdminApplicationsApi {
       },
     };
 
+    if (timeoutMs && typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
+      requestOptions.signal = AbortSignal.timeout(timeoutMs);
+    }
+
     let response = await fetch(url, requestOptions);
 
     // Handle token refresh
@@ -84,7 +92,15 @@ class AdminApplicationsApi {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Request failed: ${response.status}`);
+      const detail = errorData.detail;
+      const message =
+        typeof detail === "string"
+          ? detail
+          : detail?.message ||
+            detail?.error ||
+            errorData.message ||
+            `Request failed: ${response.status}`;
+      throw new Error(message);
     }
 
     return response.json();
@@ -129,6 +145,8 @@ class AdminApplicationsApi {
     if (filters.position && filters.position !== "all")
       params.append("position", filters.position);
     if (filters.jobId) params.append("jobId", filters.jobId);
+    if (filters.aiScoreFilter && filters.aiScoreFilter !== "all")
+      params.append("ai_score_filter", filters.aiScoreFilter);
 
     const queryString = params.toString();
 
@@ -284,6 +302,10 @@ class AdminApplicationsApi {
     if (filters.position && filters.position !== "all")
       params.append("position", filters.position);
     if (filters.jobId) params.append("jobId", filters.jobId);
+    if (filters.aiScoreFilter && filters.aiScoreFilter !== "all")
+      params.append("ai_score_filter", filters.aiScoreFilter);
+    if (filters.dateFrom) params.append("date_from", filters.dateFrom);
+    if (filters.dateTo) params.append("date_to", filters.dateTo);
 
     const queryString = params.toString();
     const endpoint = `/applications${queryString ? `?${queryString}` : ""}`;
@@ -333,6 +355,31 @@ class AdminApplicationsApi {
 
   async getArchivedApplications(filters: ApplicationFilters = {}) {
     return this.getApplicationsByStatus("archived", filters);
+  }
+
+  async rankApplications(request: {
+    ids?: string[];
+    limit?: number;
+    position?: string;
+    status?: string;
+    jobId?: string;
+  }) {
+    return this.makeRequest<{
+      ranked: number;
+      results: Array<{
+        id: string;
+        aiRankScore: number;
+        aiRankSummary?: string;
+        aiRankStrengths?: string[];
+        aiRankGaps?: string[];
+        aiRankRecommendation?: string;
+        aiRankedAt?: string;
+      }>;
+      errors: Array<{ id: string; error: string }>;
+    }>("/applications/ai-rank", {
+      method: "POST",
+      body: JSON.stringify(request),
+    }, true, 120_000);
   }
 }
 

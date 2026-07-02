@@ -13,6 +13,9 @@ import { toast } from "react-hot-toast";
 import WhatsNewFloat from "@/components/admin/WhatsNewFloat";
 import { SessionTimeoutModal } from "@/components/admin/SessionTimeoutModal";
 import { AdminBrandTitle } from "@/components/admin/AdminBrandTitle";
+import { FeaturePreviewDialog } from "@/components/admin/FeaturePreviewDialog";
+import { AiStatusProvider } from "@/contexts/AiStatusContext";
+import { AiConfigBanner } from "@/components/admin/AiConfigBanner";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -93,12 +96,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <EmailVerificationGuard requireVerification={true}>
       <AdminThemeProvider targetId="admin-root">
+        <AiStatusProvider>
         <div
           id="admin-root"
           data-admin-page
           className="flex flex-col h-screen w-screen bg-gray-100 md:flex-row overflow-hidden"
         >
-          <div className="md:hidden bg-white flex justify-between items-center h-16 px-4 flex-shrink-0 z-50">
+          <div
+            className="md:hidden bg-white flex justify-between items-center h-16 px-4 flex-shrink-0 z-50"
+            style={{ marginTop: "var(--admin-banner-offset, 0px)" }}
+          >
             <AdminBrandTitle
               titleClassName="text-xl text-gray-800"
               badgeVariant="slate"
@@ -131,22 +138,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           ${sidebarCollapsed ? "md:ml-20" : "md:ml-64"}
         `}
           >
+            <AiConfigBanner />
             <div className="h-full w-full transition-all duration-300">
               {children}
             </div>
-            <WhatsNewFloat
-              features={[
-                {
-                  title: "Surveys",
-                  description:
-                    "Create and share surveys under Content → Surveys.",
-                },
-                {
-                  title: "Email Broadcast",
-                  description: "Now in Workspace menu for quick access.",
-                },
-              ]}
-            />
+            <WhatsNewFloat />
+            <FeaturePreviewDialog />
           </main>
         </div>
 
@@ -158,6 +155,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           timeRemaining={sessionTimeRemaining}
           totalTime={5 * 60} // 5 minutes warning period
         />
+        </AiStatusProvider>
       </AdminThemeProvider>
     </EmailVerificationGuard>
   );

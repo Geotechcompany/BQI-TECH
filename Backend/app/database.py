@@ -1,6 +1,8 @@
 import os
 import asyncio
 import logging
+from datetime import datetime, timezone
+from urllib.parse import unquote, urlparse
 from .config import settings
 import dns.resolver
 
@@ -35,21 +37,75 @@ _DEFAULT_SYNC_COLLECTIONS = [
 
 
 def _operational_mongo_uri() -> str | None:
-	"""Main application database (formerly 'backup' cluster)."""
-	uri = (settings.BACKUP_MONGO_URL or os.getenv("BACKUP_MONGO_URL") or "").strip()
+	"""Main application MongoDB connection string."""
+	uri = (
+		settings.MONGODB_URI
+		or os.getenv("MONGODB_URI")
+		or settings.MONGO_URL
+		or os.getenv("MONGO_URL")
+		or ""
+	).strip()
 	return uri or None
 
 
 def _sync_target_mongo_uri() -> str | None:
 	"""Optional second cluster for periodic copy-sync only (not the app read/write DB)."""
-	uri = (settings.DB_SYNC_TARGET_URI or os.getenv("DB_SYNC_TARGET_URI") or "").strip()
+	from app.lib.integration_credentials import get_sync_target_uri_sync
+
+	uri = (
+		get_sync_target_uri_sync()
+		or (settings.DB_SYNC_TARGET_URI or os.getenv("DB_SYNC_TARGET_URI") or "").strip()
+	)
 	return uri or None
 
 
+def invalidate_sync_target_connection() -> None:
+	"""Drop cached sync-target Mongo client after credential changes."""
+	global _backup_client, _backup_database
+	if _backup_client is not None:
+		try:
+			_backup_client.close()
+		except Exception:
+			pass
+	_backup_client = None
+	_backup_database = None
+
+
 def _build_mongo_candidates() -> list[str]:
-	"""Single operational MongoDB URI (BACKUP_MONGO_URL only; legacy primary is not used)."""
+	"""Single operational MongoDB URI from MONGODB_URI (or legacy MONGO_URL)."""
 	uri = _operational_mongo_uri()
 	return [uri] if uri else []
+
+
+def _parse_database_name_from_uri(uri: str) -> str | None:
+	"""Extract database name from a MongoDB connection string path segment."""
+	if not uri:
+		return None
+	try:
+		normalized = uri.replace("mongodb+srv://", "mongodb://", 1)
+		parsed = urlparse(normalized)
+		db_name = unquote(parsed.path.lstrip("/")).split("/")[0].strip()
+		return db_name or None
+	except Exception:
+		return None
+
+
+def _resolve_database_name(uri: str | None = None) -> str:
+	"""Resolve MongoDB database name from env, URI path, or environment defaults."""
+	explicit = (os.getenv("DATABASE_NAME") or "").strip()
+	if explicit:
+		return explicit
+
+	for candidate_uri in (uri, _operational_mongo_uri()):
+		if not candidate_uri:
+			continue
+		from_uri = _parse_database_name_from_uri(candidate_uri)
+		if from_uri:
+			return from_uri
+
+	if os.getenv("NODE_ENV", "development") != "production":
+		return "BQITECH-DEV"
+	return "BQITECH"
 
 
 def _mongo_timeout_ms() -> int:
@@ -88,7 +144,10 @@ async def _try_connect(database_url: str, database_name: str) -> bool:
 async def _get_backup_database():
 	"""Get or initialize optional sync-target database (DB_SYNC_TARGET_URI), not the main app DB."""
 	global _backup_client, _backup_database
-	sync_uri = _sync_target_mongo_uri()
+	from app.lib.integration_credentials import get_backup_credentials
+
+	creds = await get_backup_credentials()
+	sync_uri = (creds.get("dbSyncTargetUri") or "").strip() or _sync_target_mongo_uri()
 	if not sync_uri:
 		return None
 
@@ -104,7 +163,7 @@ async def _get_backup_database():
 			_backup_client = None
 			_backup_database = None
 
-	database_name = os.getenv("DATABASE_NAME", "BQITECH")
+	database_name = _resolve_database_name(sync_uri)
 	from motor.motor_asyncio import AsyncIOMotorClient
 
 	timeout_ms = min(_mongo_timeout_ms(), 10000)
@@ -139,7 +198,7 @@ async def sync_databases_now(collections: list[str] | None = None) -> dict:
 	if backup_db is None:
 		return {
 			"success": False,
-			"message": "Sync target not configured (set DB_SYNC_TARGET_URI to enable replication)",
+			"message": "Sync target not configured (add MongoDB sync URI in Backup settings)",
 		}
 
 	source_db = get_database()
@@ -181,13 +240,13 @@ async def connect_to_database():
 	global _client, _database
 	
 	try:
-		# Operational cluster only (BACKUP_MONGO_URL)
+		# Operational cluster (MONGODB_URI)
 		candidates = _build_mongo_candidates()
-		database_name = os.getenv("DATABASE_NAME", "BQITECH")
+		database_name = _resolve_database_name()
 
 		if not candidates:
 			logger.error(
-				"No MongoDB URI configured: set BACKUP_MONGO_URL to your operational cluster connection string"
+				"No MongoDB URI configured: set MONGODB_URI in Backend/.env"
 			)
 			_client = None
 			_database = None
@@ -199,7 +258,7 @@ async def connect_to_database():
 
 		connected = False
 		for candidate in candidates:
-			logger.info("Connecting to MongoDB (BACKUP_MONGO_URL operational cluster)...")
+			logger.info("Connecting to MongoDB (MONGODB_URI)...")
 			connected = await _try_connect(candidate, database_name)
 			if connected:
 				logger.info(f"Connected to MongoDB: {database_name}")
@@ -284,9 +343,10 @@ def start_reconnect_task():
 		_reconnect_stop_event = asyncio.Event()
 		_reconnect_task = asyncio.create_task(_reconnect_loop())
 
-	if _sync_target_mongo_uri() and (_sync_task is None or _sync_task.done()):
-		_sync_stop_event = asyncio.Event()
-		_sync_task = asyncio.create_task(_sync_loop())
+	if _sync_target_mongo_uri() and os.getenv("DB_SYNC_LEGACY_LOOP", "").lower() == "true":
+		if _sync_task is None or _sync_task.done():
+			_sync_stop_event = asyncio.Event()
+			_sync_task = asyncio.create_task(_sync_loop())
 
 
 async def stop_reconnect_task():
@@ -322,10 +382,59 @@ def get_database():
 	global _database
 	return _database
 
+
+def get_active_database_name() -> str:
+	"""Return the connected database name, or the resolved name from config."""
+	global _database
+	if _database is not None:
+		return _database.name
+	return _resolve_database_name()
+
 def is_connected():
 	"""Check if database is connected"""
 	global _database
 	return _database is not None
+
+
+async def _dedupe_pending_admin_invites():
+	"""Revoke duplicate pending admin invites so the partial unique index can be created."""
+	if _database is None:
+		return
+
+	pipeline = [
+		{"$match": {"status": "pending"}},
+		{"$sort": {"createdAt": -1, "_id": -1}},
+		{
+			"$group": {
+				"_id": "$email",
+				"keepId": {"$first": "$_id"},
+				"duplicateIds": {"$push": "$_id"},
+				"count": {"$sum": 1},
+			}
+		},
+		{"$match": {"count": {"$gt": 1}}},
+	]
+
+	revoked_total = 0
+	async for group in _database.admin_invites.aggregate(pipeline):
+		duplicate_ids = [
+			invite_id for invite_id in group["duplicateIds"] if invite_id != group["keepId"]
+		]
+		if not duplicate_ids:
+			continue
+		result = await _database.admin_invites.update_many(
+			{"_id": {"$in": duplicate_ids}},
+			{"$set": {"status": "revoked", "revokedAt": datetime.now(timezone.utc)}},
+		)
+		revoked_total += result.modified_count
+		logger.warning(
+			"Revoked %s duplicate pending admin invite(s) for %s",
+			result.modified_count,
+			group["_id"],
+		)
+
+	if revoked_total:
+		logger.info("Deduplicated %s stale pending admin invite(s)", revoked_total)
 
 
 async def initialize_database_indexes():
@@ -363,7 +472,12 @@ async def initialize_database_indexes():
 					unique_ok = (options.get("unique") or False) == spec.get("unique", False)
 					ttl_desired = options.get("expireAfterSeconds")
 					ttl_ok = True if ttl_desired is None else ttl_desired == spec.get("expireAfterSeconds")
-					if unique_ok and ttl_ok:
+					partial_desired = options.get("partialFilterExpression")
+					if partial_desired is None:
+						partial_ok = "partialFilterExpression" not in spec
+					else:
+						partial_ok = spec.get("partialFilterExpression") == partial_desired
+					if unique_ok and ttl_ok and partial_ok:
 						# Index already satisfies our requirements; nothing to do
 						return
 					conflicting_name = idx_name
@@ -418,6 +532,22 @@ async def initialize_database_indexes():
 			["email"],
 			name="users_email_unique",
 			unique=True
+		)
+
+		# One pending admin invite per email
+		await _dedupe_pending_admin_invites()
+		await ensure_index(
+			_database.admin_invites,
+			["email"],
+			name="admin_invites_email_pending_unique",
+			unique=True,
+			partialFilterExpression={"status": "pending"},
+		)
+
+		await ensure_index(
+			_database.backup_runs,
+			["startedAt"],
+			name="backup_runs_startedAt",
 		)
 
 		# Applications collection indexes for performance
@@ -498,6 +628,23 @@ async def initialize_database_indexes():
 			_database.cv_vault,
 			["hasEmail", "hasName"],
 			name="cv_vault_contact_flags",
+		)
+
+		# Admin activity audit log
+		await ensure_index(
+			_database.admin_activities,
+			["createdAt"],
+			name="admin_activities_createdAt",
+		)
+		await ensure_index(
+			_database.admin_activities,
+			["action"],
+			name="admin_activities_action",
+		)
+		await ensure_index(
+			_database.admin_activities,
+			["actorEmail"],
+			name="admin_activities_actorEmail",
 		)
 
 		# Email campaigns collection indexes

@@ -1,9 +1,11 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable');
+function getMongoUri(): string {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error('Please define the MONGODB_URI environment variable');
+  }
+  return uri;
 }
 
 interface CachedConnection {
@@ -39,12 +41,14 @@ export function isConnected(): boolean {
 }
 
 export async function connectToDatabase() {
+  const mongoUri = getMongoUri();
+
   if (await isConnected()) {
     return { db: cached.db! };
   }
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(process.env.MONGODB_URI!, {
+    cached.promise = mongoose.connect(mongoUri, {
       serverSelectionTimeoutMS: 15000,
       socketTimeoutMS: 60000,
       maxPoolSize: 25,

@@ -1,6 +1,98 @@
 import { authService } from "./auth-backend";
 import { BACKEND_URL } from "./config";
 
+const API_FETCH_TIMEOUT_MS = 30_000;
+
+function createFetchTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
+    return AbortSignal.timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
+function mergeFetchOptions(
+  options: RequestInit,
+  timeoutMs: number
+): RequestInit {
+  const timeoutSignal = createFetchTimeoutSignal(timeoutMs);
+  const signals = [options.signal, timeoutSignal].filter(Boolean) as AbortSignal[];
+
+  if (signals.length === 0) {
+    return { ...options, signal: timeoutSignal };
+  }
+
+  if (typeof AbortSignal !== "undefined" && "any" in AbortSignal) {
+    return {
+      ...options,
+      signal: AbortSignal.any(signals),
+    };
+  }
+
+  const controller = new AbortController();
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort();
+      break;
+    }
+    signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  return {
+    ...options,
+    signal: controller.signal,
+  };
+}
+
+function formatFastApiDetail(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg: string }).msg);
+        }
+        return JSON.stringify(item);
+      })
+      .join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    const obj = detail as Record<string, unknown>;
+    if (typeof obj.message === "string" && obj.message.trim()) {
+      return obj.message;
+    }
+    if (typeof obj.detail === "string" && obj.detail.trim()) {
+      return obj.detail;
+    }
+    if (obj.detail !== undefined && obj.detail !== null) {
+      const nested = formatFastApiDetail(obj.detail);
+      if (nested !== "Request failed") {
+        return nested;
+      }
+    }
+  }
+  return "Request failed";
+}
+
+async function readApiErrorMessage(response: Response): Promise<string> {
+  try {
+    const body = await response.json();
+    if (body?.detail) {
+      return formatFastApiDetail(body.detail);
+    }
+    if (typeof body?.message === "string") {
+      return body.message;
+    }
+  } catch {
+    // Fall through to status-based message.
+  }
+  return `API request failed: ${response.status}`;
+}
+
 // Generic API client class
 export class BackendApiClient {
   private baseUrl: string;
@@ -57,21 +149,28 @@ export class BackendApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = this.buildUrl(endpoint);
-    const headers = this.getAuthHeaders();
-
-    // Merge custom headers
-    if (options.headers) {
-      Object.entries(options.headers).forEach(([key, value]) => {
-        headers.set(key, value);
-      });
-    }
 
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers,
-        credentials: "include",
-      });
+      await authService.ensureValidSession();
+
+      const requestHeaders = this.getAuthHeaders();
+      if (options.headers) {
+        Object.entries(options.headers).forEach(([key, value]) => {
+          requestHeaders.set(key, value as string);
+        });
+      }
+
+      const response = await fetch(
+        url,
+        mergeFetchOptions(
+          {
+            ...options,
+            headers: requestHeaders,
+            credentials: "include",
+          },
+          API_FETCH_TIMEOUT_MS
+        )
+      );
 
       if (response.status === 401) {
         // Token expired, try to refresh using AuthService
@@ -85,44 +184,41 @@ export class BackendApiClient {
               })
             );
           }
-          throw new Error("Authentication failed - please log in again");
+          throw new Error("Session expired — please log in again");
         }
 
         // Retry with new token
-        const retryResponse = await fetch(url, {
-          ...options,
-          headers: this.getAuthHeaders(), // Get fresh headers with new token
-          credentials: "include",
-        });
+        const retryResponse = await fetch(
+          url,
+          mergeFetchOptions(
+            {
+              ...options,
+              headers: this.getAuthHeaders(),
+              credentials: "include",
+            },
+            API_FETCH_TIMEOUT_MS
+          )
+        );
 
         if (!retryResponse.ok) {
-          throw new Error(`API request failed: ${retryResponse.status}`);
+          throw new Error(await readApiErrorMessage(retryResponse));
         }
 
         return retryResponse.json();
       }
 
       if (!response.ok) {
-        let message = `API request failed: ${response.status}`;
-        try {
-          const errBody = await response.json();
-          if (typeof errBody?.detail === "string") {
-            message = errBody.detail;
-          } else if (Array.isArray(errBody?.detail)) {
-            message = errBody.detail
-              .map((d: { msg?: string }) => d?.msg)
-              .filter(Boolean)
-              .join("; ");
-          }
-        } catch {
-          // ignore JSON parse errors
-        }
-        throw new Error(message);
+        throw new Error(await readApiErrorMessage(response));
       }
 
       return response.json();
     } catch (error) {
       console.error("API request error:", error);
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error(
+          "Request timed out. The server may be busy — please try again."
+        );
+      }
       throw error;
     }
   }
@@ -303,6 +399,30 @@ export const adminApi = {
   getUsers: (params?: { skip?: number; limit?: number }) =>
     backendApi.get("/api/admin/users", params),
 
+  searchUsers: (params: { q: string }) =>
+    backendApi.get("/api/admin/users/search", params),
+
+  getAdminPermissionModules: () =>
+    backendApi.get("/api/admin/permissions/modules"),
+
+  getAdminInvites: () => backendApi.get("/api/admin/users/invites"),
+
+  inviteUser: (data: {
+    email: string;
+    name: string;
+    role: string;
+    adminModules?: string[];
+  }) => backendApi.post("/api/admin/users/invite", data),
+
+  resendAdminInvite: (inviteId: string) =>
+    backendApi.post(`/api/admin/users/invites/${inviteId}/resend`),
+
+  resendAdminInviteForUser: (userId: string) =>
+    backendApi.post(`/api/admin/users/${userId}/resend-invite`),
+
+  revokeAdminInvite: (inviteId: string) =>
+    backendApi.delete(`/api/admin/users/invites/${inviteId}`),
+
   updateUser: (id: string, data: any) =>
     backendApi.put(`/api/admin/users/${id}`, data),
 
@@ -313,18 +433,6 @@ export const adminApi = {
     backendApi.get("/api/admin/blog-posts", params),
 
   createBlogPost: (data: any) => backendApi.post("/api/admin/blog-posts", data),
-
-  aiGenerateBlog: (data: {
-    task:
-      | "excerpt"
-      | "meta_description"
-      | "author_bio"
-      | "author_title"
-      | "format_content"
-      | "suggest_tags"
-      | "read_time";
-    context?: Record<string, string>;
-  }) => backendApi.post("/api/admin/blog-posts/ai/generate", data),
 
   getBlogPost: (id: string) => backendApi.get(`/api/admin/blog-posts/${id}`),
 
@@ -384,16 +492,32 @@ export const adminApi = {
   getRecaptchaSettings: () => backendApi.get("/api/admin/settings/recaptcha"),
   updateRecaptchaSettings: (data: { siteKey?: string; secretKey?: string }) =>
     backendApi.put("/api/admin/settings/recaptcha", data),
-  getAiProviderSettings: () => backendApi.get("/api/admin/settings/ai"),
-  updateAiProviderSettings: (data: {
-    provider?: "nvidia" | "openai";
-    apiKey?: string;
-    baseUrl?: string;
-    model?: string;
-    enabled?: boolean;
-  }) => backendApi.put("/api/admin/settings/ai", data),
-  testAiProviderSettings: () =>
-    backendApi.post("/api/admin/settings/ai/test", {}),
+
+  getBackupSettings: () => backendApi.get("/api/admin/settings/backup"),
+  updateBackupSettings: (data: Record<string, unknown>) =>
+    backendApi.put("/api/admin/settings/backup", data),
+  runBackup: () => backendApi.post("/api/admin/settings/backup/run"),
+  getBackupRuns: (params?: { limit?: number }) =>
+    backendApi.get("/api/admin/settings/backup/runs", params),
+  getBackupCredentials: () =>
+    backendApi.get("/api/admin/settings/backup/credentials"),
+  updateBackupCredentials: (data: Record<string, unknown>) =>
+    backendApi.put("/api/admin/settings/backup/credentials", data),
+
+  getEmailTransportSettings: () =>
+    backendApi.get("/api/admin/settings/email-transport"),
+  updateEmailTransportSettings: (data: Record<string, unknown>) =>
+    backendApi.put("/api/admin/settings/email-transport", data),
+  testEmailTransport: (data?: { to?: string }) =>
+    backendApi.post("/api/admin/settings/email-transport/test", data ?? {}),
+
+  getAiProviderSettings: () =>
+    backendApi.get("/api/admin/settings/ai-providers"),
+  updateAiProviderSettings: (data: Record<string, unknown>) =>
+    backendApi.put("/api/admin/settings/ai-providers", data),
+  testAiProvider: (data?: Record<string, unknown>) =>
+    backendApi.post("/api/admin/settings/ai-providers/test", data ?? {}),
+  getAiStatus: () => backendApi.get("/api/admin/ai/status"),
 
   // Get notifications
   async getNotifications() {
@@ -427,7 +551,7 @@ export const adminApi = {
     });
   },
 
-  // Audit Logs
+  // Admin Activity
   getAuditLogs: (params?: {
     skip?: number;
     limit?: number;
@@ -485,9 +609,6 @@ export const adminApi = {
     campaign_id?: string;
     status?: string;
   }) => backendApi.get("/api/admin/emails/logs", params),
-
-  searchUsers: (params: { q: string }) =>
-    backendApi.get("/api/admin/users/search", params),
 
   // Broadcast Lists
   listBroadcastLists: (params?: { skip?: number; limit?: number }) =>

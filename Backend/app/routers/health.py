@@ -1,8 +1,19 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
+
 from app.database import get_database, is_connected
-from pymongo.errors import ConnectionFailure
+from app.lib.email import test_smtp_connection
+from app.mongo_errors import is_mongo_connection_error
+from app.lib.runtime_environment import get_runtime_environment_payload
 
 router = APIRouter(tags=["health"])
+
+@router.get("/environment")
+async def runtime_environment():
+    """Public runtime environment info derived from the active MongoDB database."""
+    return get_runtime_environment_payload()
 
 @router.get("/health")
 async def health_check():
@@ -25,14 +36,26 @@ async def health_check():
         }
     except HTTPException:
         raise
-    except ConnectionFailure as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Database connection failed: {str(e)}"
-        )
     except Exception as e:
+        if is_mongo_connection_error(e):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Database connection failed: {str(e)}"
+            )
         error_message = str(e) or e.__class__.__name__
         raise HTTPException(
             status_code=503,
             detail=f"Health check failed: {error_message}"
-        ) 
+        )
+
+
+@router.get("/health/smtp")
+async def smtp_health_check():
+    """Test SMTP configuration and connectivity without sending email."""
+    result = await asyncio.to_thread(test_smtp_connection)
+    payload = {
+        "status": "healthy" if result.get("connected") else "unhealthy",
+        **result,
+    }
+    status_code = 200 if result.get("connected") else 503
+    return JSONResponse(content=payload, status_code=status_code)

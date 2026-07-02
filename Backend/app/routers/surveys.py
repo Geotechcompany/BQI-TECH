@@ -6,6 +6,11 @@ from bson import ObjectId
 from app.database import get_database
 from app.auth import get_current_admin_user, get_current_user
 from app.utils.ip_utils import get_real_client_ip
+from app.lib.admin_audit import (
+    log_resource_created,
+    log_resource_deleted,
+    log_resource_updated,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,6 +46,10 @@ async def create_survey(
     }
     result = await db.surveys.insert_one(doc)
     survey_id = str(result.inserted_id)
+    doc["_id"] = survey_id
+    await log_resource_created(
+        db, current_admin, resource_type="survey", doc=doc, resource_id=survey_id
+    )
     return {
         "id": survey_id,
         "link": f"/survey/{survey_id}",
@@ -120,10 +129,23 @@ async def update_survey(
     current_admin: dict = Depends(get_current_admin_user),
 ):
     db = get_database()
+    existing = await db.surveys.find_one({"_id": to_object_id(survey_id)})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Survey not found")
+
     update["updatedAt"] = datetime.utcnow()
     result = await db.surveys.update_one({"_id": to_object_id(survey_id)}, {"$set": update})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Survey not found")
+
+    await log_resource_updated(
+        db,
+        current_admin,
+        resource_type="survey",
+        existing=existing,
+        updates=update,
+        resource_id=survey_id,
+    )
     return {"id": survey_id}
 
 
@@ -133,9 +155,21 @@ async def delete_survey(
     current_admin: dict = Depends(get_current_admin_user),
 ):
     db = get_database()
+    existing = await db.surveys.find_one({"_id": to_object_id(survey_id)})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Survey not found")
+
     result = await db.surveys.delete_one({"_id": to_object_id(survey_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Survey not found")
+
+    await log_resource_deleted(
+        db,
+        current_admin,
+        resource_type="survey",
+        doc=existing,
+        resource_id=survey_id,
+    )
     return {"id": survey_id}
 
 
@@ -296,12 +330,19 @@ async def ai_generate_survey(
     Request: { prompt: str, num_questions?: int }
     Response: { title, description, questions: [...] }
     """
-    from app.lib.ai_client import chat_completion, extract_json_object
+    import httpx
+
+    from app.lib.ai_provider_settings import get_active_ai_config
 
     prompt = (payload.get("prompt") or "").strip()
     num_questions = int(payload.get("num_questions") or 5)
     if not prompt:
         raise HTTPException(status_code=400, detail="prompt is required")
+
+    base_url, api_key, model = await get_active_ai_config()
+
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI provider not configured")
 
     system = (
         "You are a professional survey generator. Create surveys with: "
@@ -327,17 +368,52 @@ async def ai_generate_survey(
         f'{{"title": "Survey Title", "description": "Survey description", "questions": [{{"title": "Question text", "type": "question_type", "options": ["option1", "option2"]}}]}}'
     )
 
-    content = await chat_completion(
-        user_msg,
-        system_prompt=system,
-        max_tokens=1200,
-        temperature=0.6,
-    )
-    logger.info(f"AI Response: {content[:500]}...")
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": 0.6,
+        "max_tokens": 1200,
+    }
 
-    parsed = extract_json_object(content)
-    if isinstance(parsed, dict) and "questions" in parsed:
-        return parsed
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        try:
+            resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=body)
+            resp.raise_for_status()
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"NVIDIA API error: {e}")
+
+    data = resp.json()
+    content = (
+        data.get("choices", [{}])[0].get("message", {}).get("content", "")
+    )
+    
+    # Log the AI response for debugging
+    logger.info(f"AI Response: {content[:500]}...")  # Log first 500 chars
+
+    # Parse JSON response from AI
+    import json, re
+    
+    # Try to find JSON in the response
+    json_patterns = [
+        r'```json\s*(\{[\s\S]*?\})\s*```',  # JSON in code blocks
+        r'```\s*(\{[\s\S]*?\})\s*```',      # JSON in generic code blocks
+        r'(\{[\s\S]*?\})',                   # Any JSON object
+    ]
+    
+    for pattern in json_patterns:
+        match = re.search(pattern, content.strip(), re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group(1))
+                # Validate the structure
+                if isinstance(parsed, dict) and 'questions' in parsed:
+                    return parsed
+            except (json.JSONDecodeError, KeyError):
+                continue
 
     # fallback minimal structure with varied question types
     question_types = ["short_text", "long_text", "single_choice", "multiple_choice"]

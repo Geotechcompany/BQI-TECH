@@ -6,6 +6,11 @@ import logging
 
 from ..database import get_database
 from ..auth import get_current_admin_user
+from app.lib.admin_audit import (
+    log_resource_created,
+    log_resource_deleted,
+    log_resource_updated,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/broadcast-lists", tags=["broadcast-lists"])
@@ -109,6 +114,16 @@ async def create_broadcast_list(
         
         if user_docs:
             await db.broadcast_lists_users.insert_many(user_docs)
+
+        list_doc["_id"] = str(list_id)
+        await log_resource_created(
+            db,
+            current_admin,
+            resource_type="broadcast_list",
+            doc=list_doc,
+            resource_id=str(list_id),
+            title_field="name",
+        )
         
         return {
             "id": str(list_id),
@@ -214,6 +229,16 @@ async def update_broadcast_list(
                     })
                 
                 await db.broadcast_lists_users.insert_many(user_docs)
+
+        await log_resource_updated(
+            db,
+            current_admin,
+            resource_type="broadcast_list",
+            existing=existing_list,
+            updates=update_data,
+            resource_id=list_id,
+            title_field="name",
+        )
         
         return {"message": "Broadcast list updated successfully"}
         
@@ -245,6 +270,15 @@ async def delete_broadcast_list(
         await db.broadcast_lists_users.delete_many({
             "broadcast_list_id": to_object_id(list_id)
         })
+
+        await log_resource_deleted(
+            db,
+            current_admin,
+            resource_type="broadcast_list",
+            doc=existing_list,
+            resource_id=list_id,
+            title_field="name",
+        )
         
         return {"message": "Broadcast list deleted successfully"}
         

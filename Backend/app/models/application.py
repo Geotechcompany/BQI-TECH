@@ -79,7 +79,7 @@ class Application(BaseModel):
     isArchived: Optional[bool] = False
     archivedAt: Optional[datetime] = None
     archivedBy: Optional[str] = None
-    
+
     # Additional fields for enhanced tracking
     name: Optional[str] = None
     email: Optional[str] = None
