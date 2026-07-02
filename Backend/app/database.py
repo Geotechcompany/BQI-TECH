@@ -41,6 +41,7 @@ def _operational_mongo_uri() -> str | None:
 	uri = (
 		settings.MONGODB_URI
 		or os.getenv("MONGODB_URI")
+		or os.getenv("MONGODB_URL")
 		or settings.MONGO_URL
 		or os.getenv("MONGO_URL")
 		or ""
@@ -246,7 +247,7 @@ async def connect_to_database():
 
 		if not candidates:
 			logger.error(
-				"No MongoDB URI configured: set MONGODB_URI in Backend/.env"
+				"No MongoDB URI configured: set MONGODB_URI (or MONGODB_URL) in Backend/.env"
 			)
 			_client = None
 			_database = None

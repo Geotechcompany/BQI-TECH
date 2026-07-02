@@ -13,11 +13,15 @@ class Settings(BaseModel):
     port: int = int(os.getenv("PORT", "9000"))
     debug: bool = False
     
-    # Database — primary connection string is MONGODB_URI
+    # Database — primary connection string is MONGODB_URI (MONGODB_URL alias supported)
     DATABASE_URL: Optional[str] = Field(
-        default=os.getenv("MONGODB_URI") or os.getenv("MONGO_URL")
+        default=os.getenv("MONGODB_URI")
+        or os.getenv("MONGODB_URL")
+        or os.getenv("MONGO_URL")
     )
-    MONGODB_URI: Optional[str] = Field(default=os.getenv("MONGODB_URI"))
+    MONGODB_URI: Optional[str] = Field(
+        default=os.getenv("MONGODB_URI") or os.getenv("MONGODB_URL")
+    )
     MONGO_URL: Optional[str] = Field(default=os.getenv("MONGO_URL"))
     DB_SYNC_TARGET_URI: Optional[str] = Field(default=os.getenv("DB_SYNC_TARGET_URI"))
     
