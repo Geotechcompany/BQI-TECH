@@ -3244,17 +3244,21 @@ async def get_applications_by_job(
         if db is None:
             raise HTTPException(status_code=503, detail="Database not available")
         
-        # Build job filter for applications
-        job_filter = {}
+        # Build job filter for applications (exclude archived applications)
+        match_filter = _active_application_filter()
         if job_id:
             try:
-                job_filter["jobId"] = ObjectId(job_id)
+                match_filter["jobId"] = ObjectId(job_id)
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid job ID format")
 
+        active_job_ids: set[str] = set()
+        async for active_job in db.jobpostings.find(_active_job_posting_filter(), {"_id": 1}):
+            active_job_ids.add(str(active_job["_id"]))
+
         # Get applications grouped by job
         pipeline = [
-            {"$match": job_filter},
+            {"$match": match_filter},
             {
                 "$addFields": {
                     "jobIdStr": { "$toString": "$jobId" }
@@ -3277,7 +3281,11 @@ async def get_applications_by_job(
         result = []
         for stat in job_stats:
             try:
-                job = await db.jobpostings.find_one({"_id": ObjectId(stat["_id"])})
+                job_id_str = str(stat["_id"])
+                if job_id_str not in active_job_ids:
+                    continue
+
+                job = await db.jobpostings.find_one({"_id": ObjectId(job_id_str)})
                 if job:
                     # Count status breakdown
                     status_breakdown = {}

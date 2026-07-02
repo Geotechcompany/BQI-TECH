@@ -59,6 +59,7 @@ interface OverviewData {
 
 interface ApplicationsByJob {
   applicationsByJob: Array<{
+    jobId?: string;
     position: string;
     totalApplications: number;
     statusBreakdown: Record<string, number>;
@@ -72,6 +73,7 @@ export default function OverviewPage() {
   const [recentApplications, setRecentApplications] = useState<Application[]>([]);
   const [trendData, setTrendData] = useState<any>(null);
   const [jobTitles, setJobTitles] = useState<Record<string, string>>({});
+  const [activeJobIds, setActiveJobIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewApplication, setViewApplication] = useState<Application | null>(null);
@@ -128,13 +130,19 @@ export default function OverviewPage() {
           ? jobsResponse.value
           : jobsResponse.value?.jobPostings || [];
         const jobTitlesMap: Record<string, string> = {};
+        const activeIds = new Set<string>();
         jobs.forEach((job: any) => {
           const jobId = job?.id || (job?._id ? String(job._id) : null);
+          const isActive = job?.isActive !== false;
+          if (jobId && isActive) {
+            activeIds.add(String(jobId));
+          }
           if (jobId && job?.title) {
             jobTitlesMap[String(jobId)] = String(job.title);
           }
         });
         setJobTitles(jobTitlesMap);
+        setActiveJobIds(activeIds);
       }
 
     } catch (err) {
@@ -167,6 +175,19 @@ export default function OverviewPage() {
     const byJobMap = new Map<string, number>();
 
     allApplications.forEach((application) => {
+      if (application.isArchived) return;
+
+      const applicationJobId =
+        typeof application.jobId === "object" && application.jobId?._id
+          ? String(application.jobId._id)
+          : application.jobId
+            ? String(application.jobId)
+            : null;
+
+      if (activeJobIds.size > 0 && applicationJobId && !activeJobIds.has(applicationJobId)) {
+        return;
+      }
+
       const status = String(application.status || "").toLowerCase();
       if (status === "new") stats.new += 1;
       else if (status === "shortlisted") stats.shortlisted += 1;
@@ -218,7 +239,7 @@ export default function OverviewPage() {
         )
         .slice(0, 8),
     };
-  }, [allApplications, jobTitles]);
+  }, [allApplications, jobTitles, activeJobIds]);
 
   const trendSeries = useMemo(
     () =>
@@ -234,7 +255,17 @@ export default function OverviewPage() {
       ? applicationsByJob.applicationsByJob
       : computedStats.applicationsByJobData;
 
-  const jobPostBreakdown = [...pieByJobData]
+  const activeApplicationsByJob = useMemo(
+    () =>
+      pieByJobData.filter((item) => {
+        const jobId = "jobId" in item ? String((item as { jobId?: string }).jobId || "") : "";
+        if (activeJobIds.size === 0) return true;
+        return jobId ? activeJobIds.has(jobId) : false;
+      }),
+    [pieByJobData, activeJobIds]
+  );
+
+  const jobPostBreakdown = [...activeApplicationsByJob]
     .map((item) => ({
       position: item.position || "Unknown Position",
       totalApplications: item.totalApplications || 0,
@@ -242,13 +273,13 @@ export default function OverviewPage() {
     .sort((a, b) => b.totalApplications - a.totalApplications);
 
   const pieChartData = {
-    labels: pieByJobData.map(item => {
+    labels: activeApplicationsByJob.map(item => {
       const position = item.position || 'Unknown Position';
       return position.length > 20 ? `${position.substring(0, 20)}...` : position;
     }) || [],
     datasets: [
       {
-        data: pieByJobData.map(item => item.totalApplications || 0) || [],
+        data: activeApplicationsByJob.map(item => item.totalApplications || 0) || [],
         backgroundColor: [
           'rgba(59, 130, 246, 0.8)',
           'rgba(16, 185, 129, 0.8)',
@@ -443,7 +474,7 @@ export default function OverviewPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {jobPostBreakdown.map((item, index) => (
                   <JobPostCard
-                    key={item.position}
+                    key={`${item.position}-${index}`}
                     title={item.position}
                     count={item.totalApplications}
                     subtitle={item.totalApplications === 1 ? "application" : "applications"}
