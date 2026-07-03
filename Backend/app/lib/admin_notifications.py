@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from bson import ObjectId
+READ_TRUE_VALUES: tuple[Any, ...] = (
+    True,
+    "true",
+    "True",
+    "TRUE",
+    "1",
+    1,
+    "yes",
+    "Yes",
+    "YES",
+)
 
 
 def _coerce_datetime(value: Any) -> Optional[datetime]:
@@ -34,13 +44,111 @@ def _coerce_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        return value.strip().lower() in ("true", "1", "yes")
+        normalized = value.strip().lower()
+        if normalized in ("true", "1", "yes"):
+            return True
+        if normalized in ("false", "0", "no"):
+            return False
     if isinstance(value, (int, float)):
         return bool(value)
     return False
 
 
-def normalize_notification(doc: dict[str, Any]) -> dict[str, Any]:
+def is_system_wide_notification(doc: dict[str, Any]) -> bool:
+    user_id = doc.get("userId")
+    if user_id is None:
+        return True
+    if isinstance(user_id, str) and user_id.strip() in ("", "null", "None"):
+        return True
+    return False
+
+
+def _user_in_read_by(doc: dict[str, Any], user_id: str | None) -> bool:
+    if not user_id:
+        return False
+    read_by = doc.get("readBy")
+    if not isinstance(read_by, list):
+        return False
+    user_key = str(user_id)
+    return user_key in {str(entry) for entry in read_by}
+
+
+def is_notification_read_for_user(
+    doc: dict[str, Any], user_id: str | None = None
+) -> bool:
+    """Resolve per-admin read state.
+
+    System-wide notifications (userId null/empty) use readBy so one admin marking
+    all read does not clear the badge for other admins. Legacy global isRead on
+    those docs is ignored.
+    """
+    if is_system_wide_notification(doc):
+        return _user_in_read_by(doc, user_id)
+
+    if "isRead" in doc:
+        return _coerce_bool(doc["isRead"])
+    if "read" in doc:
+        return _coerce_bool(doc["read"])
+    return False
+
+
+def admin_notification_scope_filter(user_id: str) -> dict[str, Any]:
+    user_key = str(user_id)
+    return {
+        "$or": [
+            {"userId": user_key},
+            {"userId": {"$in": [None, ""]}},
+            {"userId": {"$exists": False}},
+        ]
+    }
+
+
+def admin_notification_unread_filter(user_id: str) -> dict[str, Any]:
+    """Mongo filter aligned with is_notification_read_for_user."""
+    user_key = str(user_id)
+    scope = admin_notification_scope_filter(user_key)
+    unread = {
+        "$or": [
+            {
+                "$and": [
+                    {
+                        "$or": [
+                            {"userId": {"$in": [None, ""]}},
+                            {"userId": {"$exists": False}},
+                        ]
+                    },
+                    {
+                        "$or": [
+                            {"readBy": {"$exists": False}},
+                            {"readBy": {"$size": 0}},
+                            {
+                                "readBy": {
+                                    "$not": {"$elemMatch": {"$eq": user_key}}
+                                }
+                            },
+                        ]
+                    },
+                ]
+            },
+            {
+                "$and": [
+                    {"userId": user_key},
+                    {
+                        "$nor": [
+                            {"isRead": {"$in": list(READ_TRUE_VALUES)}},
+                            {"read": {"$in": list(READ_TRUE_VALUES)}},
+                        ]
+                    },
+                ]
+            },
+        ]
+    }
+    return {"$and": [scope, unread]}
+
+
+def normalize_notification(
+    doc: dict[str, Any], user_id: str | None = None
+) -> dict[str, Any]:
     """Map legacy notification fields to the shape the admin UI expects."""
     normalized = dict(doc)
 
@@ -49,13 +157,7 @@ def normalize_notification(doc: dict[str, Any]) -> dict[str, Any]:
 
     message = normalized.get("message") or normalized.get("description") or ""
     normalized["message"] = message
-
-    if "isRead" in normalized:
-        normalized["isRead"] = _coerce_bool(normalized["isRead"])
-    elif "read" in normalized:
-        normalized["isRead"] = _coerce_bool(normalized["read"])
-    else:
-        normalized["isRead"] = False
+    normalized["isRead"] = is_notification_read_for_user(doc, user_id)
 
     created = (
         _coerce_datetime(normalized.get("createdAt"))
@@ -115,6 +217,7 @@ async def create_system_admin_notification(
         "userId": None,
         "isRead": False,
         "read": False,
+        "readBy": [],
         "createdAt": now,
         "updatedAt": now,
         "priority": priority,

@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 import {
 
@@ -154,6 +155,8 @@ export function AdminNotificationDropdown() {
 
   const queryClient = useQueryClient();
 
+  const { isAuthenticated, isAdmin, authLoading } = useAuth();
+
   const [open, setOpen] = useState(false);
 
 
@@ -163,6 +166,8 @@ export function AdminNotificationDropdown() {
     queryKey: ["admin-notifications"],
 
     queryFn: () => adminApi.getNotifications({ limit: 50 }),
+
+    enabled: !authLoading && isAuthenticated && isAdmin,
 
     refetchInterval: 20_000,
 
@@ -176,7 +181,9 @@ export function AdminNotificationDropdown() {
 
   const notifications = data?.notifications ?? [];
 
-  const unreadCount = data?.unreadCount ?? 0;
+  const unreadFromList = notifications.filter((n) => !n.isRead).length;
+
+  const unreadCount = Math.max(data?.unreadCount ?? 0, unreadFromList);
 
 
 
@@ -275,49 +282,27 @@ export function AdminNotificationDropdown() {
   return (
 
     <Popover open={open} onOpenChange={handleOpenChange}>
-
       <PopoverTrigger asChild>
-
         <Button
-
           variant="ghost"
-
           size="icon"
-
-          className="relative h-9 w-9 overflow-visible rounded-xl"
-
+          className="relative h-9 w-9 shrink-0 overflow-visible rounded-xl"
           aria-label={
-
             unreadCount > 0
-
               ? `Notifications, ${formatUnreadBadgeCount(unreadCount)} unread`
-
               : "Notifications"
-
           }
-
         >
-
           <Bell className="h-5 w-5" />
-
           {unreadCount > 0 && (
-
             <span
-
               aria-hidden="true"
-
-              className="absolute -right-1.5 -top-1.5 z-10 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-red-500 px-1 text-[10px] font-bold leading-none text-white shadow-sm"
-
+              className="pointer-events-none absolute -right-0.5 -top-0.5 z-[60] flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-red-600 px-1 text-[10px] font-bold leading-none text-white shadow-sm"
             >
-
               {formatUnreadBadgeCount(unreadCount)}
-
             </span>
-
           )}
-
         </Button>
-
       </PopoverTrigger>
 
 

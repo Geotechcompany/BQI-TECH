@@ -43,9 +43,12 @@ from app.lib.admin_audit import (
     safe_record_admin_activity,
 )
 from app.lib.admin_notifications import (
+    admin_notification_scope_filter,
+    admin_notification_unread_filter,
     applicant_display_name,
     application_admin_link,
     create_system_admin_notification,
+    is_system_wide_notification,
     normalize_notification,
 )
 from app.lib.nvidia_ai import test_nvidia_connection
@@ -4454,32 +4457,25 @@ async def get_admin_notifications(
     """Get admin notifications"""
     db = get_database()
 
-    scope_filter = {
-        "$or": [
-            {"userId": str(current_user["_id"])},
-            {"userId": {"$in": [None, ""]}},
-            {"userId": {"$exists": False}},
-        ]
-    }
+    user_id = str(current_user["_id"])
+    scope_filter = admin_notification_scope_filter(user_id)
 
     notifications_cursor = db.notifications.find(scope_filter).skip(skip).limit(limit).sort("createdAt", -1)
 
     notifications = await notifications_cursor.to_list(length=limit)
     total = await db.notifications.count_documents(scope_filter)
     unread_count = await db.notifications.count_documents(
-        {
-            "$and": [
-                scope_filter,
-                {"$nor": [{"isRead": True}, {"read": True}]},
-            ]
-        }
+        admin_notification_unread_filter(user_id)
     )
 
     serialized: list[dict[str, Any]] = []
     for notification in notifications:
         convert_objectids_to_strings(notification)
         notification["id"] = str(notification.pop("_id", notification.get("id", "")))
-        serialized.append(normalize_notification(notification))
+        serialized.append(normalize_notification(notification, user_id))
+
+    unread_in_page = sum(1 for item in serialized if not item["isRead"])
+    unread_count = max(unread_count, unread_in_page)
 
     return JSONResponse(
         content=json.loads(
@@ -4523,23 +4519,34 @@ async def mark_notification_as_read(
 ):
     """Mark notification as read"""
     db = get_database()
-    
-    # Allow marking as read for user-specific notifications OR system-wide notifications
-    result = await db.notifications.update_one(
-        {
-            "_id": ObjectId(notification_id),
-            "$or": [
-                {"userId": str(current_user["_id"])},  # User-specific notifications
-                {"userId": {"$in": [None, ""]}},       # System-wide admin notifications
-                {"userId": {"$exists": False}}         # Notifications without userId field
-            ]
-        },
-        {"$set": {"isRead": True, "read": True}}
-    )
-    
+    user_id = str(current_user["_id"])
+
+    scope = {
+        "_id": ObjectId(notification_id),
+        "$or": [
+            {"userId": user_id},
+            {"userId": {"$in": [None, ""]}},
+            {"userId": {"$exists": False}},
+        ],
+    }
+    existing = await db.notifications.find_one(scope)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    if is_system_wide_notification(existing):
+        result = await db.notifications.update_one(
+            scope,
+            {"$addToSet": {"readBy": user_id}, "$set": {"updatedAt": datetime.utcnow()}},
+        )
+    else:
+        result = await db.notifications.update_one(
+            scope,
+            {"$set": {"isRead": True, "read": True, "updatedAt": datetime.utcnow()}},
+        )
+
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Notification not found")
-    
+
     return {"message": "Notification marked as read"}
 
 @router.put("/notifications/mark-all-read")
@@ -4548,20 +4555,37 @@ async def mark_all_notifications_as_read(
 ):
     """Mark all notifications as read"""
     db = get_database()
-    
-    # Mark all notifications as read for this admin (user-specific + system-wide)
-    result = await db.notifications.update_many(
+    user_id = str(current_user["_id"])
+    scope_filter = admin_notification_scope_filter(user_id)
+    now = datetime.utcnow()
+
+    system_result = await db.notifications.update_many(
         {
-            "$or": [
-                {"userId": str(current_user["_id"])},  # User-specific notifications
-                {"userId": {"$in": [None, ""]}},       # System-wide admin notifications
-                {"userId": {"$exists": False}}         # Notifications without userId field
+            "$and": [
+                scope_filter,
+                {
+                    "$or": [
+                        {"userId": {"$in": [None, ""]}},
+                        {"userId": {"$exists": False}},
+                    ]
+                },
             ]
         },
-        {"$set": {"isRead": True, "read": True}}
+        {"$addToSet": {"readBy": user_id}, "$set": {"updatedAt": now}},
     )
-    
-    return {"message": f"Marked {result.modified_count} notifications as read"}
+    user_result = await db.notifications.update_many(
+        {
+            "$and": [
+                scope_filter,
+                {"userId": user_id},
+            ]
+        },
+        {"$set": {"isRead": True, "read": True, "updatedAt": now}},
+    )
+
+    modified_count = system_result.modified_count + user_result.modified_count
+
+    return {"message": f"Marked {modified_count} notifications as read"}
 
 @router.delete("/notifications/{notification_id}")
 async def delete_notification(

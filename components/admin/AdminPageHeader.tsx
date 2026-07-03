@@ -75,7 +75,7 @@ export default function AdminPageHeader({
 
   return (
     <div 
-      className="bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 z-50 flex h-16 items-center border-b border-border/60 w-full fixed left-0 right-0 transition-all duration-300 ease-in-out shadow-sm"
+      className="bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 z-50 flex h-16 items-center border-b border-border/60 w-full fixed left-0 right-0 transition-all duration-300 ease-in-out shadow-sm overflow-visible"
       style={{ top: "var(--admin-banner-offset, 0px)" }}
       data-collapsed={sidebarCollapsed}
     >
@@ -113,7 +113,7 @@ export default function AdminPageHeader({
         )}
 
         {/* Right Section */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 overflow-visible sm:gap-2">
           <BackendStatusIndicator />
 
           <div className="hidden sm:block h-6 w-px bg-border/70 mx-1" />

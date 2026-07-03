@@ -533,15 +533,24 @@ export const adminApi = {
       `/api/admin/notifications${query ? `?${query}` : ""}`
     );
     const rows = response.notifications || [];
+    const notifications = rows.map((row: Record<string, unknown>) =>
+      normalizeAdminNotification(row)
+    );
+    const unreadFromApi = response.unreadCount ?? response.unread_count;
+    const parsedUnread =
+      typeof unreadFromApi === "number"
+        ? unreadFromApi
+        : typeof unreadFromApi === "string" && unreadFromApi.trim() !== ""
+          ? Number(unreadFromApi)
+          : NaN;
+    const unreadFromList = notifications.filter((n) => !n.isRead).length;
+
     return {
-      notifications: rows.map((row: Record<string, unknown>) =>
-        normalizeAdminNotification(row)
-      ),
+      notifications,
       total: typeof response.total === "number" ? response.total : rows.length,
-      unreadCount:
-        typeof response.unreadCount === "number"
-          ? response.unreadCount
-          : rows.filter((row: { isRead?: boolean }) => !row.isRead).length,
+      unreadCount: Number.isFinite(parsedUnread)
+        ? Math.max(parsedUnread, unreadFromList)
+        : unreadFromList,
     };
   },
 
