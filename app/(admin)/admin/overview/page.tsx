@@ -577,7 +577,7 @@ export default function OverviewPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6">
-                {pieByJobData.length > 0 ? (
+                {pieChartJobData.length > 0 ? (
                   <div className="h-80">
                     <Doughnut data={pieChartData} options={pieChartOptions} />
                   </div>
