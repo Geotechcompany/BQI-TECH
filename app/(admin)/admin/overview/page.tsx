@@ -57,12 +57,15 @@ interface OverviewData {
   status_breakdown: Array<{ status: string; count: number }>;
 }
 
+interface JobApplicationSummary {
+  position: string;
+  totalApplications: number;
+  isActive?: boolean | null;
+}
+
 interface ApplicationsByJob {
-  applicationsByJob: Array<{
-    position: string;
-    totalApplications: number;
-    isActive?: boolean | null;
-    statusBreakdown: Record<string, number>;
+  applicationsByJob: Array<JobApplicationSummary & {
+    statusBreakdown?: Record<string, number>;
   }>;
 }
 
@@ -202,10 +205,13 @@ export default function OverviewPage() {
       trendCounts.push(trendMap.get(dayKey) || 0);
     }
 
-    const applicationsByJobData = Array.from(byJobMap.entries()).map(([position, totalApplications]) => ({
-      position,
-      totalApplications,
-    }));
+    const applicationsByJobData: JobApplicationSummary[] = Array.from(byJobMap.entries()).map(
+      ([position, totalApplications]) => ({
+        position,
+        totalApplications,
+        isActive: null,
+      })
+    );
 
     return {
       stats,
@@ -230,7 +236,7 @@ export default function OverviewPage() {
     [trendData?.trends, computedStats.trendLabels, computedStats.trendCounts]
   );
 
-  const pieByJobData =
+  const pieByJobData: JobApplicationSummary[] =
     applicationsByJob?.applicationsByJob && applicationsByJob.applicationsByJob.length > 0
       ? applicationsByJob.applicationsByJob
       : computedStats.applicationsByJobData;
@@ -239,7 +245,7 @@ export default function OverviewPage() {
     .map((item) => ({
       position: item.position || "Unknown Position",
       totalApplications: item.totalApplications || 0,
-      isActive: "isActive" in item ? item.isActive : null,
+      isActive: item.isActive ?? null,
     }))
     .sort((a, b) => b.totalApplications - a.totalApplications);
 
