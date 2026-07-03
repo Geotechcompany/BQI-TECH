@@ -374,10 +374,8 @@ export default function OverviewPage() {
 
   if (!overviewData) return null;
 
-  const effectiveStats =
-    allApplications.length > 0
-      ? computedStats.stats
-      : (overviewData?.applications || computedStats.stats);
+  // Use backend overview counts (all non-archived applications), not the paginated list fetch.
+  const effectiveStats = overviewData.applications;
 
   const totalApplications = effectiveStats.total || 1;
 

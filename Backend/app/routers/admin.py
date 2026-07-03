@@ -1904,7 +1904,7 @@ def _append_ai_score_filter(pipeline: list, ai_score_filter: Optional[str]) -> N
 
 def _parse_iso_date(value: Optional[str]) -> Optional[datetime]:
     """Parse a YYYY-MM-DD (or ISO) date string into a datetime, ignoring invalid input."""
-    if not value:
+    if not value or not isinstance(value, str):
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -2220,6 +2220,8 @@ async def get_archived_applications(
         position=position,
         jobId=None,
         ai_score_filter=ai_score_filter,
+        date_from=None,
+        date_to=None,
     )
 
 
