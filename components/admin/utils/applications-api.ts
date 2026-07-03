@@ -245,8 +245,9 @@ class AdminApplicationsApi {
   }
 
   // Get job postings for position filtering
-  async getJobPostings() {
-    return this.makeRequest("/job-postings");
+  async getJobPostings(params?: { limit?: number }) {
+    const query = params?.limit ? `?limit=${params.limit}` : "";
+    return this.makeRequest(`/job-postings${query}`);
   }
 
   // Get application positions for filtering

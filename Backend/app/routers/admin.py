@@ -2282,24 +2282,31 @@ async def get_application_positions(
         cursor = db.applications.aggregate(pipeline)
         positions_from_apps = await cursor.to_list(length=None)
 
-        # Include all currently posted (active) job titles
-        job_titles: list[str] = []
-        try:
-            async for job in db.jobpostings.find(_active_job_posting_filter(), {"title": 1}):
-                title = _normalize_text_value(job.get("title"))
+        title_to_count: dict[str, int] = {}
+
+        if archived:
+            # Archived views: only positions that actually have archived applications
+            for pos in positions_from_apps:
+                title = _normalize_text_value(pos.get("_id"))
                 if title:
-                    job_titles.append(title)
-        except Exception as e:
-            logger.error(f"Failed to load job titles for positions list: {e}")
+                    title_to_count[title] = title_to_count.get(title, 0) + int(pos.get("count", 0))
+        else:
+            # Active pipeline: include all job postings (active and inactive)
+            job_titles: list[str] = []
+            try:
+                async for job in db.jobpostings.find({}, {"title": 1}):
+                    title = _normalize_text_value(job.get("title"))
+                    if title:
+                        job_titles.append(title)
+            except Exception as e:
+                logger.error(f"Failed to load job titles for positions list: {e}")
 
-        # Merge: active job titles + application-derived titles with counts
-        title_to_count: dict[str, int] = {t: 0 for t in job_titles}
-        for pos in positions_from_apps:
-            title = _normalize_text_value(pos.get("_id"))
-            if title:
-                title_to_count[title] = title_to_count.get(title, 0) + int(pos.get("count", 0))
+            title_to_count = {t: 0 for t in job_titles}
+            for pos in positions_from_apps:
+                title = _normalize_text_value(pos.get("_id"))
+                if title:
+                    title_to_count[title] = title_to_count.get(title, 0) + int(pos.get("count", 0))
 
-        # Build sorted list (include all active postings, even with 0 applications)
         position_options = [
             {"value": title, "label": title, "count": count}
             for title, count in sorted(title_to_count.items(), key=lambda x: x[0].lower())
@@ -3236,82 +3243,104 @@ async def get_application_trends(
 @router.get("/applications-by-job")
 async def get_applications_by_job(
     current_user: dict = Depends(get_current_admin_user),
-    job_id: Optional[str] = Query(None, description="Filter by specific job ID")
+    job_id: Optional[str] = Query(None, description="Filter by specific job ID"),
+    archived: bool = Query(
+        False,
+        description="When true, count archived applications only; otherwise active pipeline only",
+    ),
 ):
-    """Get applications grouped by job"""
+    """Get applications grouped by job (active and inactive postings)."""
     try:
         db = get_database()
         if db is None:
             raise HTTPException(status_code=503, detail="Database not available")
-        
-        # Build job filter for applications (exclude archived applications)
-        match_filter = _active_application_filter()
+
+        match_query = _archived_application_filter() if archived else _active_application_filter()
         if job_id:
             try:
-                match_filter["jobId"] = ObjectId(job_id)
+                match_query["jobId"] = ObjectId(job_id)
             except Exception:
                 raise HTTPException(status_code=400, detail="Invalid job ID format")
 
-        active_job_ids: set[str] = set()
-        async for active_job in db.jobpostings.find(_active_job_posting_filter(), {"_id": 1}):
-            active_job_ids.add(str(active_job["_id"]))
-
-        # Get applications grouped by job
         pipeline = [
-            {"$match": match_filter},
+            {"$match": match_query},
+            _job_posting_lookup_stage(),
             {
                 "$addFields": {
-                    "jobIdStr": { "$toString": "$jobId" }
+                    "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
+                    "effectivePosition": {
+                        "$cond": {
+                            "if": {
+                                "$and": [
+                                    {"$ne": ["$jobDetails", None]},
+                                    {"$ne": ["$jobDetails.title", None]},
+                                    {"$ne": ["$jobDetails.title", ""]},
+                                ]
+                            },
+                            "then": "$jobDetails.title",
+                            "else": "$position",
+                        }
+                    },
+                    "groupKey": {
+                        "$cond": {
+                            "if": {"$ne": ["$jobId", None]},
+                            "then": {"$toString": "$jobId"},
+                            "else": {
+                                "$ifNull": ["$position", "unknown-position"]
+                            },
+                        }
+                    },
                 }
             },
             {
                 "$group": {
-                    "_id": "$jobIdStr",
-                    "count": { "$sum": 1 },
-                    "statuses": {
-                        "$push": "$status"
-                    }
+                    "_id": "$groupKey",
+                    "position": {"$first": "$effectivePosition"},
+                    "jobId": {"$first": "$jobId"},
+                    "department": {"$first": "$jobDetails.department"},
+                    "isActive": {"$first": "$jobDetails.isActive"},
+                    "count": {"$sum": 1},
+                    "statuses": {"$push": "$status"},
                 }
-            }
+            },
+            {"$sort": {"count": -1}},
         ]
-        
+
         job_stats = await db.applications.aggregate(pipeline).to_list(length=None)
-        
-        # Get job details and format response
+
         result = []
         for stat in job_stats:
             try:
-                job_id_str = str(stat["_id"])
-                if job_id_str not in active_job_ids:
+                position = _normalize_text_value(stat.get("position")) or "Unknown Position"
+                if position in ("", "Position Not Available"):
                     continue
 
-                job = await db.jobpostings.find_one({"_id": ObjectId(job_id_str)})
-                if job:
-                    # Count status breakdown
-                    status_breakdown = {}
-                    for status in stat["statuses"]:
-                        status_breakdown[status] = status_breakdown.get(status, 0) + 1
-                    
-                    job_data = {
-                        "jobId": str(stat["_id"]),
-                        "position": job.get("title", "Unknown Job"),  # Frontend expects 'position' not 'title'
-                        "title": job.get("title", "Unknown Job"),
-                        "department": job.get("department", "N/A"),
-                        "totalApplications": stat["count"],  # Frontend expects 'totalApplications' not 'count'
-                        "count": stat["count"],
-                        "statuses": stat["statuses"],
-                        "statusBreakdown": status_breakdown
-                    }
-                    # Convert any datetime fields
-                    for field in ["createdAt", "updatedAt", "postedDate"]:
-                        if field in job and isinstance(job[field], datetime):
-                            job_data[field] = job[field].isoformat()
-                    result.append(job_data)
+                status_breakdown: Dict[str, int] = {}
+                for status in stat.get("statuses", []):
+                    status_breakdown[status] = status_breakdown.get(status, 0) + 1
+
+                job_id_value = stat.get("jobId")
+                is_active = stat.get("isActive")
+                if is_active is None and job_id_value is not None:
+                    is_active = True
+
+                job_data = {
+                    "jobId": str(job_id_value) if job_id_value else None,
+                    "position": position,
+                    "title": position,
+                    "department": stat.get("department") or "N/A",
+                    "isActive": bool(is_active) if is_active is not None else None,
+                    "totalApplications": stat["count"],
+                    "count": stat["count"],
+                    "statuses": stat.get("statuses", []),
+                    "statusBreakdown": status_breakdown,
+                }
+                result.append(job_data)
             except Exception as e:
                 logger.error(f"Error processing job stats: {str(e)}")
                 continue
-        
-        response_data = {"applicationsByJob": result}  # Frontend expects 'applicationsByJob' not 'jobs'
+
+        response_data = {"applicationsByJob": result}
         return JSONResponse(
             content=json.loads(json.dumps(response_data, cls=CustomJSONEncoder)),
             headers={

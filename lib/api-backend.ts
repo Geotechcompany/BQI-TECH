@@ -452,10 +452,13 @@ export const adminApi = {
       ...(jobId && { job_id: jobId }),
     }),
 
-  getApplicationsByJob: (jobId?: string) =>
+  getApplicationsByJob: (jobId?: string, options?: { archived?: boolean }) =>
     backendApi.get(
       "/api/admin/applications-by-job",
-      jobId ? { job_id: jobId } : {}
+      {
+        ...(jobId && { job_id: jobId }),
+        ...(options?.archived && { archived: true }),
+      }
     ),
 
   // Questions

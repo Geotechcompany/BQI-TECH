@@ -10,6 +10,7 @@ interface JobPostCardProps {
   subtitle?: string;
   index?: number;
   className?: string;
+  isActive?: boolean | null;
 }
 
 const JOB_CARD_IMAGES = [
@@ -50,6 +51,7 @@ export const JobPostCard: React.FC<JobPostCardProps> = ({
   subtitle = "applications",
   index = 0,
   className,
+  isActive = null,
 }) => {
   const imageUrl = JOB_CARD_IMAGES[index % JOB_CARD_IMAGES.length];
 
@@ -78,6 +80,7 @@ export const JobPostCard: React.FC<JobPostCardProps> = ({
             {title}
           </motion.h2>
           <motion.p variants={itemVariants} className="mt-0.5 text-[10px] uppercase tracking-wider opacity-80">
+            {isActive === false ? "Inactive · " : ""}
             {subtitle}
           </motion.p>
         </div>

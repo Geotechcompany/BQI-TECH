@@ -111,7 +111,7 @@ export function useAdminApplicationPage({
   useEffect(() => {
     const fetchJobTitles = async () => {
       try {
-        const response = await adminApplicationsApi.getJobPostings();
+        const response = await adminApplicationsApi.getJobPostings({ limit: 100 });
         const jobs = Array.isArray(response) ? response : 
                     (response as any)?.jobPostings ? (response as any).jobPostings : [];
         
@@ -264,9 +264,9 @@ export function useAdminApplicationPage({
     }
   }, [statusType, enablePositionFilter]);
 
-  // Merge active job postings into position filter options
+  // Merge job posting titles into position filter (skip for archived — backend returns those positions)
   useEffect(() => {
-    if (!enablePositionFilter) return;
+    if (!enablePositionFilter || statusType === "archived") return;
 
     setPositionFilterOptions((prev) => {
       const optionSet = new Set(prev);
