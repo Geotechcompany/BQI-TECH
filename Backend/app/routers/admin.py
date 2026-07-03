@@ -1926,6 +1926,48 @@ def _build_applied_date_range(
     return range_filter or None
 
 
+def _effective_position_expr(
+    job_title_field: str = "$jobDetails.title",
+    position_field: str = "$position",
+) -> Dict[str, Any]:
+    """Resolve display position: trimmed job title when non-empty, else trimmed app position."""
+    return {
+        "$let": {
+            "vars": {
+                "jobTitle": {
+                    "$trim": {"input": {"$ifNull": [job_title_field, ""]}}
+                },
+                "appPosition": {
+                    "$trim": {"input": {"$ifNull": [position_field, ""]}}
+                },
+            },
+            "in": {
+                "$cond": {
+                    "if": {"$gt": [{"$strLenCP": "$$jobTitle"}, 0]},
+                    "then": "$$jobTitle",
+                    "else": "$$appPosition",
+                }
+            },
+        }
+    }
+
+
+def _append_position_filter(pipeline: list, position: Optional[str]) -> None:
+    """Append a $match stage that filters by resolved position title."""
+    if not position or position == "all":
+        return
+    normalized = _normalize_text_value(position)
+    if not normalized:
+        return
+    pipeline.append({
+        "$match": {
+            "$expr": {
+                "$eq": [_effective_position_expr(), normalized]
+            }
+        }
+    })
+
+
 def _job_posting_lookup_stage() -> Dict[str, Any]:
     """Join jobpostings when application.jobId is stored as a string or ObjectId."""
     return {
@@ -2072,23 +2114,7 @@ async def get_admin_applications(
             })
         
         # Add position filter to pipeline if provided (ALL APPLICATIONS)
-        if position and position != "all":
-            pipeline.append({
-                "$match": {
-                    "$expr": {
-                        "$eq": [
-                            {
-                                "$cond": {
-                                    "if": {"$and": [{"$ne": ["$jobDetails", None]}, {"$ne": ["$jobDetails.title", None]}]},
-                                    "then": "$jobDetails.title",
-                                    "else": "$position"
-                                }
-                            },
-                            position
-                        ]
-                    }
-                }
-            })
+        _append_position_filter(pipeline, position)
 
         # Computed keys so name/position sort by their resolved display values
         pipeline.append({
@@ -2249,20 +2275,11 @@ async def get_application_positions(
             {
                 "$addFields": {
                     "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
-                    "jobTitle": {"$arrayElemAt": ["$jobDetails.title", 0]},
-                    "effectivePosition": {
-                        "$cond": {
-                            "if": {
-                                "$and": [
-                                    {"$ne": ["$jobDetails", None]},
-                                    {"$ne": ["$jobDetails.title", None]},
-                                    {"$ne": ["$jobDetails.title", ""]},
-                                ]
-                            },
-                            "then": "$jobDetails.title",
-                            "else": "$position",
-                        }
-                    },
+                }
+            },
+            {
+                "$addFields": {
+                    "effectivePosition": _effective_position_expr(),
                 }
             },
             {
@@ -2396,23 +2413,7 @@ async def get_shortlisted_applications(
             })
         
         # Add position filter to pipeline if provided (SHORTLISTED)
-        if position and position != "all":
-            pipeline.append({
-                "$match": {
-                    "$expr": {
-                        "$eq": [
-                            {
-                                "$cond": {
-                                    "if": {"$and": [{"$ne": ["$jobDetails", None]}, {"$ne": ["$jobDetails.title", None]}]},
-                                    "then": "$jobDetails.title",
-                                    "else": "$position"
-                                }
-                            },
-                            position
-                        ]
-                    }
-                }
-            })
+        _append_position_filter(pipeline, position)
 
         _append_ai_score_filter(pipeline, ai_score_filter)
         
@@ -2570,23 +2571,7 @@ async def get_disqualified_applications(
             })
         
         # Add position filter to pipeline if provided (DISQUALIFIED)
-        if position and position != "all":
-            pipeline.append({
-                "$match": {
-                    "$expr": {
-                        "$eq": [
-                            {
-                                "$cond": {
-                                    "if": {"$and": [{"$ne": ["$jobDetails", None]}, {"$ne": ["$jobDetails.title", None]}]},
-                                    "then": "$jobDetails.title",
-                                    "else": "$position"
-                                }
-                            },
-                            position
-                        ]
-                    }
-                }
-            })
+        _append_position_filter(pipeline, position)
 
         _append_ai_score_filter(pipeline, ai_score_filter)
         
@@ -3270,32 +3255,11 @@ async def get_applications_by_job(
             {
                 "$addFields": {
                     "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
-                    "effectivePosition": {
-                        "$let": {
-                            "vars": {
-                                "jobTitle": {
-                                    "$trim": {
-                                        "input": {
-                                            "$ifNull": [
-                                                {"$arrayElemAt": ["$jobDetails.title", 0]},
-                                                "",
-                                            ]
-                                        }
-                                    }
-                                },
-                                "appPosition": {
-                                    "$trim": {"input": {"$ifNull": ["$position", ""]}}
-                                },
-                            },
-                            "in": {
-                                "$cond": {
-                                    "if": {"$gt": [{"$strLenCP": "$$jobTitle"}, 0]},
-                                    "then": "$$jobTitle",
-                                    "else": "$$appPosition",
-                                }
-                            },
-                        }
-                    },
+                }
+            },
+            {
+                "$addFields": {
+                    "effectivePosition": _effective_position_expr(),
                     "groupKey": {
                         "$cond": {
                             "if": {"$ne": ["$jobId", None]},
