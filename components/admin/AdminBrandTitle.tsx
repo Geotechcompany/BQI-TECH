@@ -23,11 +23,11 @@ export function Version2Badge({
   return (
     <span
       className={cn(badgeBase, badgeVariantClass[variant], className)}
-      title="Version 2"
-      aria-label="Version 2"
+      title="Version 3.1"
+      aria-label="Version 3.1"
     >
       <Layers2 className="h-3 w-3 shrink-0" strokeWidth={2.5} aria-hidden />
-      v2
+      v3.1
     </span>
   );
 }
