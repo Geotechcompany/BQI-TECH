@@ -7,6 +7,7 @@ import { adminApplicationsApi, type ApplicationFilters } from '../components/adm
 import { Application } from '@/types/application';
 import { toast } from 'react-hot-toast';
 import { useDebounce } from './useDebounce';
+import { useQueryClient } from '@tanstack/react-query';
 import { getNameDisplay } from '@/components/admin/utils/table-utils';
 import {
   type AiRankProgressState,
@@ -47,6 +48,7 @@ export function useAdminApplicationPage({
   enableAiScoreFilter = false,
 }: UseAdminApplicationPageOptions) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { isAuthenticated, isAdmin, authLoading } = useAuth();
 
   // State management
@@ -458,6 +460,7 @@ export function useAdminApplicationPage({
     try {
       await adminApplicationsApi.bulkUpdateStatus({ ids, status });
       await loadApplications(); // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['admin-notifications'] });
       toast.success(`Updated ${ids.length} application(s) to ${status}`);
     } catch (error) {
       console.error('Failed to update applications:', error);

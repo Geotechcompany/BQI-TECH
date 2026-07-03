@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
-import { notificationService } from "@/lib/notifications";
+import { formatAdminNotificationTime } from "@/lib/admin-notification-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { 
@@ -83,11 +83,15 @@ export default function NotificationsPage() {
     }
   }, [authLoading, isAuthenticated, isAdmin, router]);
 
-  const { data = [], isLoading: isLoadingNotifications } = useQuery({
+  const { data: notificationData, isLoading: isLoadingNotifications } = useQuery({
     queryKey: ['admin-notifications'],
-    queryFn: () => adminApi.getNotifications(),
-    refetchInterval: 30000, // Refetch every 30 seconds
+    queryFn: () => adminApi.getNotifications({ limit: 100 }),
+    refetchInterval: 20_000,
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
   });
+
+  const data = notificationData?.notifications ?? [];
 
   const markAsReadMutation = useMutation({
     mutationFn: (notificationId: string) => adminApi.markNotificationAsRead(notificationId),
@@ -149,16 +153,7 @@ export default function NotificationsPage() {
     }
   });
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: true
-    }).format(date);
-  };
+  const formatDate = (dateString: string) => formatAdminNotificationTime(dateString);
 
   const filteredNotifications = data.filter(notification => {
     const matchesStatus = 
@@ -173,7 +168,8 @@ export default function NotificationsPage() {
     return matchesStatus && matchesType;
   });
 
-  const unreadCount = data.filter(n => !n.isRead).length;
+  const unreadCount =
+    notificationData?.unreadCount ?? data.filter((n) => !n.isRead).length;
 
   if (authLoading || isLoadingNotifications) {
     return (

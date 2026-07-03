@@ -18,7 +18,7 @@ class NotificationService {
   async getNotifications(): Promise<Notification[]> {
     try {
       const response = await adminApi.getNotifications();
-      return response || [];
+      return response.notifications || [];
     } catch (error) {
       console.error('Error fetching notifications:', error);
       return [];

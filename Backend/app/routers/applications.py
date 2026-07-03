@@ -3,6 +3,11 @@ from fastapi.responses import JSONResponse
 from typing import List, Optional, Dict, Any
 from app.database import get_database, is_connected
 from app.lib.email import send_application_confirmation_email
+from app.lib.admin_notifications import (
+    applicant_display_name,
+    application_admin_link,
+    create_system_admin_notification,
+)
 from datetime import datetime
 from bson import ObjectId
 from app.auth import get_current_user
@@ -125,6 +130,14 @@ async def submit_application(
             logger.info(f"Successfully verified application in database: {json.dumps(saved_app, default=str)}")
         else:
             logger.warning("Could not verify application in database after insertion")
+
+        job_title = application_data.get("position") or "the position"
+        try:
+            job = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
+            if job and job.get("title"):
+                job_title = job.get("title")
+        except Exception:
+            pass
         
         # Try to send confirmation email (non-blocking for response)
         # Run email in background to prevent timeout
@@ -141,15 +154,6 @@ async def submit_application(
                 if "name" in q_text and isinstance(a.get("answer"), str) and len(a.get("answer").strip()) > 0:
                     applicant_name = a.get("answer").strip()
 
-            # Fetch job title if possible
-            job_title = "the position"
-            try:
-                job = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
-                if job and job.get("title"):
-                    job_title = job.get("title")
-            except Exception:
-                pass
-
             if applicant_email:
                 # Fire and forget - don't await to prevent timeout
                 asyncio.create_task(send_application_confirmation_email(
@@ -159,6 +163,27 @@ async def submit_application(
                 ))
         except Exception as email_err:
             logger.error(f"Failed to send application confirmation email: {str(email_err)}")
+
+        try:
+            applicant = applicant_display_name(application_data)
+            app_id = str(result.inserted_id)
+            await create_system_admin_notification(
+                db,
+                title="New application",
+                message=f"{applicant} applied for {job_title}",
+                notification_type="application",
+                category="new_application",
+                link=application_admin_link(app_id),
+                priority="high",
+                metadata={
+                    "applicationId": app_id,
+                    "jobId": job_id,
+                    "status": application_data.get("status", "New"),
+                    "category": "new_application",
+                },
+            )
+        except Exception as notify_err:
+            logger.error(f"Failed to create admin notification for new application: {notify_err}")
 
         # Return success response with proper CORS headers
         response_data = {

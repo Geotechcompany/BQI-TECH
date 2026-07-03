@@ -1,5 +1,6 @@
 import { authService } from "./auth-backend";
 import { BACKEND_URL } from "./config";
+import { normalizeAdminNotification } from "./admin-notification-utils";
 
 const API_FETCH_TIMEOUT_MS = 30_000;
 
@@ -523,10 +524,25 @@ export const adminApi = {
   getAiStatus: () => backendApi.get("/api/admin/ai/status"),
 
   // Get notifications
-  async getNotifications() {
-    const response = await backendApi.request("/api/admin/notifications");
-    // The admin API returns {notifications: [...], total: number}
-    return response.notifications || [];
+  async getNotifications(params?: { skip?: number; limit?: number }) {
+    const searchParams = new URLSearchParams();
+    if (params?.skip != null) searchParams.set("skip", String(params.skip));
+    searchParams.set("limit", String(params?.limit ?? 50));
+    const query = searchParams.toString();
+    const response = await backendApi.request(
+      `/api/admin/notifications${query ? `?${query}` : ""}`
+    );
+    const rows = response.notifications || [];
+    return {
+      notifications: rows.map((row: Record<string, unknown>) =>
+        normalizeAdminNotification(row)
+      ),
+      total: typeof response.total === "number" ? response.total : rows.length,
+      unreadCount:
+        typeof response.unreadCount === "number"
+          ? response.unreadCount
+          : rows.filter((row: { isRead?: boolean }) => !row.isRead).length,
+    };
   },
 
   // Mark notification as read

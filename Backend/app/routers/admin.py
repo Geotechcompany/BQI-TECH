@@ -42,6 +42,12 @@ from app.lib.admin_audit import (
     log_resource_updated,
     safe_record_admin_activity,
 )
+from app.lib.admin_notifications import (
+    applicant_display_name,
+    application_admin_link,
+    create_system_admin_notification,
+    normalize_notification,
+)
 from app.lib.nvidia_ai import test_nvidia_connection
 from app.lib.error_utils import format_exception_message
 from app.auth import get_password_hash
@@ -2960,6 +2966,27 @@ async def bulk_update_application_status(
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="No applications found to update")
 
+        changed_by = current_user.get("email") or current_user.get("name") or "Admin"
+        updated_apps = await db.applications.find({"_id": {"$in": object_ids}}).to_list(length=len(object_ids))
+        for app in updated_apps:
+            applicant = applicant_display_name(app)
+            position = app.get("position") or "a role"
+            app_id = str(app["_id"])
+            await create_system_admin_notification(
+                db,
+                title="Application status updated",
+                message=f"{applicant} moved to {status} for {position}",
+                notification_type="info",
+                category="status_update",
+                link=application_admin_link(app_id),
+                metadata={
+                    "applicationId": app_id,
+                    "status": status,
+                    "changedBy": changed_by,
+                    "category": "status_update",
+                },
+            )
+
         await log_bulk_operation(
             db,
             current_user,
@@ -3084,11 +3111,33 @@ async def update_admin_application(
             raise HTTPException(status_code=404, detail="Application not found")
 
         update_data = dict(update_data or {})
+        previous_status = existing.get("status")
         update_data["updatedAt"] = datetime.utcnow()
 
         result = await db.applications.update_one({"_id": obj_id}, {"$set": update_data})
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Application not found")
+
+        new_status = update_data.get("status")
+        if new_status and new_status != previous_status:
+            applicant = applicant_display_name(existing)
+            position = existing.get("position") or update_data.get("position") or "a role"
+            changed_by = current_user.get("email") or current_user.get("name") or "Admin"
+            await create_system_admin_notification(
+                db,
+                title="Application status updated",
+                message=f"{applicant} moved to {new_status} for {position}",
+                notification_type="info",
+                category="status_update",
+                link=application_admin_link(application_id),
+                metadata={
+                    "applicationId": application_id,
+                    "status": new_status,
+                    "previousStatus": previous_status,
+                    "changedBy": changed_by,
+                    "category": "status_update",
+                },
+            )
 
         applicant = (
             existing.get("fullName")
@@ -4400,35 +4449,46 @@ async def get_contact_protection_analytics(
 async def get_admin_notifications(
     current_user: dict = Depends(get_current_admin_user),
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100)
+    limit: int = Query(50, ge=1, le=100)
 ):
     """Get admin notifications"""
     db = get_database()
-    
-    # Get notifications for this admin user OR system-wide admin notifications (userId is null)
-    notifications_cursor = db.notifications.find({
-        "$or": [
-            {"userId": str(current_user["_id"])},  # User-specific notifications
-            {"userId": {"$in": [None, ""]}},       # System-wide admin notifications
-            {"userId": {"$exists": False}}         # Notifications without userId field
-        ]
-    }).skip(skip).limit(limit).sort("createdAt", -1)
-    
-    notifications = await notifications_cursor.to_list(length=limit)
-    total = await db.notifications.count_documents({
+
+    scope_filter = {
         "$or": [
             {"userId": str(current_user["_id"])},
             {"userId": {"$in": [None, ""]}},
-            {"userId": {"$exists": False}}
+            {"userId": {"$exists": False}},
         ]
-    })
-    
-    # Convert ObjectIds to strings
+    }
+
+    notifications_cursor = db.notifications.find(scope_filter).skip(skip).limit(limit).sort("createdAt", -1)
+
+    notifications = await notifications_cursor.to_list(length=limit)
+    total = await db.notifications.count_documents(scope_filter)
+    unread_count = await db.notifications.count_documents(
+        {
+            "$and": [
+                scope_filter,
+                {"$nor": [{"isRead": True}, {"read": True}]},
+            ]
+        }
+    )
+
+    serialized: list[dict[str, Any]] = []
     for notification in notifications:
         convert_objectids_to_strings(notification)
-        notification["id"] = str(notification["_id"])
-    
-    return {"notifications": notifications, "total": total}
+        notification["id"] = str(notification.pop("_id", notification.get("id", "")))
+        serialized.append(normalize_notification(notification))
+
+    return JSONResponse(
+        content=json.loads(
+            json.dumps(
+                {"notifications": serialized, "total": total, "unreadCount": unread_count},
+                cls=CustomJSONEncoder,
+            )
+        )
+    )
 
 @router.post("/notifications")
 async def create_admin_notification(
@@ -4474,7 +4534,7 @@ async def mark_notification_as_read(
                 {"userId": {"$exists": False}}         # Notifications without userId field
             ]
         },
-        {"$set": {"isRead": True}}
+        {"$set": {"isRead": True, "read": True}}
     )
     
     if result.matched_count == 0:
@@ -4498,7 +4558,7 @@ async def mark_all_notifications_as_read(
                 {"userId": {"$exists": False}}         # Notifications without userId field
             ]
         },
-        {"$set": {"isRead": True}}
+        {"$set": {"isRead": True, "read": True}}
     )
     
     return {"message": f"Marked {result.modified_count} notifications as read"}

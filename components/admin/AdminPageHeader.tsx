@@ -4,7 +4,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { 
   Menu, 
-  Bell, 
   Search, 
   Settings,
   HelpCircle,
@@ -13,13 +12,10 @@ import {
   Moon,
   Laptop,
   Sparkles,
-  Trash2,
-  Check,
   LogOut,
   ShieldCheck,
 } from "lucide-react";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -35,25 +31,11 @@ import { useAdminTheme, type AdminTheme } from "@/contexts/AdminThemeContext";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { adminApi } from "@/lib/api-backend";
-import { toast } from "react-hot-toast";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "@/contexts/SettingsContext";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { formatAdminRoleLabel, isAdminRoleLabel } from "@/lib/format-admin-role";
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: string;
-  isRead: boolean;
-  link?: string;
-  createdAt: string;
-  expiresAt?: string;
-  priority?: string;
-  userId?: string;
-}
+import { AdminNotificationDropdown } from "@/components/admin/AdminNotificationDropdown";
 
 interface AdminPageHeaderProps {
   title: string;
@@ -73,59 +55,10 @@ export default function AdminPageHeader({
   const { theme, setTheme } = useAdminTheme();
   const { sidebarCollapsed } = useSettings();
   const [searchValue, setSearchValue] = useState("");
-  const queryClient = useQueryClient();
 
   const handleSearch = (value: string) => {
     setSearchValue(value);
     onSearch?.(value);
-  };
-
-  // Fetch notifications
-  const { data: notificationsResponse, isLoading: isLoadingNotifications } = useQuery({
-    queryKey: ['admin-notifications'],
-    queryFn: () => adminApi.getNotifications(),
-    refetchInterval: 30000, // Refetch every 30 seconds
-  });
-
-  // Extract notifications from the response
-  const notifications = notificationsResponse || [];
-
-  // Mark as read mutation
-  const markAsReadMutation = useMutation({
-    mutationFn: (notificationId: string) => 
-      adminApi.markNotificationAsRead(notificationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-notifications'] });
-    },
-    onError: (error) => {
-      toast.error('Failed to mark notification as read');
-    }
-  });
-
-  // Delete notification mutation
-  const deleteNotificationMutation = useMutation({
-    mutationFn: (notificationId: string) => 
-      adminApi.deleteNotification(notificationId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-notifications'] });
-      toast.success('Notification deleted');
-    },
-    onError: (error) => {
-      toast.error('Failed to delete notification');
-    }
-  });
-
-  const unreadCount = notifications.filter((n: Notification) => !n.isRead).length;
-
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (diffInSeconds < 60) return 'just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
   const displayRole = formatAdminRoleLabel(userRole || user?.role);
@@ -229,93 +162,7 @@ export default function AdminPageHeader({
           </DropdownMenu>
 
           {/* Notifications */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl">
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-red-500 text-[10px] font-medium text-white flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">Notifications</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {unreadCount 
-                      ? `You have ${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
-                      : 'No new notifications'
-                    }
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {isLoadingNotifications ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">
-                  Loading notifications...
-                </div>
-              ) : notifications.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">
-                  No notifications
-                </div>
-              ) : (
-                <div className="max-h-[300px] overflow-auto">
-                  {notifications.map((notification: Notification) => (
-                    <DropdownMenuItem 
-                      key={notification.id} 
-                      className="flex flex-col items-start gap-1 p-4 cursor-default"
-                    >
-                      <div className="flex w-full items-start justify-between gap-2">
-                        <div className="flex flex-col flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{notification.title}</span>
-                            {!notification.isRead && (
-                              <Badge variant="secondary" className="h-auto py-0 px-1">New</Badge>
-                            )}
-                          </div>
-                          <p className="line-clamp-2 text-sm text-muted-foreground">
-                            {notification.message}
-                          </p>
-                          <span className="text-xs text-muted-foreground">
-                            {formatTimeAgo(notification.createdAt)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {!notification.isRead && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => markAsReadMutation.mutate(notification.id)}
-                            >
-                              <Check className="h-4 w-4" aria-hidden="true" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            onClick={() => deleteNotificationMutation.mutate(notification.id)}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                          </Button>
-                        </div>
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                </div>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="w-full text-center cursor-pointer">
-                <Link href="/admin/notifications" className="w-full text-center">
-                  View all notifications
-                </Link>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <AdminNotificationDropdown />
 
           {/* Help */}
           <Link href="/admin/help" aria-label="Help">
