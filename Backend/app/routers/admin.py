@@ -2273,7 +2273,7 @@ async def get_application_positions(
             },
             {
                 "$match": {
-                    "_id": {"$nin": [None, "", "Position Not Available"]}
+                    "_id": {"$nin": [None, "", "Position Not Available", "Unknown Position"]}
                 }
             },
             {
@@ -3271,16 +3271,29 @@ async def get_applications_by_job(
                 "$addFields": {
                     "jobDetails": {"$arrayElemAt": ["$jobDetails", 0]},
                     "effectivePosition": {
-                        "$cond": {
-                            "if": {
-                                "$and": [
-                                    {"$ne": ["$jobDetails", None]},
-                                    {"$ne": ["$jobDetails.title", None]},
-                                    {"$ne": ["$jobDetails.title", ""]},
-                                ]
+                        "$let": {
+                            "vars": {
+                                "jobTitle": {
+                                    "$trim": {
+                                        "input": {
+                                            "$ifNull": [
+                                                {"$arrayElemAt": ["$jobDetails.title", 0]},
+                                                "",
+                                            ]
+                                        }
+                                    }
+                                },
+                                "appPosition": {
+                                    "$trim": {"input": {"$ifNull": ["$position", ""]}}
+                                },
                             },
-                            "then": "$jobDetails.title",
-                            "else": "$position",
+                            "in": {
+                                "$cond": {
+                                    "if": {"$gt": [{"$strLenCP": "$$jobTitle"}, 0]},
+                                    "then": "$$jobTitle",
+                                    "else": "$$appPosition",
+                                }
+                            },
                         }
                     },
                     "groupKey": {
@@ -3314,7 +3327,7 @@ async def get_applications_by_job(
         for stat in job_stats:
             try:
                 position = _normalize_text_value(stat.get("position")) or "Unknown Position"
-                if position in ("", "Position Not Available"):
+                if position in ("", "Position Not Available", "Unknown Position"):
                     continue
 
                 status_breakdown: Dict[str, int] = {}

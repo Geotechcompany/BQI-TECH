@@ -241,7 +241,17 @@ export default function OverviewPage() {
       ? applicationsByJob.applicationsByJob
       : computedStats.applicationsByJobData;
 
+  const isResolvableJobPosition = (position?: string | null) => {
+    const normalized = (position || "").trim();
+    return (
+      normalized.length > 0 &&
+      normalized !== "Unknown Position" &&
+      normalized !== "Position Not Available"
+    );
+  };
+
   const jobPostBreakdown = [...pieByJobData]
+    .filter((item) => isResolvableJobPosition(item.position))
     .map((item) => ({
       position: item.position || "Unknown Position",
       totalApplications: item.totalApplications || 0,
@@ -249,14 +259,18 @@ export default function OverviewPage() {
     }))
     .sort((a, b) => b.totalApplications - a.totalApplications);
 
+  const pieChartJobData = pieByJobData.filter((item) =>
+    isResolvableJobPosition(item.position)
+  );
+
   const pieChartData = {
-    labels: pieByJobData.map(item => {
+    labels: pieChartJobData.map(item => {
       const position = item.position || 'Unknown Position';
       return position.length > 20 ? `${position.substring(0, 20)}...` : position;
     }) || [],
     datasets: [
       {
-        data: pieByJobData.map(item => item.totalApplications || 0) || [],
+        data: pieChartJobData.map(item => item.totalApplications || 0) || [],
         backgroundColor: [
           'rgba(59, 130, 246, 0.8)',
           'rgba(16, 185, 129, 0.8)',
