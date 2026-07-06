@@ -1132,6 +1132,208 @@ async def link_cv_vault_entry(
     return items[0]
 
 
+CV_VAULT_APPLICATION_STATUSES = [
+    "New",
+    "Shortlisted",
+    "Technical Assessment",
+    "Interviewing",
+    "Hired",
+    "Rejected",
+    "Disqualified",
+]
+
+
+async def _upsert_password_reset_token(db, email: str, user_id: str) -> str:
+    import secrets
+
+    token = secrets.token_urlsafe(48)
+    expires_at = datetime.utcnow() + timedelta(days=7)
+    now = datetime.utcnow()
+    await db.password_resets.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email": email,
+                "userId": user_id,
+                "token": token,
+                "expiresAt": expires_at,
+                "createdAt": now,
+            }
+        },
+        upsert=True,
+    )
+    return token
+
+
+async def create_application_from_cv_vault(
+    db,
+    vault_id: str,
+    job_id: str,
+    status: str = "New",
+    *,
+    email_override: Optional[str] = None,
+    name_override: Optional[str] = None,
+    created_by_admin_id: Optional[str] = None,
+    frontend_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create an application (and user if needed) from a CV vault row, then link it."""
+    import asyncio
+    import secrets
+    from bson import ObjectId
+
+    from app.auth import get_password_hash
+    from app.utils.status_history import StatusHistoryManager
+
+    if not vault_id or not job_id:
+        raise ValueError("vaultId and jobId are required")
+
+    normalized_status = (status or "New").strip()
+    if normalized_status not in CV_VAULT_APPLICATION_STATUSES:
+        raise ValueError(
+            f"Invalid status. Must be one of: {', '.join(CV_VAULT_APPLICATION_STATUSES)}"
+        )
+
+    collection = db[CV_VAULT_COLLECTION]
+    vault_doc = await collection.find_one({"vaultId": vault_id})
+    if not vault_doc:
+        raise ValueError("CV vault entry not found")
+
+    if vault_doc.get("applicationId"):
+        raise ValueError("This CV is already linked to an application")
+
+    email = (email_override or vault_doc.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        raise ValueError("A valid email is required. Enter one manually if the CV has none.")
+
+    name = (name_override or vault_doc.get("name") or "").strip()
+    if not name or name.lower() in INVALID_NAMES:
+        stem = os.path.splitext(vault_doc.get("fileName") or "")[0]
+        name = parse_name_from_filename(stem) if stem else ""
+    if not name or name.lower() in INVALID_NAMES:
+        name = email.split("@")[0]
+
+    try:
+        job_oid = ObjectId(job_id)
+    except Exception:
+        raise ValueError("Invalid job ID")
+
+    job = await db.jobpostings.find_one({"_id": job_oid})
+    if not job:
+        raise ValueError("Job posting not found")
+
+    email_filter = {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+    user = await db.users.find_one(email_filter)
+    user_created = False
+    password_setup_email_sent = False
+    now = datetime.utcnow()
+
+    if not user:
+        temp_password = secrets.token_urlsafe(24)
+        hashed_password = await asyncio.to_thread(get_password_hash, temp_password)
+        user_doc = {
+            "email": email,
+            "name": name,
+            "password": hashed_password,
+            "role": "USER",
+            "isEmailVerified": True,
+            "needsPasswordSetup": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        insert_result = await db.users.insert_one(user_doc)
+        user = {**user_doc, "_id": insert_result.inserted_id}
+        user_created = True
+
+    user_id = str(user["_id"])
+
+    existing_application = await db.applications.find_one(
+        {"userId": user_id, "jobId": job_id}
+    )
+    if existing_application:
+        raise ValueError("This user already has an application for the selected job")
+
+    cv_url = (vault_doc.get("cvUrl") or "").strip()
+    position = job.get("title") or "Position"
+
+    status_history = StatusHistoryManager.initialize_status_history(
+        initial_status=normalized_status,
+        applied_date=now,
+        user_id=created_by_admin_id,
+    )
+    if status_history:
+        status_history[0]["reason"] = "Created from CV vault"
+        status_history[0]["metadata"] = {
+            "source": "cv_vault_link",
+            "automatedChange": True,
+            "vaultId": vault_id,
+        }
+
+    legacy_fields = StatusHistoryManager.sync_legacy_fields(status_history)
+    application_doc: Dict[str, Any] = {
+        "userId": user_id,
+        "jobId": job_id,
+        "name": name,
+        "email": email,
+        "position": position,
+        "status": normalized_status,
+        "cvUrl": cv_url,
+        "appliedDate": now,
+        "createdAt": now,
+        "updatedAt": now,
+        "statusHistory": status_history,
+        "source": "cv_vault",
+        "user": {"id": user_id, "email": email, "name": name},
+    }
+    application_doc.update(legacy_fields)
+
+    insert_result = await db.applications.insert_one(application_doc)
+    application_id = str(insert_result.inserted_id)
+
+    entry = db_doc_to_entry(vault_doc)
+    await _apply_manual_link_to_entry(db, entry, application_id)
+    doc = entry_to_db_doc(entry, now)
+    doc["linkSource"] = "manual"
+    doc["updatedAt"] = now
+    await collection.update_one({"vaultId": vault_id}, {"$set": doc})
+
+    updated = await collection.find_one({"vaultId": vault_id})
+    item = db_doc_to_entry(updated)
+    items = await _enrich_vault_items_with_application_data(db, [item])
+    linked_item = items[0]
+
+    needs_password_email = user_created or bool(
+        user.get("needsPasswordSetup")
+    ) or not user.get("password")
+
+    if needs_password_email and frontend_url:
+        try:
+            from app.lib.email import send_password_reset_email
+
+            token = await _upsert_password_reset_token(db, email, user_id)
+            reset_link = f"{frontend_url.rstrip('/')}/reset-password?token={token}"
+            sent = await send_password_reset_email(
+                email=email,
+                reset_link=reset_link,
+                frontend_url=frontend_url,
+            )
+            password_setup_email_sent = bool(sent)
+            if needs_password_email:
+                await db.users.update_one(
+                    {"_id": user["_id"]},
+                    {"$set": {"needsPasswordSetup": True, "updatedAt": now}},
+                )
+        except Exception as exc:
+            logger.warning("Failed to send password setup email to %s: %s", email, exc)
+
+    return {
+        "item": linked_item,
+        "applicationId": application_id,
+        "userId": user_id,
+        "userCreated": user_created,
+        "passwordSetupEmailSent": password_setup_email_sent,
+    }
+
+
 async def suggest_applications_for_vault(
     db,
     vault_id: str,

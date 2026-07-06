@@ -101,3 +101,29 @@ export interface LinkCvVaultRequest {
 export interface LinkCvVaultResponse {
   item: CvVaultEntry
 }
+
+export interface CreateApplicationFromVaultRequest {
+  vaultId: string
+  jobId: string
+  status: string
+  email?: string
+  name?: string
+}
+
+export interface CreateApplicationFromVaultResponse {
+  item: CvVaultEntry
+  applicationId: string
+  userId: string
+  userCreated: boolean
+  passwordSetupEmailSent: boolean
+}
+
+export const CV_VAULT_APPLICATION_STATUSES = [
+  "New",
+  "Shortlisted",
+  "Technical Assessment",
+  "Interviewing",
+  "Hired",
+  "Rejected",
+  "Disqualified",
+] as const

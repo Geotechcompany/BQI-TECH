@@ -1,6 +1,6 @@
 """CV Vault API — cached in MongoDB, synced from Dropbox on demand."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 import logging
@@ -9,8 +9,10 @@ from app.auth import get_current_admin_user
 from app.database import get_database
 from app.lib.dropbox import get_dropbox_access_token
 from app.lib.cv_vault import (
+    CV_VAULT_APPLICATION_STATUSES,
     CV_VAULT_COLLECTION,
     VALID_SORTS,
+    create_application_from_cv_vault,
     get_cv_vault_filter_options,
     link_cv_vault_entry,
     list_cv_vault_from_db,
@@ -27,6 +29,16 @@ router = APIRouter(prefix="/api/admin/cv-vault", tags=["cv-vault"])
 class LinkVaultRequest(BaseModel):
     vault_id: str = Field(..., alias="vaultId")
     application_id: str = Field(..., alias="applicationId")
+
+    model_config = {"populate_by_name": True}
+
+
+class CreateApplicationFromVaultRequest(BaseModel):
+    vault_id: str = Field(..., alias="vaultId")
+    job_id: str = Field(..., alias="jobId")
+    status: str = "New"
+    email: Optional[str] = None
+    name: Optional[str] = None
 
     model_config = {"populate_by_name": True}
 
@@ -186,6 +198,45 @@ async def link_cv_vault(
         raise HTTPException(status_code=500, detail="Failed to link application")
 
     return {"item": entry}
+
+
+@router.post("/create-application")
+async def create_cv_vault_application(
+    body: CreateApplicationFromVaultRequest,
+    request: Request,
+    current_admin: dict = Depends(get_current_admin_user),
+) -> Dict[str, Any]:
+    """Create an application from a CV vault row, optionally creating the applicant account."""
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    if body.status not in CV_VAULT_APPLICATION_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {', '.join(CV_VAULT_APPLICATION_STATUSES)}",
+        )
+
+    from app.lib.cors import resolve_frontend_url
+
+    try:
+        result = await create_application_from_cv_vault(
+            db,
+            body.vault_id,
+            body.job_id,
+            body.status,
+            email_override=body.email,
+            name_override=body.name,
+            created_by_admin_id=str(current_admin.get("_id") or current_admin.get("id") or ""),
+            frontend_url=resolve_frontend_url(request.headers.get("origin")),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("CV vault create-application failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to create application from CV")
+
+    return result
 
 
 @router.get("/{vault_id:path}/suggestions")

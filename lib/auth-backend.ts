@@ -181,6 +181,15 @@ export function getLoginToastFromError(error: unknown): {
     };
   }
 
+  if (code === "password_setup_required") {
+    return {
+      title: "Set your password",
+      description:
+        message ||
+        "Check your email for a link to set your password, then sign in again.",
+    };
+  }
+
   if (/couldn't find an account with that email/i.test(message)) {
     return {
       title: "Email not recognized",

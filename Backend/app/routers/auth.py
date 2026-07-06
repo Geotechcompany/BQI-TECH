@@ -66,6 +66,10 @@ LOGIN_ERROR_PENDING_VERIFICATION = {
     "code": "pending_verification",
     "message": "Please verify your email to complete registration before signing in.",
 }
+LOGIN_ERROR_PASSWORD_SETUP_REQUIRED = {
+    "code": "password_setup_required",
+    "message": "Check your email to set your password before signing in.",
+}
 
 
 def _normalize_email(email: str) -> str:
@@ -141,6 +145,45 @@ async def login(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=LOGIN_ERROR_EMAIL_NOT_FOUND,
+            )
+
+        needs_password_setup = bool(user.get("needsPasswordSetup")) or not user.get("password")
+        if needs_password_setup:
+            from app.lib.cors import resolve_frontend_url
+            from app.lib.email import send_password_reset_email
+
+            token = _generate_reset_token()
+            canonical_email = _normalize_email(user.get("email", email))
+            expires_at = datetime.utcnow() + timedelta(hours=1)
+            await db.password_resets.update_one(
+                {"email": canonical_email},
+                {
+                    "$set": {
+                        "email": canonical_email,
+                        "userId": str(user["_id"]),
+                        "token": token,
+                        "expiresAt": expires_at,
+                        "createdAt": datetime.utcnow(),
+                    }
+                },
+                upsert=True,
+            )
+            reset_link = (
+                f"{resolve_frontend_url(request.headers.get('origin'))}"
+                f"/reset-password?token={token}"
+            )
+            try:
+                await send_password_reset_email(
+                    email=canonical_email,
+                    reset_link=reset_link,
+                    frontend_url=resolve_frontend_url(request.headers.get("origin")),
+                )
+            except Exception as e:
+                logger.warning("Failed sending password setup email to %s: %s", canonical_email, e)
+
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=LOGIN_ERROR_PASSWORD_SETUP_REQUIRED,
             )
             
         # Verify password
@@ -829,6 +872,7 @@ async def reset_password(data: ResetPasswordRequest):
                     "updatedAt": datetime.utcnow(),
                     "passwordResetAt": datetime.utcnow(),
                     "invitePending": False,
+                    "needsPasswordSetup": False,
                 }
             },
         )
