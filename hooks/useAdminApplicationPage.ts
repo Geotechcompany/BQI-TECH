@@ -528,7 +528,7 @@ export function useAdminApplicationPage({
           aiRankSummary: rankedItem.aiRankSummary,
           aiRankStrengths: rankedItem.aiRankStrengths,
           aiRankGaps: rankedItem.aiRankGaps,
-          aiRankRequirements: rankedItem.aiRankRequirements,
+          aiRankRequirements: rankedItem.aiRankRequirements as Application["aiRankRequirements"],
           aiRankScoreReason: rankedItem.aiRankScoreReason,
           aiRankRecommendation: rankedItem.aiRankRecommendation,
           aiRankedAt: rankedItem.aiRankedAt,
