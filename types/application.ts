@@ -87,8 +87,21 @@ export interface Application {
     aiRankSummary?: string;
     aiRankStrengths?: string[];
     aiRankGaps?: string[];
+    aiRankRequirements?: AiRankRequirement[];
+    aiRankScoreReason?: string;
     aiRankRecommendation?: string;
     aiRankedAt?: Date | string;
+}
+
+export interface AiRankRequirement {
+    requirement: string;
+    jdQuote?: string;
+    category?: string;
+    criticality?: number;
+    match: 'full' | 'partial' | 'weak' | 'none' | 'unknown';
+    score?: number;
+    evidence?: string;
+    gapNote?: string;
 }
 
 export interface ShortlistedCandidate extends Application {

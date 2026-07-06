@@ -239,6 +239,131 @@ def _derive_recommendation(score: float) -> str:
     return "Not a Fit"
 
 
+def _normalize_requirement_entry(item: Dict[str, Any]) -> Dict[str, Any]:
+    match = _normalize_match_level(item.get("match"))
+    try:
+        criticality = int(item.get("criticality", 1))
+    except (TypeError, ValueError):
+        criticality = 1
+    criticality = max(1, min(3, criticality))
+
+    category = str(item.get("category", "other")).strip().lower()
+    if category not in CATEGORY_WEIGHTS:
+        category = "other"
+
+    clamped_score = round(_clamp_requirement_score(item), 1)
+
+    return {
+        "requirement": str(item.get("requirement", "")).strip(),
+        "jdQuote": str(item.get("jd_quote") or item.get("jdQuote") or "").strip(),
+        "category": category,
+        "criticality": criticality,
+        "match": match,
+        "score": clamped_score,
+        "evidence": str(item.get("evidence", "")).strip() or "not evidenced",
+        "gapNote": str(item.get("gap_note") or item.get("gapNote") or "").strip(),
+    }
+
+
+def _normalize_requirements(parsed: Dict[str, Any]) -> List[Dict[str, Any]]:
+    requirements = [
+        _normalize_requirement_entry(item)
+        for item in (parsed.get("requirements") or [])
+        if isinstance(item, dict) and str(item.get("requirement", "")).strip()
+    ]
+    requirements.sort(
+        key=lambda item: (
+            -item["criticality"],
+            {"none": 0, "weak": 1, "unknown": 2, "partial": 3, "full": 4}.get(
+                item["match"], 2
+            ),
+        ),
+    )
+    return requirements
+
+
+def _match_label(match: str) -> str:
+    return {
+        "full": "Met",
+        "partial": "Partial",
+        "weak": "Weak",
+        "none": "Missing",
+        "unknown": "Not evidenced",
+    }.get(match, match.title())
+
+
+def _build_score_reason(
+    requirements: List[Dict[str, Any]],
+    score: float,
+    parsed: Dict[str, Any],
+) -> str:
+    model_reason = str(
+        parsed.get("score_rationale") or parsed.get("scoreRationale") or ""
+    ).strip()
+    if len(model_reason) >= 80:
+        return model_reason
+
+    if not requirements:
+        return model_reason or f"Overall fit score: {score}/100."
+
+    must_have = [r for r in requirements if r["criticality"] >= 3]
+    must_have_misses = [r for r in must_have if r["match"] in {"none", "weak", "unknown"}]
+    none_count = sum(1 for r in requirements if r["match"] == "none")
+
+    parts = [f"Weighted score {score}/100 from {len(requirements)} job requirements."]
+    if must_have_misses:
+        missed = "; ".join(
+            f'"{r["jdQuote"] or r["requirement"]}" ({_match_label(r["match"]).lower()})'
+            for r in must_have_misses[:4]
+        )
+        parts.append(f"Must-have gaps: {missed}.")
+    if none_count:
+        parts.append(f"{none_count} requirement(s) clearly not met.")
+    recommendation = _derive_recommendation(score)
+    parts.append(f"Band: {recommendation}.")
+    return " ".join(parts)
+
+
+def _build_strengths_and_gaps(
+    requirements: List[Dict[str, Any]],
+    parsed: Dict[str, Any],
+) -> tuple[List[str], List[str]]:
+    strengths = [
+        str(item).strip()
+        for item in (parsed.get("strengths") or [])
+        if str(item).strip()
+    ]
+    gaps = [
+        str(item).strip()
+        for item in (parsed.get("gaps") or [])
+        if str(item).strip()
+    ]
+
+    if strengths and gaps:
+        return strengths[:8], gaps[:8]
+
+    derived_strengths: List[str] = []
+    derived_gaps: List[str] = []
+    for req in requirements:
+        jd_ref = req["jdQuote"] or req["requirement"]
+        label = _match_label(req["match"])
+        if req["match"] == "full":
+            derived_strengths.append(
+                f'JD: "{jd_ref}" — Met. Evidence: {req["evidence"]}'
+            )
+        elif req["match"] in {"none", "weak", "partial", "unknown"}:
+            gap_detail = req["gapNote"] or req["evidence"]
+            derived_gaps.append(
+                f'JD: "{jd_ref}" — {label}. {gap_detail}'
+            )
+
+    if not strengths:
+        strengths = derived_strengths[:8]
+    if not gaps:
+        gaps = derived_gaps[:8]
+    return strengths[:8], gaps[:8]
+
+
 async def rank_application_with_ai(
     application: Dict[str, Any],
     job: Optional[Dict[str, Any]],
@@ -261,15 +386,15 @@ async def rank_application_with_ai(
     job_summary = _build_job_summary(job, position)
 
     prompt = f"""You are a strict hiring evaluator for BQI Technologies.
-Score this ONE candidate against EVERY explicit requirement in the job posting.
+Score this ONE candidate against EVERY explicit requirement in the job posting below.
 
-Step 1 — Extract requirements from the job text (skills, years of experience, education, certifications, industry background, responsibilities, tools, leadership scope). List each as a separate requirement. Mark criticality 1 (nice-to-have), 2 (important), or 3 (must-have).
+Step 1 — Extract requirements from the job text (skills, years of experience, education, certifications, industry background, responsibilities, tools, leadership scope). List each as a separate requirement. For each, copy a short jd_quote (verbatim phrase from the job posting). Mark criticality 1 (nice-to-have), 2 (important), or 3 (must-have).
 
 Step 2 — For EACH requirement, compare the candidate's CV and application answers. Assign:
 - match: full | partial | weak | none | unknown
 - score: 0.0–100.0 with ONE decimal place (e.g. 73.4, 58.7). Avoid round numbers (90, 85, 80, 75, 70, 65, 60, 55, 50).
-- evidence: brief quote or fact from CV/answers, or "not evidenced"
-- gap_note: what is missing if not a full match
+- evidence: specific quote, role, project, tool, or year from CV/answers. Write "not evidenced" only when nothing supports the requirement.
+- gap_note: what is missing or weaker than the JD asks for (empty string if full match)
 
 Scoring rules (be strict):
 - full: clear, direct evidence the requirement is met
@@ -281,17 +406,24 @@ Scoring rules (be strict):
 - Do not inflate scores for generic finance/leadership buzzwords without role-specific proof
 - Differentiate candidates: use the full 0–100 range; profiles with different depth MUST get different scores
 
+Step 3 — Write notes tied to THIS job posting only:
+- summary: 3–5 sentences. Name the role, cite specific JD requirements met and missed, reference concrete CV evidence. No generic praise.
+- strengths: each item must cite a JD requirement (quote or paraphrase) AND specific CV evidence
+- gaps: each item must cite the JD requirement AND what is missing or weak in the candidate profile
+- score_rationale: 2–4 sentences explaining why the overall fit lands at the level it does. Reference must-have misses, partial matches, and evidence quality. The server computes the final numeric score.
+
 Return STRICT JSON only:
 {{
   "requirements": [
     {{
-      "requirement": "<specific requirement from job posting>",
+      "requirement": "<specific requirement distilled from job posting>",
+      "jd_quote": "<verbatim or near-verbatim phrase from the job posting>",
       "category": "<experience|skills|education|certifications|responsibilities|other>",
       "criticality": <1|2|3>,
       "match": "<full|partial|weak|none|unknown>",
       "score": <number with one decimal>,
-      "evidence": "<brief evidence or 'not evidenced'>",
-      "gap_note": "<gap if any>"
+      "evidence": "<specific CV/answer evidence or 'not evidenced'>",
+      "gap_note": "<what is missing; empty if full match>"
     }}
   ],
   "dimension_scores": {{
@@ -300,9 +432,10 @@ Return STRICT JSON only:
     "education": <number one decimal>,
     "certifications": <number one decimal>
   }},
-  "summary": "<2-3 sentences on fit for '{position}'. Name specific requirements met and missed.>",
-  "strengths": ["<strength tied to a requirement>", "..."],
-  "gaps": ["<gap tied to a requirement>", "..."]
+  "summary": "<3-5 sentences: fit for '{position}' with JD-specific met/missed requirements and CV evidence>",
+  "strengths": ["<JD requirement + evidence>", "..."],
+  "gaps": ["<JD requirement + gap>", "..."],
+  "score_rationale": "<why this candidate scores at this level; reference must-haves and evidence>"
 }}
 
 Fit bands (for your reference only — final score is computed server-side):
@@ -329,27 +462,54 @@ CV TEXT:
                 "role": "system",
                 "content": (
                     "You are a strict, evidence-based recruiter. "
-                    "Evaluate each job requirement independently. "
+                    "Evaluate each job requirement independently against the posted JD text. "
+                    "Every note must reference a specific JD requirement and CV evidence. "
                     "Output only valid JSON. Use decimal scores with real variance."
                 ),
             },
             {"role": "user", "content": prompt},
         ],
         temperature=0.35,
-        max_tokens=1800,
+        max_tokens=3200,
     )
 
     parsed = _parse_ai_json(content)
 
     score = _compute_final_score(parsed, cv_available)
-    strengths = [str(item) for item in (parsed.get("strengths") or [])[:6]]
-    gaps = [str(item) for item in (parsed.get("gaps") or [])[:6]]
+    requirements = _normalize_requirements(parsed)
+    strengths, gaps = _build_strengths_and_gaps(requirements, parsed)
+    score_reason = _build_score_reason(requirements, score, parsed)
+    summary = str(parsed.get("summary", "")).strip()
+    if len(summary) < 60 and requirements:
+        met = [r for r in requirements if r["match"] == "full"]
+        missed = [r for r in requirements if r["match"] in {"none", "weak", "partial"}]
+        summary_parts = [f"Fit for {position}: score {score}/100."]
+        if met:
+            summary_parts.append(
+                "Met: "
+                + "; ".join(
+                    f'"{r["jdQuote"] or r["requirement"]}"' for r in met[:3]
+                )
+                + "."
+            )
+        if missed:
+            summary_parts.append(
+                "Gaps: "
+                + "; ".join(
+                    f'"{r["jdQuote"] or r["requirement"]}" ({_match_label(r["match"]).lower()})'
+                    for r in missed[:3]
+                )
+                + "."
+            )
+        summary = " ".join(summary_parts)
 
     return {
         "aiRankScore": score,
-        "aiRankSummary": str(parsed.get("summary", "")).strip(),
+        "aiRankSummary": summary,
         "aiRankStrengths": strengths,
         "aiRankGaps": gaps,
+        "aiRankRequirements": requirements,
+        "aiRankScoreReason": score_reason,
         "aiRankRecommendation": _derive_recommendation(score),
         "aiRankedAt": datetime.utcnow(),
     }

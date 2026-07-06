@@ -211,6 +211,8 @@ export default function CvVaultPage() {
       source: sourceFilter,
       contact_filter: contactFilter,
       application_status: statusFilter,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
     }),
     [
       debouncedSearch,
@@ -221,6 +223,8 @@ export default function CvVaultPage() {
       sourceFilter,
       contactFilter,
       statusFilter,
+      dateFrom,
+      dateTo,
     ]
   )
 
@@ -232,6 +236,8 @@ export default function CvVaultPage() {
     hasNameFilter !== "all",
     linkedFilter !== "all",
     statusFilter !== "all",
+    Boolean(dateFrom),
+    Boolean(dateTo),
     sort !== DEFAULT_SORT,
   ].filter(Boolean).length
 
@@ -275,6 +281,78 @@ export default function CvVaultPage() {
     },
   })
 
+  const statusMutation = useMutation({
+    mutationFn: ({
+      applicationId,
+      status,
+    }: {
+      applicationId: string
+      status: string
+    }) => adminApplicationsApi.bulkUpdateStatus({ ids: [applicationId], status }),
+    onSuccess: (_, { status }) => {
+      queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-notifications"] })
+      toast.success(`Status set to ${status}`)
+    },
+    onError: () => {
+      toast.error("Failed to update status")
+    },
+  })
+
+  const handleRankApplication = useCallback(
+    async (applicationId: string, candidateName?: string) => {
+      if (aiRankInFlightRef.current) {
+        toast.error("AI ranking is already in progress")
+        return
+      }
+      if (aiUnconfigured) {
+        toast.error(AI_UNCONFIGURED_MESSAGE)
+        return
+      }
+
+      aiRankInFlightRef.current = true
+      setRankingApplicationId(applicationId)
+
+      setAiRankProgress({
+        isActive: true,
+        current: 0,
+        total: 1,
+        phase: "extracting",
+        mode: "single",
+        applicationId,
+        candidateName,
+      })
+
+      const phaseInterval = window.setInterval(() => {
+        setAiRankProgress((current) =>
+          current?.isActive
+            ? { ...current, phase: cycleAiRankPhase(current.phase) }
+            : current
+        )
+      }, 1600)
+
+      try {
+        const result = await adminApplicationsApi.rankApplications({
+          ids: [applicationId],
+        })
+        if (result.errors?.length) {
+          toast.error(result.errors[0]?.error || "AI ranking failed")
+        } else {
+          toast.success("AI ranking complete")
+          queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "AI ranking failed")
+      } finally {
+        window.clearInterval(phaseInterval)
+        setAiRankProgress(null)
+        setRankingApplicationId(null)
+        aiRankInFlightRef.current = false
+      }
+    },
+    [aiUnconfigured, queryClient]
+  )
+
   const resetFilters = () => {
     setSearch("")
     setDebouncedSearch("")
@@ -285,6 +363,8 @@ export default function CvVaultPage() {
     setHasNameFilter("all")
     setLinkedFilter("all")
     setStatusFilter("all")
+    setDateFrom("")
+    setDateTo("")
   }
 
   const items = data?.items ?? []
@@ -388,6 +468,10 @@ export default function CvVaultPage() {
           onSourceChange={setSourceFilter}
           statusFilter={statusFilter}
           onStatusChange={setStatusFilter}
+          dateFrom={dateFrom}
+          onDateFromChange={setDateFrom}
+          dateTo={dateTo}
+          onDateToChange={setDateTo}
           applicationStatuses={filterOptions?.applicationStatuses ?? []}
           sortOptions={filterOptions?.sorts}
           onReset={resetFilters}
@@ -425,6 +509,9 @@ export default function CvVaultPage() {
                     <th className="text-left p-3 font-medium hidden lg:table-cell">
                       Status
                     </th>
+                    <th className="text-left p-3 font-medium hidden lg:table-cell min-w-[100px]">
+                      AI Score
+                    </th>
                     <th className="text-left p-3 font-medium hidden xl:table-cell">
                       Dropbox / Applied
                     </th>
@@ -435,7 +522,7 @@ export default function CvVaultPage() {
                   {items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={8}
                         className="p-8 text-center text-muted-foreground"
                       >
                         No CVs match your filters
@@ -494,12 +581,54 @@ export default function CvVaultPage() {
                           </Badge>
                         </td>
                         <td className="p-3 hidden lg:table-cell">
-                          {entry.applicationStatus ? (
+                          {entry.applicationId ? (
+                            <Select
+                              value={entry.applicationStatus || "New"}
+                              onValueChange={(status) =>
+                                statusMutation.mutate({
+                                  applicationId: entry.applicationId!,
+                                  status,
+                                })
+                              }
+                              disabled={statusMutation.isPending}
+                            >
+                              <SelectTrigger className="h-8 w-[160px] text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STATUS_OPTIONS.map((status) => (
+                                  <SelectItem key={status} value={status}>
+                                    {status}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : entry.applicationStatus ? (
                             <Badge variant="outline">
                               {entry.applicationStatus}
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-3 hidden lg:table-cell align-top">
+                          {entry.applicationId ? (
+                            <AiRankScoreCell
+                              score={entry.aiRankScore ?? undefined}
+                              recommendation={entry.aiRankRecommendation ?? undefined}
+                              onRank={() =>
+                                handleRankApplication(
+                                  entry.applicationId!,
+                                  entry.name
+                                )
+                              }
+                              isRanking={rankingApplicationId === entry.applicationId}
+                              disabledReason={
+                                aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined
+                              }
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
                         </td>
                         <td className="p-3 hidden xl:table-cell text-muted-foreground">
@@ -512,6 +641,36 @@ export default function CvVaultPage() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {entry.applicationId && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() =>
+                                  handleRankApplication(
+                                    entry.applicationId!,
+                                    entry.name
+                                  )
+                                }
+                                disabled={
+                                  rankingApplicationId === entry.applicationId ||
+                                  aiUnconfigured
+                                }
+                                title={
+                                  aiUnconfigured
+                                    ? AI_UNCONFIGURED_MESSAGE
+                                    : entry.aiRankScore != null
+                                      ? "Re-rank with AI"
+                                      : "AI Rank"
+                                }
+                              >
+                                {rankingApplicationId === entry.applicationId ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Sparkles className="h-4 w-4" />
+                                )}
+                              </Button>
+                            )}
                             {entry.cvUrl ? (
                               <>
                                 <CVCell
@@ -550,6 +709,7 @@ export default function CvVaultPage() {
           </div>
         )}
       </div>
+      <AiRankProgressOverlay progress={aiRankProgress} />
     </AdminPageLayout>
   )
 }
