@@ -2969,6 +2969,12 @@ async def bulk_update_application_status(
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="No applications found to update")
 
+        id_strings = [str(oid) for oid in object_ids]
+        await db.cv_vault.update_many(
+            {"applicationId": {"$in": id_strings}},
+            {"$set": {"applicationStatus": status, "updatedAt": current_time}},
+        )
+
         changed_by = current_user.get("email") or current_user.get("name") or "Admin"
         updated_apps = await db.applications.find({"_id": {"$in": object_ids}}).to_list(length=len(object_ids))
         for app in updated_apps:
