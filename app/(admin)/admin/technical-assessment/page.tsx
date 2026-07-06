@@ -41,7 +41,6 @@ export default function TechnicalAssessmentPage() {
     handleSaveEdit,
     handleSaveFromView,
     handleRankApplication,
-    aiRankProgress,
     rankingApplicationId,
     handleConfirmDelete,
     handleBulkStatusUpdate,
@@ -138,7 +137,6 @@ export default function TechnicalAssessmentPage() {
         jobTitles={jobTitles}
         onSave={handleSaveFromView}
         onRank={handleRankApplication}
-        rankProgress={aiRankProgress}
       />
       
       <EditApplicationModal

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { adminApplicationsApi, type ApplicationFilters } from '../components/admin/utils/applications-api';
@@ -9,10 +9,7 @@ import { toast } from 'react-hot-toast';
 import { useDebounce } from './useDebounce';
 import { useQueryClient } from '@tanstack/react-query';
 import { getNameDisplay } from '@/components/admin/utils/table-utils';
-import {
-  type AiRankProgressState,
-  cycleAiRankPhase,
-} from '@/components/admin/AiRankProgress';
+import { useAiRank } from '@/contexts/AiRankContext';
 import { AI_SCORE_FILTER_OPTIONS } from '@/lib/ai-score-filter';
 
 export type StatusType = 'all' | 'shortlisted' | 'technical-assessment' | 'interviewing' | 'hired' | 'disqualified' | 'archived';
@@ -79,8 +76,14 @@ export function useAdminApplicationPage({
   const [viewApplication, setViewApplication] = useState<Application | null>(null);
   const [editApplication, setEditApplication] = useState<Application | null>(null);
   const [deleteApplicationId, setDeleteApplicationId] = useState<string | null>(null);
-  const [aiRankProgress, setAiRankProgress] = useState<AiRankProgressState | null>(null);
-  const aiRankInFlightRef = useRef(false);
+  const {
+    progress: aiRankProgress,
+    rankApplication: rankApplicationById,
+    rankApplications: rankApplicationsByIds,
+    isRanking: isAiRanking,
+    rankingApplicationId,
+    inFlightApplicationIds,
+  } = useAiRank();
 
   // Filter options for position dropdown
   const [positionFilterOptions, setPositionFilterOptions] = useState<string[]>([]);
@@ -508,134 +511,51 @@ export function useAdminApplicationPage({
     await handleSaveEdit(updatedApplication, { fromView: true });
   };
 
-  const rankApplicationsSequentially = async (
-    targetIds: string[],
-    mode: AiRankProgressState['mode']
-  ) => {
-    if (aiRankInFlightRef.current) {
-      toast.error('AI ranking is already in progress');
-      return { ranked: 0, errors: [] as Array<{ id: string; error: string }>, results: [] };
-    }
+  const applyRankResultsToView = useCallback(
+    (
+      results: Awaited<
+        ReturnType<typeof adminApplicationsApi.rankApplications>
+      >["results"]
+    ) => {
+      if (!results?.length) return;
+      setViewApplication((current) => {
+        if (!current) return current;
+        const rankedItem = results.find((item) => item.id === current.id);
+        if (!rankedItem) return current;
+        return {
+          ...current,
+          aiRankScore: rankedItem.aiRankScore,
+          aiRankSummary: rankedItem.aiRankSummary,
+          aiRankStrengths: rankedItem.aiRankStrengths,
+          aiRankGaps: rankedItem.aiRankGaps,
+          aiRankRequirements: rankedItem.aiRankRequirements,
+          aiRankScoreReason: rankedItem.aiRankScoreReason,
+          aiRankRecommendation: rankedItem.aiRankRecommendation,
+          aiRankedAt: rankedItem.aiRankedAt,
+        };
+      });
+    },
+    []
+  );
 
-    if (!targetIds.length) {
-      toast.error('No applications to rank');
-      return { ranked: 0, errors: [] as Array<{ id: string; error: string }>, results: [] };
-    }
-
-    aiRankInFlightRef.current = true;
-
-    try {
-    setAiRankProgress({
-      isActive: true,
-      current: 0,
-      total: targetIds.length,
-      phase: 'extracting',
-      mode,
-      candidateName: undefined,
-    });
-
-    let rankedCount = 0;
-    const errors: Array<{ id: string; error: string }> = [];
-    const allResults: Awaited<ReturnType<typeof adminApplicationsApi.rankApplications>>['results'] = [];
-
-    for (let index = 0; index < targetIds.length; index++) {
-      const applicationId = targetIds[index];
+  const resolveCandidateName = useCallback(
+    (applicationId: string) => {
       const application = applications.find((app) => app.id === applicationId);
-      const candidateName = application ? getNameDisplay(application) : 'Candidate';
-
-      setAiRankProgress({
-        isActive: true,
-        current: index,
-        total: targetIds.length,
-        phase: 'extracting',
-        mode,
-        applicationId,
-        candidateName,
-      });
-
-      const phaseInterval = window.setInterval(() => {
-        setAiRankProgress((current) =>
-          current?.isActive
-            ? { ...current, phase: cycleAiRankPhase(current.phase) }
-            : current
-        );
-      }, 1600);
-
-      try {
-        const result = await adminApplicationsApi.rankApplications({ ids: [applicationId] });
-        if (result.results?.length) {
-          allResults.push(...result.results);
-        }
-        if (result.errors?.length) {
-          errors.push(...result.errors);
-        } else {
-          rankedCount += result.ranked;
-        }
-      } catch (error) {
-        errors.push({
-          id: applicationId,
-          error: error instanceof Error ? error.message : 'AI ranking failed',
-        });
-      } finally {
-        window.clearInterval(phaseInterval);
-      }
-
-      setAiRankProgress({
-        isActive: true,
-        current: index + 1,
-        total: targetIds.length,
-        phase: 'saving',
-        mode,
-        applicationId,
-        candidateName,
-      });
-    }
-
-    setAiRankProgress(null);
-    await loadApplications();
-
-    return { ranked: rankedCount, errors, results: allResults };
-    } finally {
-      aiRankInFlightRef.current = false;
-    }
-  };
+      return application ? getNameDisplay(application) : 'Candidate';
+    },
+    [applications]
+  );
 
   const handleRankApplication = async (applicationId: string) => {
     try {
-      const { ranked, errors, results } = await rankApplicationsSequentially(
-        [applicationId],
-        'single'
-      );
-
-      if (errors.length) {
-        toast.error(errors[0].error || 'AI ranking failed');
-        return;
-      }
-
-      const rankedResult = results?.[0];
-      if (rankedResult && viewApplication?.id === applicationId) {
-        setViewApplication((current) =>
-          current
-            ? {
-                ...current,
-                aiRankScore: rankedResult.aiRankScore,
-                aiRankSummary: rankedResult.aiRankSummary,
-                aiRankStrengths: rankedResult.aiRankStrengths,
-                aiRankGaps: rankedResult.aiRankGaps,
-                aiRankRequirements: rankedResult.aiRankRequirements,
-                aiRankScoreReason: rankedResult.aiRankScoreReason,
-                aiRankRecommendation: rankedResult.aiRankRecommendation,
-                aiRankedAt: rankedResult.aiRankedAt,
-              }
-            : current
-        );
-      }
-
-      if (ranked > 0) {
-        toast.success('AI ranking complete');
-      }
+      const application = applications.find((app) => app.id === applicationId);
+      const { results } = await rankApplicationById(applicationId, {
+        candidateName: application ? getNameDisplay(application) : undefined,
+        mode: 'single',
+      });
+      applyRankResultsToView(results);
+      await loadApplications();
     } catch (error) {
-      setAiRankProgress(null);
       console.error('Failed to rank application:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to rank application');
     }
@@ -644,41 +564,14 @@ export function useAdminApplicationPage({
   const handleRankApplications = async (ids?: string[]) => {
     try {
       const targetIds = ids?.length ? ids : applications.map((app) => app.id);
-      const { ranked, errors, results } = await rankApplicationsSequentially(
+      const { results } = await rankApplicationsByIds(
         targetIds,
-        'batch'
+        resolveCandidateName,
+        { mode: 'batch' }
       );
-
-      if (viewApplication && results?.length) {
-        const rankedItem = results.find((item) => item.id === viewApplication.id);
-        if (rankedItem) {
-          setViewApplication({
-            ...viewApplication,
-            aiRankScore: rankedItem.aiRankScore,
-            aiRankSummary: rankedItem.aiRankSummary,
-            aiRankStrengths: rankedItem.aiRankStrengths,
-            aiRankGaps: rankedItem.aiRankGaps,
-            aiRankRequirements: rankedItem.aiRankRequirements,
-            aiRankScoreReason: rankedItem.aiRankScoreReason,
-            aiRankRecommendation: rankedItem.aiRankRecommendation,
-            aiRankedAt: rankedItem.aiRankedAt,
-          });
-        }
-      }
-
-      if (errors.length && !ranked) {
-        toast.error(errors[0].error || 'AI ranking failed');
-        return;
-      }
-
-      if (errors.length && ranked) {
-        toast.success(`Ranked ${ranked} application(s). ${errors.length} failed.`);
-        return;
-      }
-
-      toast.success(`Ranked ${ranked} application(s) with AI`);
+      applyRankResultsToView(results);
+      await loadApplications();
     } catch (error) {
-      setAiRankProgress(null);
       console.error('Failed to rank applications:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to rank applications');
     }
@@ -745,8 +638,9 @@ export function useAdminApplicationPage({
     handleRankApplication,
     handleRankApplications,
     aiRankProgress,
-    rankingApplicationId: aiRankProgress?.applicationId ?? null,
-    isAiRanking: Boolean(aiRankProgress?.isActive),
+    rankingApplicationId,
+    isAiRanking,
+    inFlightApplicationIds,
     handleConfirmDelete,
     handleBulkStatusUpdate: enableBulkUpdates ? handleBulkStatusUpdate : undefined,
     handleBulkArchive: enableBulkUpdates ? handleBulkArchive : undefined,

@@ -41,7 +41,6 @@ export default function InterviewingPage() {
     handleSaveEdit,
     handleSaveFromView,
     handleRankApplication,
-    aiRankProgress,
     rankingApplicationId,
     handleConfirmDelete,
     handleBulkStatusUpdate,
@@ -138,7 +137,6 @@ export default function InterviewingPage() {
         jobTitles={jobTitles}
         onSave={handleSaveFromView}
         onRank={handleRankApplication}
-        rankProgress={aiRankProgress}
       />
       
       <EditApplicationModal

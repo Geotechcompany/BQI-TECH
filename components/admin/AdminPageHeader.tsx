@@ -36,6 +36,7 @@ import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/h
 import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { formatAdminRoleLabel, isAdminRoleLabel } from "@/lib/format-admin-role";
 import { AdminNotificationDropdown } from "@/components/admin/AdminNotificationDropdown";
+import { AiRankHeaderIndicator } from "@/components/admin/AiRankProgress";
 
 interface AdminPageHeaderProps {
   title: string;
@@ -115,6 +116,8 @@ export default function AdminPageHeader({
         {/* Right Section */}
         <div className="flex items-center gap-1.5 overflow-visible sm:gap-2">
           <BackendStatusIndicator />
+
+          <AiRankHeaderIndicator />
 
           <div className="hidden sm:block h-6 w-px bg-border/70 mx-1" />
 

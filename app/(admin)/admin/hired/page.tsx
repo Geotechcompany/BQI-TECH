@@ -41,7 +41,6 @@ export default function HiredPage() {
     handleSaveEdit,
     handleSaveFromView,
     handleRankApplication,
-    aiRankProgress,
     rankingApplicationId,
     handleConfirmDelete,
     handleBulkStatusUpdate,
@@ -138,7 +137,6 @@ export default function HiredPage() {
         jobTitles={jobTitles}
         onSave={handleSaveFromView}
         onRank={handleRankApplication}
-        rankProgress={aiRankProgress}
       />
       
       <EditApplicationModal

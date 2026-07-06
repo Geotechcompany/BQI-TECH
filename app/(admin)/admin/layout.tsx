@@ -16,6 +16,8 @@ import { AdminBrandTitle } from "@/components/admin/AdminBrandTitle";
 import { FeaturePreviewDialog } from "@/components/admin/FeaturePreviewDialog";
 import { AiStatusProvider } from "@/contexts/AiStatusContext";
 import { AiConfigBanner } from "@/components/admin/AiConfigBanner";
+import { AiRankProvider } from "@/contexts/AiRankContext";
+import { AiRankProgressHost } from "@/components/admin/AiRankProgress";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -97,6 +99,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     <EmailVerificationGuard requireVerification={true}>
       <AdminThemeProvider targetId="admin-root">
         <AiStatusProvider>
+        <AiRankProvider>
         <div
           id="admin-root"
           data-admin-page
@@ -155,6 +158,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           timeRemaining={sessionTimeRemaining}
           totalTime={5 * 60} // 5 minutes warning period
         />
+        <AiRankProgressHost />
+        </AiRankProvider>
         </AiStatusProvider>
       </AdminThemeProvider>
     </EmailVerificationGuard>

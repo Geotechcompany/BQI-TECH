@@ -9,6 +9,7 @@ import { CVCell } from "@/components/admin/CVCell";
 import { AiRankScoreCell } from "@/components/admin/AiRankCell";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
+import { useAiRank } from "@/contexts/AiRankContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +56,11 @@ export function UnifiedApplicationTable({
   const showBulkActions = Boolean(onBulkStatusUpdate || onBulkArchive || onBulkUnarchive || onBulkRank);
   const [selectedApplications, setSelectedApplications] = useState<Set<string>>(new Set());
   const { isUnconfigured: aiUnconfigured } = useAiStatus();
+  const { inFlightApplicationIds, isRanking: isAnyRanking } = useAiRank();
+
+  const isApplicationRanking = (applicationId: string) =>
+    inFlightApplicationIds.includes(applicationId) ||
+    rankingApplicationId === applicationId;
 
   const statusOptions = [
     { label: "New", value: "New" },
@@ -344,7 +350,7 @@ export function UnifiedApplicationTable({
                       scoreReason={application.aiRankScoreReason}
                       requirements={application.aiRankRequirements}
                       onRank={onRank ? () => onRank(application.id) : undefined}
-                      isRanking={rankingApplicationId === application.id}
+                      isRanking={isApplicationRanking(application.id)}
                       disabledReason={
                         aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined
                       }
@@ -379,19 +385,20 @@ export function UnifiedApplicationTable({
                         size="sm"
                         onClick={() => onRank(application.id)}
                         disabled={
-                          rankingApplicationId === application.id ||
-                          aiUnconfigured
+                          isAnyRanking || aiUnconfigured
                         }
                         className="text-violet-600 hover:text-violet-800"
                         title={
                           aiUnconfigured
                             ? AI_UNCONFIGURED_MESSAGE
-                            : application.aiRankScore != null
-                              ? "Re-rank with AI"
-                              : "AI Rank"
+                            : isAnyRanking
+                              ? "AI ranking in progress"
+                              : application.aiRankScore != null
+                                ? "Re-rank with AI"
+                                : "AI Rank"
                         }
                       >
-                        {rankingApplicationId === application.id ? (
+                        {isApplicationRanking(application.id) ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Sparkles className="h-4 w-4" />

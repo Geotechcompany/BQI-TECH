@@ -9,7 +9,8 @@ import {
 import { Application, AiRankRequirement } from "@/types/application";
 import { getPositionDisplay, getCvUrl } from "./utils/table-utils";
 import { APPLICATION_STATUS_OPTIONS, getStatusColor } from "./application-status";
-import { AiRankInlineProgress, type AiRankProgressState } from "./AiRankProgress";
+import { AiRankInlineProgress } from "./AiRankProgress";
+import { useAiRank } from "@/contexts/AiRankContext";
 import { useEffect, useState } from "react";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
@@ -63,7 +64,6 @@ interface ViewApplicationModalProps {
   jobTitles?: Record<string, string>;
   onSave?: (updatedApplication: Application) => Promise<void> | void;
   onRank?: (applicationId: string) => Promise<void> | void;
-  rankProgress?: AiRankProgressState | null;
 }
 
 export function ViewApplicationModal({
@@ -73,13 +73,17 @@ export function ViewApplicationModal({
   jobTitles = {},
   onSave,
   onRank,
-  rankProgress = null,
 }: ViewApplicationModalProps) {
   const [status, setStatus] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { isUnconfigured: aiUnconfigured } = useAiStatus();
+  const { progress: rankProgress, isBackground, inFlightApplicationIds } = useAiRank();
 
-  const isRanking = Boolean(rankProgress?.isActive && rankProgress.mode === "single");
+  const isRanking = inFlightApplicationIds.includes(application?.id ?? "");
+  const showInlineRankProgress =
+    Boolean(rankProgress?.isActive) &&
+    isBackground &&
+    rankProgress?.applicationId === application?.id;
 
   useEffect(() => {
     if (application && isOpen) {
@@ -170,7 +174,9 @@ export function ViewApplicationModal({
 
             {(application.aiRankScore != null || onRank) && (
               <div className="p-4 sm:p-5 bg-gradient-to-br from-violet-50 to-blue-50 border border-violet-100 rounded-lg sm:rounded-xl shadow-sm space-y-4">
-                <AiRankInlineProgress progress={rankProgress} />
+                {showInlineRankProgress && (
+                  <AiRankInlineProgress progress={rankProgress} />
+                )}
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="flex-1">
                     <h4 className="text-sm sm:text-base font-semibold text-gray-700 flex items-center gap-2 mb-2">

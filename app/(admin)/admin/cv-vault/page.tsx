@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useRef, useCallback } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout"
@@ -8,12 +8,8 @@ import { useAuth } from "@/contexts/AuthContext"
 import { authService } from "@/lib/auth-backend"
 import { CVCell } from "@/components/admin/CVCell"
 import { AiRankScoreCell } from "@/components/admin/AiRankCell"
-import {
-  AiRankProgressOverlay,
-  type AiRankProgressState,
-  cycleAiRankPhase,
-} from "@/components/admin/AiRankProgress"
 import { adminApplicationsApi } from "@/components/admin/utils/applications-api"
+import { useAiRank } from "@/contexts/AiRankContext"
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -230,12 +226,10 @@ export default function CvVaultPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [extractPdf, setExtractPdf] = useState(true)
-  const [aiRankProgress, setAiRankProgress] = useState<AiRankProgressState | null>(null)
-  const [rankingApplicationId, setRankingApplicationId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const aiRankInFlightRef = useRef(false)
   const queryClient = useQueryClient()
   const { isUnconfigured: aiUnconfigured } = useAiStatus()
+  const { rankApplication, inFlightApplicationIds, isRanking: isAnyRanking } = useAiRank()
 
   const filterParams = useMemo(
     () => ({
@@ -369,56 +363,22 @@ export default function CvVaultPage() {
 
   const handleRankApplication = useCallback(
     async (applicationId: string, candidateName?: string) => {
-      if (aiRankInFlightRef.current) {
-        toast.error("AI ranking is already in progress")
-        return
-      }
       if (aiUnconfigured) {
         toast.error(AI_UNCONFIGURED_MESSAGE)
         return
       }
 
-      aiRankInFlightRef.current = true
-      setRankingApplicationId(applicationId)
-
-      setAiRankProgress({
-        isActive: true,
-        current: 0,
-        total: 1,
-        phase: "extracting",
-        mode: "single",
-        applicationId,
-        candidateName,
-      })
-
-      const phaseInterval = window.setInterval(() => {
-        setAiRankProgress((current) =>
-          current?.isActive
-            ? { ...current, phase: cycleAiRankPhase(current.phase) }
-            : current
-        )
-      }, 1600)
-
       try {
-        const result = await adminApplicationsApi.rankApplications({
-          ids: [applicationId],
+        await rankApplication(applicationId, {
+          candidateName,
+          mode: "single",
         })
-        if (result.errors?.length) {
-          toast.error(result.errors[0]?.error || "AI ranking failed")
-        } else {
-          toast.success("AI ranking complete")
-          queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
-        }
+        queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "AI ranking failed")
-      } finally {
-        window.clearInterval(phaseInterval)
-        setAiRankProgress(null)
-        setRankingApplicationId(null)
-        aiRankInFlightRef.current = false
       }
     },
-    [aiUnconfigured, queryClient]
+    [aiUnconfigured, queryClient, rankApplication]
   )
 
   const resetFilters = () => {
@@ -811,7 +771,7 @@ export default function CvVaultPage() {
                                   entry.name
                                 )
                               }
-                              isRanking={rankingApplicationId === entry.applicationId}
+                              isRanking={inFlightApplicationIds.includes(entry.applicationId)}
                               disabledReason={
                                 aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined
                               }
@@ -842,18 +802,19 @@ export default function CvVaultPage() {
                                   )
                                 }
                                 disabled={
-                                  rankingApplicationId === entry.applicationId ||
-                                  aiUnconfigured
+                                  isAnyRanking || aiUnconfigured
                                 }
                                 title={
                                   aiUnconfigured
                                     ? AI_UNCONFIGURED_MESSAGE
-                                    : entry.aiRankScore != null
-                                      ? "Re-rank with AI"
-                                      : "AI Rank"
+                                    : isAnyRanking
+                                      ? "AI ranking in progress"
+                                      : entry.aiRankScore != null
+                                        ? "Re-rank with AI"
+                                        : "AI Rank"
                                 }
                               >
-                                {rankingApplicationId === entry.applicationId ? (
+                                {inFlightApplicationIds.includes(entry.applicationId) ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                   <Sparkles className="h-4 w-4" />
@@ -933,7 +894,6 @@ export default function CvVaultPage() {
           />
         )}
       </div>
-      <AiRankProgressOverlay progress={aiRankProgress} />
     </AdminPageLayout>
   )
 }

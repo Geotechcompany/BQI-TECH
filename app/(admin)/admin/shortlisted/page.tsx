@@ -10,7 +10,6 @@ import { Pagination } from "@/components/Pagination";
 import { useAdminApplicationPage } from "@/hooks/useAdminApplicationPage";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { AiRankProgressOverlay } from "@/components/admin/AiRankProgress";
 import { FailedStatusState } from "@/components/ui/failed-status-state";
 
 export default function ShortlistedPage() {
@@ -42,7 +41,6 @@ export default function ShortlistedPage() {
     handleSaveEdit,
     handleSaveFromView,
     handleRankApplication,
-    aiRankProgress,
     rankingApplicationId,
     handleConfirmDelete,
     handleBulkStatusUpdate,
@@ -139,7 +137,6 @@ export default function ShortlistedPage() {
         jobTitles={jobTitles}
         onSave={handleSaveFromView}
         onRank={handleRankApplication}
-        rankProgress={aiRankProgress}
       />
       
       <EditApplicationModal
@@ -156,8 +153,6 @@ export default function ShortlistedPage() {
         onClose={() => setDeleteApplicationId(null)}
         onConfirm={handleConfirmDelete}
       />
-
-      <AiRankProgressOverlay progress={aiRankProgress} />
     </AdminPageLayout>
   );
 }

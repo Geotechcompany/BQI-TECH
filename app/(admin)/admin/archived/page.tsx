@@ -41,7 +41,6 @@ export default function ArchivedApplicationsPage() {
     handleSaveEdit,
     handleSaveFromView,
     handleRankApplication,
-    aiRankProgress,
     rankingApplicationId,
     handleConfirmDelete,
     handleBulkUnarchive,
@@ -133,7 +132,6 @@ export default function ArchivedApplicationsPage() {
         jobTitles={jobTitles}
         onSave={handleSaveFromView}
         onRank={handleRankApplication}
-        rankProgress={aiRankProgress}
       />
 
       <EditApplicationModal

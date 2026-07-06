@@ -3094,6 +3094,33 @@ async def ai_rank_applications(
                 detail=f"AI-ranked {len(results)} application(s)",
             )
 
+            if len(results) == 1:
+                app = await db.applications.find_one({"_id": ObjectId(str(results[0]["id"]))})
+                applicant = applicant_display_name(app) if app else "Candidate"
+                await create_system_admin_notification(
+                    db,
+                    title="AI ranking complete",
+                    message=f"AI ranking complete for {applicant}",
+                    notification_type="success",
+                    category="ai_rank",
+                    link=application_admin_link(str(results[0]["id"])),
+                    metadata={
+                        "applicationId": str(results[0]["id"]),
+                        "aiRankScore": results[0].get("aiRankScore"),
+                        "category": "ai_rank",
+                    },
+                )
+            elif len(results) > 1:
+                await create_system_admin_notification(
+                    db,
+                    title="AI ranking complete",
+                    message=f"AI ranking complete for {len(results)} candidates",
+                    notification_type="success",
+                    category="ai_rank",
+                    link="/admin/applications",
+                    metadata={"rankedCount": len(results), "category": "ai_rank"},
+                )
+
         return {
             "ranked": len(results),
             "results": results,

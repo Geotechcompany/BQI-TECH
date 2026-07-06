@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Download, FileText, Sheet, Archive, Sparkles, Loader2, SlidersHorizontal, ArrowUp, ArrowDown, RotateCcw } from "lucide-react";
-import { AiRankProgressOverlay } from "@/components/admin/AiRankProgress";
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
 import {
   AlertDialog,
@@ -88,7 +87,6 @@ export default function ApplicationsPage() {
     handleSaveFromView,
     handleRankApplication,
     handleRankApplications,
-    aiRankProgress,
     rankingApplicationId,
     isAiRanking,
     handleConfirmDelete,
@@ -413,10 +411,7 @@ export default function ApplicationsPage() {
         jobTitles={jobTitles}
         onSave={handleSaveFromView}
         onRank={handleRankApplication}
-        rankProgress={aiRankProgress}
       />
-
-      <AiRankProgressOverlay progress={aiRankProgress} />
       
       <EditApplicationModal
         application={editApplication}
