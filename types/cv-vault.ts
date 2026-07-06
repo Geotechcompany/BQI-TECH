@@ -82,3 +82,22 @@ export interface CvVaultFilterOptions {
   sorts: Array<{ value: CvVaultSort; label: string }>
   applicationStatuses: string[]
 }
+
+export interface CvVaultApplicationSuggestion {
+  id: string
+  name: string
+  email: string
+  position: string
+  status: string
+  appliedDate?: string | null
+  hasCvUrl?: boolean
+}
+
+export interface LinkCvVaultRequest {
+  vaultId: string
+  applicationId: string
+}
+
+export interface LinkCvVaultResponse {
+  item: CvVaultEntry
+}

@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { useAiRank } from "@/contexts/AiRankContext";
 
-export type AiRankPhase = "extracting" | "analyzing" | "scoring" | "saving";
+export type AiRankPhase = "extracting" | "analyzing" | "scoring" | "saving" | "complete";
 
 export interface AiRankProgressState {
   isActive: boolean;
@@ -31,6 +31,7 @@ export interface AiRankProgressState {
 
 const LLM_PROGRESS_CAP = 92;
 const SAVING_PROGRESS = 97;
+const COMPLETE_PROGRESS = 100;
 const LONG_WAIT_MS = 3000;
 
 const PHASES: Array<{
@@ -73,15 +74,19 @@ function useMounted() {
 
 const LLM_PHASES: AiRankPhase[] = ["extracting", "analyzing", "scoring"];
 
-function progressPercent(progress: AiRankProgressState, now = Date.now()): number {
-  if (progress.total <= 0) return 0;
+/** Shared percent for overlay, pill, and header — never 100% until `complete`. */
+export function computeProgressPercent(
+  progress: AiRankProgressState,
+  now = Date.now()
+): number {
+  if (!progress.isActive || progress.total <= 0) return 0;
+
+  if (progress.phase === "complete") {
+    return COMPLETE_PROGRESS;
+  }
 
   if (progress.phase === "saving") {
-    const completed = ((progress.current + 1) / progress.total) * 100;
-    if (progress.total === 1) {
-      return Math.max(SAVING_PROGRESS, Math.round(completed));
-    }
-    return Math.min(100, Math.round(completed));
+    return SAVING_PROGRESS;
   }
 
   const phaseIndex = Math.max(0, LLM_PHASES.indexOf(progress.phase));
@@ -97,21 +102,42 @@ function progressPercent(progress: AiRankProgressState, now = Date.now()): numbe
   return Math.min(LLM_PROGRESS_CAP, Math.round(base + timeBonus));
 }
 
-function useMonotonicPercent(progress: AiRankProgressState): number {
-  const [display, setDisplay] = useState(() => progressPercent(progress));
+function progressPercentCap(phase: AiRankPhase): number {
+  if (phase === "complete") return COMPLETE_PROGRESS;
+  if (phase === "saving") return SAVING_PROGRESS;
+  return LLM_PROGRESS_CAP;
+}
+
+function progressSessionKey(progress: AiRankProgressState): string {
+  return `${progress.total}:${progress.applicationId ?? ""}:${progress.candidateStartedAt ?? ""}`;
+}
+
+function useMonotonicProgress(progress: AiRankProgressState): number {
+  const [display, setDisplay] = useState(() => computeProgressPercent(progress));
   const peakRef = useRef(0);
-  const sessionTotalRef = useRef(progress.total);
+  const sessionKeyRef = useRef("");
 
   useEffect(() => {
-    if (sessionTotalRef.current !== progress.total) {
-      sessionTotalRef.current = progress.total;
+    if (!progress.isActive) {
+      sessionKeyRef.current = "";
+      peakRef.current = 0;
+      setDisplay(0);
+      return;
+    }
+
+    const sessionKey = progressSessionKey(progress);
+    if (sessionKeyRef.current !== sessionKey) {
+      sessionKeyRef.current = sessionKey;
       peakRef.current = 0;
     }
-    const raw = progressPercent(progress);
-    const next = Math.max(peakRef.current, raw);
+
+    const cap = progressPercentCap(progress.phase);
+    const raw = Math.min(computeProgressPercent(progress), cap);
+    const next = Math.min(Math.max(peakRef.current, raw), cap);
     peakRef.current = next;
     setDisplay(next);
   }, [
+    progress.isActive,
     progress.current,
     progress.total,
     progress.phase,
@@ -120,10 +146,13 @@ function useMonotonicPercent(progress: AiRankProgressState): number {
   ]);
 
   useEffect(() => {
-    if (!progress.isActive || progress.phase === "saving") return;
+    if (!progress.isActive || progress.phase === "saving" || progress.phase === "complete") {
+      return;
+    }
     const id = window.setInterval(() => {
-      const raw = progressPercent(progress);
-      const next = Math.max(peakRef.current, raw);
+      const cap = progressPercentCap(progress.phase);
+      const raw = Math.min(computeProgressPercent(progress), cap);
+      const next = Math.min(Math.max(peakRef.current, raw), cap);
       peakRef.current = next;
       setDisplay(next);
     }, 1000);
@@ -144,7 +173,11 @@ function useLongWait(progress: AiRankProgressState): boolean {
   const [isLongWait, setIsLongWait] = useState(false);
 
   useEffect(() => {
-    if (!progress.candidateStartedAt || progress.phase === "saving") {
+    if (
+      !progress.candidateStartedAt ||
+      progress.phase === "saving" ||
+      progress.phase === "complete"
+    ) {
       setIsLongWait(false);
       return;
     }
@@ -161,6 +194,9 @@ function useLongWait(progress: AiRankProgressState): boolean {
 }
 
 function phaseDisplayLabel(progress: AiRankProgressState, isLongWait: boolean): string {
+  if (progress.phase === "complete") {
+    return "Complete";
+  }
   if (progress.phase === "scoring" && isLongWait) {
     return "Scoring with AI…";
   }
@@ -175,12 +211,16 @@ function ProgressCore({
   progress: AiRankProgressState;
   compact?: boolean;
 }) {
-  const percent = useMonotonicPercent(progress);
+  const percent = useMonotonicProgress(progress);
   const isLongWait = useLongWait(progress);
+  const isComplete = progress.phase === "complete";
   const activePhaseIndex = PHASES.findIndex((p) => p.id === progress.phase);
-  const ActiveIcon = PHASES[activePhaseIndex]?.icon ?? Sparkles;
+  const ActiveIcon = isComplete
+    ? CheckCircle2
+    : (PHASES[activePhaseIndex]?.icon ?? Sparkles);
   const label = phaseDisplayLabel(progress, isLongWait);
-  const showWorkingPulse = isLongWait && progress.phase !== "saving";
+  const showWorkingPulse =
+    isLongWait && progress.phase !== "saving" && progress.phase !== "complete";
 
   return (
     <div className={compact ? "space-y-3" : "space-y-5"}>
@@ -326,7 +366,7 @@ function AiRankFloatingPill({
   progress: AiRankProgressState;
   onExpand: () => void;
 }) {
-  const percent = useMonotonicPercent(progress);
+  const percent = useMonotonicProgress(progress);
   const isLongWait = useLongWait(progress);
   const phaseLabel = phaseDisplayLabel(progress, isLongWait);
 
@@ -494,37 +534,48 @@ export function AiRankInlineProgress({
 
 export function AiRankHeaderIndicator() {
   const { progress, isBackground, isRanking, expandOverlay } = useAiRank();
-  const fallback: AiRankProgressState = {
-    isActive: false,
-    current: 0,
-    total: 1,
-    phase: "extracting",
-    mode: "single",
-  };
-  const percent = useMonotonicPercent(progress ?? fallback);
-  const isLongWait = useLongWait(progress ?? fallback);
 
   if (!isRanking || !isBackground || !progress) return null;
 
+  return (
+    <AiRankHeaderIndicatorContent progress={progress} onExpand={expandOverlay} />
+  );
+}
+
+function AiRankHeaderIndicatorContent({
+  progress,
+  onExpand,
+}: {
+  progress: AiRankProgressState;
+  onExpand: () => void;
+}) {
+  const percent = useMonotonicProgress(progress);
+  const isLongWait = useLongWait(progress);
+  const isComplete = progress.phase === "complete";
   const phaseLabel = phaseDisplayLabel(progress, isLongWait);
 
   return (
     <button
       type="button"
-      onClick={expandOverlay}
+      onClick={onExpand}
       className="inline-flex items-center gap-2 rounded-xl border border-violet-200/70 bg-violet-50/80 px-2.5 py-1.5 text-xs font-medium text-violet-800 transition hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
     >
-      <span className="relative flex h-2 w-2">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-500 opacity-60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" />
-      </span>
-      {phaseLabel} {percent}%
+      {isComplete ? (
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+      ) : (
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-500 opacity-60" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" />
+        </span>
+      )}
+      {phaseLabel}
+      {!isComplete ? ` ${percent}%` : null}
     </button>
   );
 }
 
 export function cycleAiRankPhase(phase: AiRankPhase): AiRankPhase {
-  if (phase === "saving") return "saving";
+  if (phase === "saving" || phase === "complete") return phase;
   const index = LLM_PHASES.indexOf(phase);
   if (index < 0) return "extracting";
   if (index >= LLM_PHASES.length - 1) return "scoring";

@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Any, Dict, Optional
+from pydantic import BaseModel, Field
 import logging
 
 from app.auth import get_current_admin_user
@@ -11,7 +12,9 @@ from app.lib.cv_vault import (
     CV_VAULT_COLLECTION,
     VALID_SORTS,
     get_cv_vault_filter_options,
+    link_cv_vault_entry,
     list_cv_vault_from_db,
+    suggest_applications_for_vault,
     sync_cv_vault_from_dropbox,
 )
 import dropbox
@@ -19,6 +22,13 @@ import dropbox
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/cv-vault", tags=["cv-vault"])
+
+
+class LinkVaultRequest(BaseModel):
+    vault_id: str = Field(..., alias="vaultId")
+    application_id: str = Field(..., alias="applicationId")
+
+    model_config = {"populate_by_name": True}
 
 
 async def get_dropbox_client():
@@ -155,3 +165,39 @@ async def sync_cv_vault(
         skip=skip,
         limit=limit,
     )
+
+
+@router.put("/link")
+async def link_cv_vault(
+    body: LinkVaultRequest,
+    current_admin: dict = Depends(get_current_admin_user),
+) -> Dict[str, Any]:
+    """Link a CV vault row to an existing application."""
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        entry = await link_cv_vault_entry(db, body.vault_id, body.application_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("CV vault link failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to link application")
+
+    return {"item": entry}
+
+
+@router.get("/{vault_id:path}/suggestions")
+async def cv_vault_suggestions(
+    vault_id: str,
+    current_admin: dict = Depends(get_current_admin_user),
+    limit: int = Query(10, ge=1, le=25),
+) -> Dict[str, Any]:
+    """Suggest applications that may match an unlinked CV vault row."""
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    suggestions = await suggest_applications_for_vault(db, vault_id, limit=limit)
+    return {"suggestions": suggestions}

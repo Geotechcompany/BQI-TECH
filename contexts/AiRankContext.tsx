@@ -56,6 +56,7 @@ const AiRankContext = createContext<AiRankContextValue | null>(null);
 
 const LLM_PHASE_INTERVAL_MS = 2200;
 const SAVE_FLASH_MS = 450;
+const COMPLETE_FLASH_MS = 500;
 
 export function AiRankProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -238,6 +239,14 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
           results: allResults,
         };
 
+        setProgress((current) =>
+          current?.isActive ? { ...current, phase: "complete" } : current
+        );
+        await new Promise((resolve) => window.setTimeout(resolve, COMPLETE_FLASH_MS));
+
+        sessionActiveRef.current = false;
+        setProgress(null);
+        setIsBackground(false);
         notifyComplete(rankedCount, errors, completedNames);
         options?.onComplete?.(payload);
         return payload;

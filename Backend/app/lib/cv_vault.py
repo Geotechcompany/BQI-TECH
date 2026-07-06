@@ -391,7 +391,7 @@ def _quality_fields(entry: Dict[str, Any], synced_at: datetime) -> Dict[str, Any
 def entry_to_db_doc(entry: Dict[str, Any], synced_at: datetime) -> Dict[str, Any]:
     """Map API entry shape to MongoDB document."""
     quality = _quality_fields(entry, synced_at)
-    return {
+    doc = {
         "vaultId": entry["id"],
         "name": entry.get("name") or "Unknown",
         "email": entry.get("email") or "",
@@ -412,6 +412,9 @@ def entry_to_db_doc(entry: Dict[str, Any], synced_at: datetime) -> Dict[str, Any
         "updatedAt": synced_at,
         **quality,
     }
+    if entry.get("linkSource"):
+        doc["linkSource"] = entry["linkSource"]
+    return doc
 
 
 VALID_SORTS = {
@@ -801,16 +804,96 @@ async def build_cv_vault_entries(
     )
 
 
+async def _load_manual_vault_links(db) -> Dict[str, Dict[str, Any]]:
+    """Vault rows linked manually in admin (survive Dropbox resync)."""
+    collection = db[CV_VAULT_COLLECTION]
+    manual: Dict[str, Dict[str, Any]] = {}
+    cursor = collection.find(
+        {
+            "linkSource": "manual",
+            "applicationId": {"$exists": True, "$nin": [None, ""]},
+        },
+        {"vaultId": 1, "applicationId": 1},
+    )
+    async for doc in cursor:
+        vault_id = doc.get("vaultId")
+        app_id = doc.get("applicationId")
+        if vault_id and app_id:
+            manual[vault_id] = {"applicationId": app_id}
+    return manual
+
+
+async def _apply_manual_link_to_entry(
+    db, entry: Dict[str, Any], application_id: str
+) -> None:
+    """Overlay application metadata on a vault entry after manual link."""
+    from bson import ObjectId
+
+    try:
+        app = await db.applications.find_one(
+            {"_id": ObjectId(application_id)},
+            {
+                "status": 1,
+                "appliedDate": 1,
+                "aiRankScore": 1,
+                "aiRankRecommendation": 1,
+                "answers": 1,
+                "name": 1,
+                "email": 1,
+                "user": 1,
+            },
+        )
+    except Exception:
+        app = None
+    if not app:
+        entry["applicationId"] = application_id
+        entry["linkSource"] = "manual"
+        return
+
+    user = app.get("user") or {}
+    app_name = (
+        extract_name_from_answers(app.get("answers") or [])
+        or app.get("name")
+        or (user.get("name") if isinstance(user, dict) else "")
+        or ""
+    )
+    app_email = (
+        extract_email_from_answers(app.get("answers") or [])
+        or app.get("email")
+        or (user.get("email") if isinstance(user, dict) else "")
+        or ""
+    )
+
+    entry["applicationId"] = application_id
+    entry["linkSource"] = "manual"
+    entry["applicationStatus"] = app.get("status", "")
+    entry["appliedDate"] = app.get("appliedDate")
+    entry["aiRankScore"] = app.get("aiRankScore")
+    entry["aiRankRecommendation"] = app.get("aiRankRecommendation")
+
+    if app_name and _is_missing_name(entry.get("name", "")):
+        entry["name"] = app_name
+        entry["nameSource"] = CONTACT_SOURCE_APPLICATION
+    if app_email and not (entry.get("email") or "").strip():
+        entry["email"] = app_email
+        entry["emailSource"] = CONTACT_SOURCE_APPLICATION
+
+
 async def persist_cv_vault_entries(db, entries: List[Dict[str, Any]]) -> Dict[str, int]:
     """Upsert CV vault entries into MongoDB; remove stale records."""
     collection = db[CV_VAULT_COLLECTION]
     now = datetime.utcnow()
     vault_ids: List[str] = []
+    manual_links = await _load_manual_vault_links(db)
 
     for entry in entries:
         vault_id = entry.get("id")
         if not vault_id:
             continue
+        if not entry.get("applicationId") and vault_id in manual_links:
+            await _apply_manual_link_to_entry(
+                db, entry, manual_links[vault_id]["applicationId"]
+            )
         vault_ids.append(vault_id)
         doc = entry_to_db_doc(entry, now)
         await collection.update_one(
@@ -998,6 +1081,138 @@ async def sync_cv_vault_from_dropbox(
     payload["cached"] = False
     payload["sync"] = sync_result
     return payload
+
+
+async def link_cv_vault_entry(
+    db,
+    vault_id: str,
+    application_id: str,
+) -> Dict[str, Any]:
+    """Link a cached CV vault row to an existing application."""
+    from bson import ObjectId
+
+    if not vault_id or not application_id:
+        raise ValueError("vaultId and applicationId are required")
+
+    collection = db[CV_VAULT_COLLECTION]
+    vault_doc = await collection.find_one({"vaultId": vault_id})
+    if not vault_doc:
+        raise ValueError("CV vault entry not found")
+
+    try:
+        app_oid = ObjectId(application_id)
+    except Exception:
+        raise ValueError("Invalid application ID")
+
+    app = await db.applications.find_one({"_id": app_oid})
+    if not app:
+        raise ValueError("Application not found")
+
+    cv_url = (vault_doc.get("cvUrl") or "").strip()
+    app_cv = get_cv_url_from_application(app)
+    now = datetime.utcnow()
+
+    if cv_url and not app_cv:
+        await db.applications.update_one(
+            {"_id": app_oid},
+            {"$set": {"cvUrl": cv_url, "updatedAt": now}},
+        )
+
+    entry = db_doc_to_entry(vault_doc)
+    await _apply_manual_link_to_entry(db, entry, application_id)
+
+    doc = entry_to_db_doc(entry, now)
+    doc["linkSource"] = "manual"
+    doc["updatedAt"] = now
+    await collection.update_one({"vaultId": vault_id}, {"$set": doc})
+
+    updated = await collection.find_one({"vaultId": vault_id})
+    item = db_doc_to_entry(updated)
+    items = await _enrich_vault_items_with_application_data(db, [item])
+    return items[0]
+
+
+async def suggest_applications_for_vault(
+    db,
+    vault_id: str,
+    *,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """Suggest applications that may match an unlinked vault row."""
+    collection = db[CV_VAULT_COLLECTION]
+    vault_doc = await collection.find_one({"vaultId": vault_id})
+    if not vault_doc:
+        return []
+
+    email = (vault_doc.get("email") or "").strip().lower()
+    name = (vault_doc.get("name") or "").strip()
+    file_name = (vault_doc.get("fileName") or "").strip()
+
+    clauses: List[Dict[str, Any]] = []
+    if email and "@" in email:
+        clauses.append({"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
+        clauses.append({"user.email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}})
+    if name and name.lower() not in ("unknown", "incomplete application"):
+        pattern = re.escape(name)
+        clauses.append({"name": {"$regex": pattern, "$options": "i"}})
+        clauses.append({"user.name": {"$regex": pattern, "$options": "i"}})
+    if file_name:
+        stem = os.path.splitext(file_name)[0]
+        parsed = parse_name_from_filename(file_name)
+        if parsed:
+            pattern = re.escape(parsed)
+            clauses.append({"name": {"$regex": pattern, "$options": "i"}})
+        if stem and len(stem) >= 4:
+            clauses.append(
+                {"cvUrl": {"$regex": re.escape(stem), "$options": "i"}}
+            )
+
+    if not clauses:
+        return []
+
+    match_query = {"$or": clauses}
+    safe_limit = max(1, min(limit, 25))
+    cursor = db.applications.find(
+        match_query,
+        {
+            "name": 1,
+            "email": 1,
+            "status": 1,
+            "position": 1,
+            "appliedDate": 1,
+            "cvUrl": 1,
+            "answers": 1,
+            "user": 1,
+        },
+    ).sort("appliedDate", -1).limit(safe_limit)
+
+    results: List[Dict[str, Any]] = []
+    async for doc in cursor:
+        user = doc.get("user") or {}
+        display_name = (
+            doc.get("name")
+            or extract_name_from_answers(doc.get("answers") or [])
+            or (user.get("name") if isinstance(user, dict) else "")
+            or "Unknown"
+        )
+        display_email = (
+            doc.get("email")
+            or extract_email_from_answers(doc.get("answers") or [])
+            or (user.get("email") if isinstance(user, dict) else "")
+            or ""
+        )
+        results.append(
+            {
+                "id": str(doc["_id"]),
+                "name": display_name,
+                "email": display_email,
+                "position": doc.get("position") or "",
+                "status": doc.get("status") or "",
+                "appliedDate": _serialize_date(doc.get("appliedDate")),
+                "hasCvUrl": bool(get_cv_url_from_application(doc)),
+            }
+        )
+    return results
 
 
 async def get_cv_vault_filter_options(db) -> Dict[str, Any]:

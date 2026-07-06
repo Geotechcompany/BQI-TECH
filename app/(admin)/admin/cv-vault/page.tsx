@@ -30,6 +30,7 @@ import {
 import {
   ExternalLink,
   FileArchive,
+  Link2,
   Loader2,
   Mail,
   RefreshCw,
@@ -40,8 +41,10 @@ import {
   CvVaultFilters,
   type TriFilter,
 } from "@/components/admin/cv-vault/CvVaultFilters"
+import { LinkApplicationDialog } from "@/components/admin/cv-vault/LinkApplicationDialog"
 import type {
   CvVaultFilterOptions,
+  CvVaultEntry,
   CvVaultListParams,
   CvVaultResponse,
   CvVaultSort,
@@ -227,6 +230,8 @@ export default function CvVaultPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [extractPdf, setExtractPdf] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [linkEntry, setLinkEntry] = useState<CvVaultEntry | null>(null)
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const queryClient = useQueryClient()
   const { isUnconfigured: aiUnconfigured } = useAiStatus()
   const { rankApplication, inFlightApplicationIds, isRanking: isAnyRanking } = useAiRank()
@@ -454,6 +459,19 @@ export default function CvVaultPage() {
     bulkStatusMutation.mutate({ ids: eligibleApplicationIds, status })
   }
 
+  const openLinkDialog = (entry: CvVaultEntry) => {
+    setLinkEntry(entry)
+    setLinkDialogOpen(true)
+  }
+
+  const unlinkedSelectedEntries = selectedEntries.filter((entry) => !entry.applicationId)
+  const canBulkLink = unlinkedSelectedEntries.length === 1
+
+  const handleLinked = () => {
+    queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
+    setSelectedIds(new Set())
+  }
+
   const formatDate = (value?: string | null) => {
     if (!value) return "—"
     try {
@@ -595,6 +613,16 @@ export default function CvVaultPage() {
                   <span className="text-xs text-amber-600 dark:text-amber-500">
                     {unlinkedSelectedCount} selected have no linked application
                   </span>
+                )}
+                {canBulkLink && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openLinkDialog(unlinkedSelectedEntries[0])}
+                  >
+                    <Link2 className="h-4 w-4 mr-2" />
+                    Link application
+                  </Button>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -752,12 +780,16 @@ export default function CvVaultPage() {
                                 ))}
                               </SelectContent>
                             </Select>
-                          ) : entry.applicationStatus ? (
-                            <Badge variant="outline">
-                              {entry.applicationStatus}
-                            </Badge>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => openLinkDialog(entry)}
+                            >
+                              <Link2 className="h-3.5 w-3.5 mr-1" />
+                              Link
+                            </Button>
                           )}
                         </td>
                         <td className="p-3 hidden lg:table-cell align-top">
@@ -894,6 +926,13 @@ export default function CvVaultPage() {
           />
         )}
       </div>
+
+      <LinkApplicationDialog
+        entry={linkEntry}
+        open={linkDialogOpen}
+        onOpenChange={setLinkDialogOpen}
+        onLinked={handleLinked}
+      />
     </AdminPageLayout>
   )
 }
