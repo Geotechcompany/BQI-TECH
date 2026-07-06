@@ -77,7 +77,11 @@ function progressPercent(progress: AiRankProgressState, now = Date.now()): numbe
   if (progress.total <= 0) return 0;
 
   if (progress.phase === "saving") {
-    return SAVING_PROGRESS;
+    const completed = ((progress.current + 1) / progress.total) * 100;
+    if (progress.total === 1) {
+      return Math.max(SAVING_PROGRESS, Math.round(completed));
+    }
+    return Math.min(100, Math.round(completed));
   }
 
   const phaseIndex = Math.max(0, LLM_PHASES.indexOf(progress.phase));
