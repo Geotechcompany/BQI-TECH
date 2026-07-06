@@ -24,12 +24,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   ExternalLink,
   FileArchive,
   Loader2,
   Mail,
   RefreshCw,
+  Settings,
   Sparkles,
 } from "lucide-react"
 import {
@@ -45,6 +53,7 @@ import type {
 import { format, formatDistanceToNow } from "date-fns"
 import { BACKEND_URL } from "@/lib/config"
 import { toast } from "sonner"
+import { Pagination } from "@/components/Pagination"
 
 const baseUrl = () =>
   (BACKEND_URL || process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000").replace(
@@ -53,6 +62,28 @@ const baseUrl = () =>
   )
 
 const DEFAULT_SORT: CvVaultSort = "complete_first"
+const DEFAULT_PAGE_SIZE = 25
+const PAGE_SIZE_OPTIONS = [25, 50] as const
+
+const CONTACT_SOURCE_LABELS: Record<string, string> = {
+  application: "Application",
+  filename: "Filename",
+  cv_text: "CV text",
+}
+
+function contactSourceBadge(source?: string | null) {
+  if (!source || source === "application") return null
+  const label = CONTACT_SOURCE_LABELS[source] ?? source
+  return (
+    <Badge
+      variant="outline"
+      className="text-[10px] px-1.5 py-0 text-blue-600 border-blue-500/30 shrink-0"
+      title={`Auto-extracted from ${label.toLowerCase()}`}
+    >
+      auto
+    </Badge>
+  )
+}
 
 const STATUS_OPTIONS = [
   "New",
@@ -98,6 +129,8 @@ function buildQueryParams(params: CvVaultListParams): string {
   }
   if (params.date_from) qs.set("date_from", params.date_from)
   if (params.date_to) qs.set("date_to", params.date_to)
+  if (params.skip != null && params.skip > 0) qs.set("skip", String(params.skip))
+  if (params.limit != null) qs.set("limit", String(params.limit))
   return qs.toString()
 }
 
@@ -194,14 +227,17 @@ export default function CvVaultPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
-  const [extractPdf, setExtractPdf] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const [extractPdf, setExtractPdf] = useState(true)
   const [aiRankProgress, setAiRankProgress] = useState<AiRankProgressState | null>(null)
   const [rankingApplicationId, setRankingApplicationId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const aiRankInFlightRef = useRef(false)
   const queryClient = useQueryClient()
   const { isUnconfigured: aiUnconfigured } = useAiStatus()
 
-  const listParams: CvVaultListParams = useMemo(
+  const filterParams = useMemo(
     () => ({
       search: debouncedSearch,
       sort,
@@ -226,6 +262,15 @@ export default function CvVaultPage() {
       dateFrom,
       dateTo,
     ]
+  )
+
+  const listParams: CvVaultListParams = useMemo(
+    () => ({
+      ...filterParams,
+      skip: (currentPage - 1) * pageSize,
+      limit: pageSize,
+    }),
+    [filterParams, currentPage, pageSize]
   )
 
   const activeFilterCount = [
@@ -254,6 +299,10 @@ export default function CvVaultPage() {
     return () => clearTimeout(t)
   }, [search])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterParams, pageSize])
+
   const { data: filterOptions } = useQuery({
     queryKey: ["cv-vault-filters"],
     queryFn: fetchFilterOptions,
@@ -272,9 +321,14 @@ export default function CvVaultPage() {
     mutationFn: () => syncCvVault(listParams, extractPdf),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
-      toast.success(
-        `Synced ${result.sync?.upserted ?? result.total} CV(s) from Dropbox`
-      )
+      const upserted = result.sync?.upserted ?? result.total
+      const extractedNames = result.sync?.extractedNames ?? 0
+      const extractedEmails = result.sync?.extractedEmails ?? 0
+      const extractedNote =
+        extractedNames || extractedEmails
+          ? ` · ${extractedNames} name(s), ${extractedEmails} email(s) from CV text`
+          : ""
+      toast.success(`Synced ${upserted} CV(s) from Dropbox${extractedNote}`)
     },
     onError: (err: Error) => {
       toast.error(err.message || "Failed to sync CV vault")
@@ -293,6 +347,20 @@ export default function CvVaultPage() {
       queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
       queryClient.invalidateQueries({ queryKey: ["admin-notifications"] })
       toast.success(`Status set to ${status}`)
+    },
+    onError: () => {
+      toast.error("Failed to update status")
+    },
+  })
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
+      adminApplicationsApi.bulkUpdateStatus({ ids, status }),
+    onSuccess: (_, { ids, status }) => {
+      queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
+      queryClient.invalidateQueries({ queryKey: ["admin-notifications"] })
+      toast.success(`Updated ${ids.length} application(s) to ${status}`)
+      setSelectedIds(new Set())
     },
     onError: () => {
       toast.error("Failed to update status")
@@ -365,10 +433,66 @@ export default function CvVaultPage() {
     setStatusFilter("all")
     setDateFrom("")
     setDateTo("")
+    setCurrentPage(1)
   }
 
   const items = data?.items ?? []
   const stats = data?.stats
+  const total = data?.total ?? 0
+  const totalPages = data?.totalPages ?? Math.max(1, Math.ceil(total / pageSize))
+  const rangeStart = total === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  const rangeEnd = total === 0 ? 0 : Math.min(currentPage * pageSize, total)
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+  }
+
+  const handlePageSizeChange = (value: string) => {
+    setPageSize(Number(value))
+    setCurrentPage(1)
+  }
+
+  useEffect(() => {
+    if (total > 0 && currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [total, currentPage, totalPages])
+
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [listParams])
+
+  const selectedEntries = items.filter((entry) => selectedIds.has(entry.id))
+  const eligibleApplicationIds = selectedEntries
+    .filter((entry) => entry.applicationId)
+    .map((entry) => entry.applicationId!)
+  const unlinkedSelectedCount = selectedEntries.length - eligibleApplicationIds.length
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === items.length && items.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(items.map((entry) => entry.id)))
+    }
+  }
+
+  const handleSelectRow = (id: string) => {
+    const next = new Set(selectedIds)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    setSelectedIds(next)
+  }
+
+  const handleBulkStatusUpdate = (status: string) => {
+    if (eligibleApplicationIds.length === 0) {
+      toast.error("No selected CVs have a linked application")
+      return
+    }
+    bulkStatusMutation.mutate({ ids: eligibleApplicationIds, status })
+  }
 
   const formatDate = (value?: string | null) => {
     if (!value) return "—"
@@ -431,9 +555,10 @@ export default function CvVaultPage() {
               variant={extractPdf ? "default" : "outline"}
               size="sm"
               onClick={() => setExtractPdf((v) => !v)}
+              title="Extract name and email from PDF text when missing"
             >
               <Sparkles className="h-4 w-4 mr-1" />
-              PDF extract {extractPdf ? "on" : "off"}
+              CV extract {extractPdf ? "on" : "off"}
             </Button>
             <Button
               variant="outline"
@@ -494,10 +619,63 @@ export default function CvVaultPage() {
           </div>
         ) : (
           <div className="rounded-xl border overflow-hidden bg-card">
+            {selectedIds.size > 0 && (
+              <div className="flex flex-wrap items-center gap-3 p-4 border-b bg-muted/50">
+                <span className="text-sm font-medium">
+                  {selectedIds.size} selected
+                  {eligibleApplicationIds.length > 0 &&
+                    eligibleApplicationIds.length < selectedIds.size && (
+                      <span className="text-muted-foreground font-normal">
+                        {" "}
+                        · {eligibleApplicationIds.length} with linked application
+                      </span>
+                    )}
+                </span>
+                {unlinkedSelectedCount > 0 && (
+                  <span className="text-xs text-amber-600 dark:text-amber-500">
+                    {unlinkedSelectedCount} selected have no linked application
+                  </span>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        eligibleApplicationIds.length === 0 ||
+                        bulkStatusMutation.isPending
+                      }
+                    >
+                      <Settings className="h-4 w-4 mr-2" />
+                      Bulk Update Status
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {STATUS_OPTIONS.map((status) => (
+                      <DropdownMenuItem
+                        key={status}
+                        onClick={() => handleBulkStatusUpdate(status)}
+                      >
+                        {status}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
+                    <th className="p-3 w-10">
+                      <Checkbox
+                        checked={
+                          items.length > 0 && selectedIds.size === items.length
+                        }
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all on page"
+                      />
+                    </th>
                     <th className="text-left p-3 font-medium">Name</th>
                     <th className="text-left p-3 font-medium">Email</th>
                     <th className="text-left p-3 font-medium hidden md:table-cell">
@@ -522,7 +700,7 @@ export default function CvVaultPage() {
                   {items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="p-8 text-center text-muted-foreground"
                       >
                         No CVs match your filters
@@ -542,9 +720,17 @@ export default function CvVaultPage() {
                         key={entry.id}
                         className="border-b last:border-0 hover:bg-muted/30 transition-colors"
                       >
+                        <td className="p-3">
+                          <Checkbox
+                            checked={selectedIds.has(entry.id)}
+                            onCheckedChange={() => handleSelectRow(entry.id)}
+                            aria-label={`Select ${entry.name}`}
+                          />
+                        </td>
                         <td className="p-3 font-medium">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {entry.name}
+                            {contactSourceBadge(entry.nameSource)}
                             {entry.name &&
                               entry.name !== "Unknown" &&
                               entry.email && (
@@ -559,15 +745,18 @@ export default function CvVaultPage() {
                         </td>
                         <td className="p-3">
                           {entry.email ? (
-                            <a
-                              href={`mailto:${entry.email}`}
-                              className="text-primary hover:underline inline-flex items-center gap-1"
-                            >
-                              <Mail className="h-3.5 w-3.5 shrink-0" />
-                              <span className="truncate max-w-[200px]">
-                                {entry.email}
-                              </span>
-                            </a>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <a
+                                href={`mailto:${entry.email}`}
+                                className="text-primary hover:underline inline-flex items-center gap-1"
+                              >
+                                <Mail className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate max-w-[200px]">
+                                  {entry.email}
+                                </span>
+                              </a>
+                              {contactSourceBadge(entry.emailSource)}
+                            </div>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -707,6 +896,41 @@ export default function CvVaultPage() {
               </table>
             </div>
           </div>
+        )}
+
+        {!isLoading && !syncMutation.isPending && total > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-muted-foreground">
+            <span>
+              Showing {rangeStart}–{rangeEnd} of {total} CV
+              {total === 1 ? "" : "s"}
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs">Rows per page</span>
+              <Select
+                value={String(pageSize)}
+                onValueChange={handlePageSizeChange}
+              >
+                <SelectTrigger className="h-8 w-[72px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        {totalPages > 1 && !isLoading && !syncMutation.isPending && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
         )}
       </div>
       <AiRankProgressOverlay progress={aiRankProgress} />

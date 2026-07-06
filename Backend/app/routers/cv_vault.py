@@ -59,6 +59,8 @@ async def list_cv_vault(
     application_status: str = Query("all", description="Application status filter"),
     date_from: Optional[str] = Query(None, description="Applied date from (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="Applied date to (YYYY-MM-DD)"),
+    skip: int = Query(0, ge=0, description="Pagination offset"),
+    limit: int = Query(25, ge=1, le=100, description="Page size"),
     sync: bool = Query(False, description="Force sync from Dropbox before returning"),
 ) -> Dict[str, Any]:
     """List CVs from MongoDB cache. Syncs from Dropbox if cache is empty or sync=true."""
@@ -85,6 +87,8 @@ async def list_cv_vault(
         else None,
         "date_from": date_from,
         "date_to": date_to,
+        "skip": skip,
+        "limit": limit,
     }
 
     count = await db[CV_VAULT_COLLECTION].count_documents({})
@@ -95,7 +99,7 @@ async def list_cv_vault(
             raise
         except Exception:
             raise HTTPException(status_code=500, detail="Dropbox is not configured")
-        return await sync_cv_vault_from_dropbox(db, dbx, extract_pdf=False, **list_kwargs)
+        return await sync_cv_vault_from_dropbox(db, dbx, extract_pdf=True, **list_kwargs)
 
     return await list_cv_vault_from_db(db, **list_kwargs)
 
@@ -104,8 +108,8 @@ async def list_cv_vault(
 async def sync_cv_vault(
     current_admin: dict = Depends(get_current_admin_user),
     extract_pdf: bool = Query(
-        False,
-        description="Extract name/email from PDF content for entries missing data (slower)",
+        True,
+        description="Extract name/email from PDF content for entries missing data (set false for faster sync)",
     ),
     sort: str = Query("complete_first"),
     search: str = Query(""),
@@ -117,6 +121,8 @@ async def sync_cv_vault(
     application_status: str = Query("all"),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
 ) -> Dict[str, Any]:
     """Pull latest CVs from Dropbox, extract metadata, and store in MongoDB."""
     db = get_database()
@@ -146,4 +152,6 @@ async def sync_cv_vault(
         else None,
         date_from=date_from,
         date_to=date_to,
+        skip=skip,
+        limit=limit,
     )

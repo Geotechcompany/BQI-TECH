@@ -5154,7 +5154,7 @@ async def list_cv_vault(
         except Exception as e:
             logger.error("Dropbox client init failed: %s", e)
             raise HTTPException(status_code=500, detail="Failed to connect to Dropbox storage")
-        return await sync_cv_vault_from_dropbox(db, dbx, extract_pdf=False, **list_kwargs)
+        return await sync_cv_vault_from_dropbox(db, dbx, extract_pdf=True, **list_kwargs)
 
     return await list_cv_vault_from_db(db, **list_kwargs)
 
@@ -5162,7 +5162,7 @@ async def list_cv_vault(
 @router.post("/cv-vault/sync")
 async def sync_cv_vault(
     current_admin: dict = Depends(get_current_admin_user),
-    extract_pdf: bool = Query(False, description="Extract name/email from PDFs when missing"),
+    extract_pdf: bool = Query(True, description="Extract name/email from PDFs when missing"),
     sort: str = Query("complete_first"),
     search: str = Query(""),
     has_email: Optional[bool] = Query(None),

@@ -62,7 +62,7 @@ async def extract_text_from_cv_url(url: str) -> str:
 
     fetch_url = _normalize_dropbox_url(url)
     try:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             response = await client.get(fetch_url)
         if response.status_code != 200:
             return ""
@@ -471,6 +471,8 @@ CV TEXT:
         ],
         temperature=0.35,
         max_tokens=3200,
+        timeout=145.0,
+        retries=0,
     )
 
     parsed = _parse_ai_json(content)

@@ -1,3 +1,5 @@
+export type CvVaultContactSource = "application" | "filename" | "cv_text" | null
+
 export interface CvVaultEntry {
   id: string
   name: string
@@ -13,6 +15,8 @@ export interface CvVaultEntry {
   size?: number | null
   aiRankScore?: number | null
   aiRankRecommendation?: string | null
+  nameSource?: CvVaultContactSource
+  emailSource?: CvVaultContactSource
 }
 
 export type CvVaultSort =
@@ -39,6 +43,8 @@ export interface CvVaultListParams {
   application_status?: string
   date_from?: string
   date_to?: string
+  skip?: number
+  limit?: number
 }
 
 export interface CvVaultResponse {
@@ -46,6 +52,10 @@ export interface CvVaultResponse {
   total: number
   filteredTotal?: number
   cacheTotal?: number
+  skip?: number
+  limit?: number
+  page?: number
+  totalPages?: number
   stats: {
     withEmail: number
     withApplication: number
@@ -63,6 +73,8 @@ export interface CvVaultResponse {
   sync?: {
     upserted: number
     removed: number
+    extractedNames?: number
+    extractedEmails?: number
   }
 }
 

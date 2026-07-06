@@ -17,6 +17,19 @@ logger = logging.getLogger(__name__)
 
 CV_EXTENSIONS = {".pdf", ".doc", ".docx"}
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+INVALID_NAMES = frozenset(
+    {
+        "",
+        "unknown",
+        "Unknown",
+        "incomplete application",
+        "Incomplete Application",
+        "n/a",
+        "N/A",
+        "not set",
+        "none",
+    }
+)
 
 DROPBOX_CV_FOLDERS = [
     p.strip()
@@ -80,6 +93,84 @@ def extract_email_from_text(text: str) -> str:
             continue
         return email
     return ""
+
+
+SKIP_NAME_PATTERNS = (
+    "curriculum vitae",
+    "resume",
+    "résumé",
+    "curriculum",
+    "vitae",
+    "personal details",
+    "contact",
+    "profile",
+    "objective",
+    "summary",
+    "professional summary",
+    "about me",
+    "work experience",
+    "education",
+    "skills",
+)
+
+CONTACT_SOURCE_APPLICATION = "application"
+CONTACT_SOURCE_FILENAME = "filename"
+CONTACT_SOURCE_CV_TEXT = "cv_text"
+
+
+def _is_missing_name(name: str) -> bool:
+    stripped = (name or "").strip()
+    return not stripped or stripped.lower() in INVALID_NAMES
+
+
+def _needs_cv_text_extraction(name: str, email: str) -> bool:
+    return _is_missing_name(name) or not (email or "").strip()
+
+
+def extract_name_from_cv_text(text: str) -> str:
+    """Heuristic name from CV body text (first lines, skip headers)."""
+    if not text:
+        return ""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    for line in lines[:20]:
+        lower = line.lower().strip(":- ")
+        if "@" in line or len(line) > 55:
+            continue
+        if re.search(r"\d{3,}", line):
+            continue
+        if any(pattern in lower for pattern in SKIP_NAME_PATTERNS):
+            continue
+        if not re.match(r"^[A-Za-z][A-Za-z\s'\-\.]{2,48}$", line):
+            continue
+        words = line.split()
+        if not 1 <= len(words) <= 5:
+            continue
+        return " ".join(
+            word.capitalize() if word.isupper() and len(word) > 1 else word
+            for word in words
+        )
+    return ""
+
+
+def extract_text_from_pdf_bytes(data: bytes, max_pages: int = 4) -> str:
+    if not data:
+        return ""
+    try:
+        from pypdf import PdfReader
+        import io
+
+        reader = PdfReader(io.BytesIO(data))
+        chunks: List[str] = []
+        for page in reader.pages[:max_pages]:
+            chunks.append(page.extract_text() or "")
+        return "\n".join(chunks)
+    except Exception as e:
+        logger.debug("PDF text extraction failed: %s", e)
+        return ""
+
+
+def extract_contact_from_cv_text(text: str) -> Tuple[str, str]:
+    return extract_name_from_cv_text(text), extract_email_from_text(text)
 
 
 def extract_name_from_answers(answers: List[Dict[str, Any]]) -> str:
@@ -235,7 +326,9 @@ def get_shared_link(dbx: dropbox.Dropbox, dropbox_path: str) -> str:
 
 
 def try_extract_pdf_metadata(dbx: dropbox.Dropbox, dropbox_path: str) -> Tuple[str, str]:
-    """Download PDF and extract name/email hints from text (best-effort)."""
+    """Download PDF and extract name/email from text (best-effort; never raises)."""
+    if not dropbox_path.lower().endswith(".pdf"):
+        return "", ""
     try:
         _, response = dbx.files_download(dropbox_path)
         data = response.content
@@ -243,29 +336,10 @@ def try_extract_pdf_metadata(dbx: dropbox.Dropbox, dropbox_path: str) -> Tuple[s
         logger.debug("PDF download failed for %s: %s", dropbox_path, e)
         return "", ""
 
-    text = ""
-    try:
-        from pypdf import PdfReader
-        import io
-        reader = PdfReader(io.BytesIO(data))
-        for page in reader.pages[:3]:
-            text += (page.extract_text() or "") + "\n"
-    except ImportError:
+    text = extract_text_from_pdf_bytes(data)
+    if not text:
         return "", ""
-    except Exception as e:
-        logger.debug("PDF parse failed for %s: %s", dropbox_path, e)
-        return "", ""
-
-    email = extract_email_from_text(text)
-    name = ""
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    for line in lines[:8]:
-        if "@" in line or len(line) > 60:
-            continue
-        if re.match(r"^[A-Za-z][A-Za-z\s'\-\.]{2,50}$", line):
-            name = line
-            break
-    return name, email
+    return extract_contact_from_cv_text(text)
 
 
 CV_VAULT_COLLECTION = "cv_vault"
@@ -332,6 +406,8 @@ def entry_to_db_doc(entry: Dict[str, Any], synced_at: datetime) -> Dict[str, Any
         "size": entry.get("size"),
         "aiRankScore": entry.get("aiRankScore"),
         "aiRankRecommendation": entry.get("aiRankRecommendation"),
+        "nameSource": entry.get("nameSource"),
+        "emailSource": entry.get("emailSource"),
         "syncedAt": synced_at,
         "updatedAt": synced_at,
         **quality,
@@ -350,19 +426,6 @@ VALID_SORTS = {
 
 
 EMAIL_PRESENT_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+", re.IGNORECASE)
-INVALID_NAMES = frozenset(
-    {
-        "",
-        "unknown",
-        "Unknown",
-        "incomplete application",
-        "Incomplete Application",
-        "n/a",
-        "N/A",
-        "not set",
-        "none",
-    }
-)
 
 
 def _email_present_match() -> Dict[str, Any]:
@@ -651,6 +714,8 @@ def db_doc_to_entry(doc: Dict[str, Any]) -> Dict[str, Any]:
         "size": doc.get("size"),
         "aiRankScore": doc.get("aiRankScore"),
         "aiRankRecommendation": doc.get("aiRankRecommendation"),
+        "nameSource": doc.get("nameSource"),
+        "emailSource": doc.get("emailSource"),
     }
 
 
@@ -715,7 +780,7 @@ async def build_cv_vault_entries(
     db,
     dbx,
     *,
-    extract_pdf: bool = False,
+    extract_pdf: bool = True,
 ) -> List[Dict[str, Any]]:
     """Build CV vault entries from Dropbox + applications (live fetch)."""
     app_index = await build_application_index(db)
@@ -777,9 +842,18 @@ async def persist_cv_vault_entries(db, entries: List[Dict[str, Any]]) -> Dict[st
         upsert=True,
     )
 
+    extracted_names = sum(
+        1 for entry in entries if entry.get("nameSource") == CONTACT_SOURCE_CV_TEXT
+    )
+    extracted_emails = sum(
+        1 for entry in entries if entry.get("emailSource") == CONTACT_SOURCE_CV_TEXT
+    )
+
     return {
         "upserted": len(vault_ids),
         "removed": removed,
+        "extractedNames": extracted_names,
+        "extractedEmails": extracted_emails,
     }
 
 
@@ -796,6 +870,8 @@ async def list_cv_vault_from_db(
     application_status: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 25,
 ) -> Dict[str, Any]:
     """Read CV vault entries from MongoDB with filters and sorting."""
     if sort not in VALID_SORTS:
@@ -819,7 +895,14 @@ async def list_cv_vault_from_db(
     )
 
     collection = db[CV_VAULT_COLLECTION]
-    cursor = collection.find(query).sort(_vault_sort_spec(sort))
+    safe_skip = max(0, skip)
+    safe_limit = max(1, min(limit, 100))
+    cursor = (
+        collection.find(query)
+        .sort(_vault_sort_spec(sort))
+        .skip(safe_skip)
+        .limit(safe_limit)
+    )
     items: List[Dict[str, Any]] = []
     async for doc in cursor:
         items.append(db_doc_to_entry(doc))
@@ -836,11 +919,17 @@ async def list_cv_vault_from_db(
     global_stats = (meta or {}).get("stats") or {}
     matched_stats = _compute_stats(items)
 
+    total_pages = (filtered_total + safe_limit - 1) // safe_limit if filtered_total else 0
+
     return {
         "items": items,
         "total": filtered_total,
         "filteredTotal": filtered_total,
         "cacheTotal": cache_total,
+        "skip": safe_skip,
+        "limit": safe_limit,
+        "page": safe_skip // safe_limit + 1 if safe_limit else 1,
+        "totalPages": total_pages,
         "stats": {
             "withEmail": global_stats.get("withEmail", 0),
             "withApplication": global_stats.get("withApplication", 0),
@@ -869,7 +958,7 @@ async def sync_cv_vault_from_dropbox(
     db,
     dbx,
     *,
-    extract_pdf: bool = False,
+    extract_pdf: bool = True,
     search: str = "",
     sort: str = "complete_first",
     has_email: Optional[bool] = None,
@@ -880,6 +969,8 @@ async def sync_cv_vault_from_dropbox(
     application_status: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 25,
 ) -> Dict[str, Any]:
     """Sync Dropbox CVs into MongoDB and return the vault payload."""
     entries = await build_cv_vault_entries(db, dbx, extract_pdf=extract_pdf)
@@ -901,6 +992,8 @@ async def sync_cv_vault_from_dropbox(
         application_status=application_status,
         date_from=date_from,
         date_to=date_to,
+        skip=skip,
+        limit=limit,
     )
     payload["cached"] = False
     payload["sync"] = sync_result
@@ -933,7 +1026,7 @@ async def fetch_cv_vault_list(
     dbx,
     *,
     search: str = "",
-    extract_pdf: bool = False,
+    extract_pdf: bool = True,
 ) -> Dict[str, Any]:
     """Legacy: always sync from Dropbox. Prefer sync_cv_vault_from_dropbox + list_cv_vault_from_db."""
     return await sync_cv_vault_from_dropbox(
@@ -941,12 +1034,38 @@ async def fetch_cv_vault_list(
     )
 
 
+def _resolve_contact_from_application(
+    app_meta: Dict[str, Any], filename: str
+) -> Tuple[str, str, Optional[str], Optional[str]]:
+    """Pick name/email from application answers, with filename fallback for name."""
+    app_name = (app_meta.get("name") or "").strip()
+    app_email = (app_meta.get("email") or "").strip()
+
+    name_source: Optional[str] = None
+    email_source: Optional[str] = None
+    name = app_name
+    email = app_email
+
+    if app_name:
+        name_source = CONTACT_SOURCE_APPLICATION
+    else:
+        parsed = parse_name_from_filename(filename)
+        if parsed:
+            name = parsed
+            name_source = CONTACT_SOURCE_FILENAME
+
+    if app_email:
+        email_source = CONTACT_SOURCE_APPLICATION
+
+    return name, email, name_source, email_source
+
+
 def merge_vault_entries(
     dropbox_files: List[FileMetadata],
     dbx: dropbox.Dropbox,
     app_index: Dict[str, Dict[str, Any]],
     *,
-    extract_pdf: bool = False,
+    extract_pdf: bool = True,
 ) -> List[Dict[str, Any]]:
     """Build unified CV vault entries from Dropbox files + applications."""
     entries: Dict[str, Dict[str, Any]] = {}
@@ -956,11 +1075,13 @@ def merge_vault_entries(
     for key, app_meta in app_index.items():
         cv_url = app_meta.get("cvUrl", "")
         filename = filename_from_url(cv_url)
-        name = app_meta.get("name") or parse_name_from_filename(filename)
+        name, email, name_source, email_source = _resolve_contact_from_application(
+            app_meta, filename
+        )
         entries[key] = {
             "id": key,
             "name": name or "Unknown",
-            "email": app_meta.get("email") or "",
+            "email": email,
             "cvUrl": cv_url,
             "dropboxPath": "",
             "fileName": filename,
@@ -972,6 +1093,8 @@ def merge_vault_entries(
             "size": None,
             "aiRankScore": app_meta.get("aiRankScore"),
             "aiRankRecommendation": app_meta.get("aiRankRecommendation"),
+            "nameSource": name_source,
+            "emailSource": email_source,
         }
 
     # Dropbox files
@@ -986,15 +1109,29 @@ def merge_vault_entries(
         filename = meta.name
 
         existing = entries.get(key, {})
-        name = existing.get("name") or parse_name_from_filename(filename)
-        email = existing.get("email") or ""
+        name = (existing.get("name") or "").strip()
+        email = (existing.get("email") or "").strip()
+        name_source = existing.get("nameSource")
+        email_source = existing.get("emailSource")
 
-        if extract_pdf and (not email or name in ("", "Unknown")):
-            pdf_name, pdf_email = try_extract_pdf_metadata(dbx, path)
-            if pdf_name and (not name or name == "Unknown"):
+        if _is_missing_name(name):
+            parsed = parse_name_from_filename(filename)
+            if parsed:
+                name = parsed
+                name_source = CONTACT_SOURCE_FILENAME
+
+        if extract_pdf and _needs_cv_text_extraction(name, email):
+            try:
+                pdf_name, pdf_email = try_extract_pdf_metadata(dbx, path)
+            except Exception as e:
+                logger.debug("CV text extraction skipped for %s: %s", path, e)
+                pdf_name, pdf_email = "", ""
+            if pdf_name and _is_missing_name(name):
                 name = pdf_name
+                name_source = CONTACT_SOURCE_CV_TEXT
             if pdf_email and not email:
                 email = pdf_email
+                email_source = CONTACT_SOURCE_CV_TEXT
 
         modified = None
         if meta.client_modified:
@@ -1015,6 +1152,8 @@ def merge_vault_entries(
             "size": meta.size,
             "aiRankScore": existing.get("aiRankScore"),
             "aiRankRecommendation": existing.get("aiRankRecommendation"),
+            "nameSource": name_source,
+            "emailSource": email_source,
         }
 
     result = list(entries.values())

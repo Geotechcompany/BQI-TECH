@@ -16,6 +16,16 @@ import { Filter, Search, X } from "lucide-react"
 
 export type TriFilter = "all" | "yes" | "no"
 
+const FALLBACK_APPLICATION_STATUSES = [
+  "New",
+  "Shortlisted",
+  "Technical Assessment",
+  "Interviewing",
+  "Hired",
+  "Rejected",
+  "Disqualified",
+] as const
+
 const SORT_LABELS: Record<CvVaultSort, string> = {
   complete_first: "Complete profiles first",
   dropbox_newest: "Newest on Dropbox",
@@ -127,6 +137,9 @@ export function CvVaultFilters({
       label,
     }))
 
+  const statusOptions =
+    applicationStatuses.length > 0 ? applicationStatuses : [...FALLBACK_APPLICATION_STATUSES]
+
   return (
     <div className="rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-sm overflow-hidden">
       <div className="border-b border-border/50 bg-gradient-to-r from-violet-500/5 via-transparent to-[#31CDFF]/5 px-4 py-3 sm:px-5">
@@ -234,26 +247,24 @@ export function CvVaultFilters({
           <TriChip label="Linked to application" value={linkedFilter} onChange={onLinkedChange} />
         </div>
 
-        {applicationStatuses.length > 0 && (
-          <div className="space-y-1.5 max-w-md">
-            <Label className="text-xs font-medium text-muted-foreground">
-              Application status
-            </Label>
-            <Select value={statusFilter} onValueChange={onStatusChange}>
-              <SelectTrigger className="h-10 rounded-xl">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                {applicationStatuses.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="space-y-1.5 max-w-md">
+          <Label className="text-xs font-medium text-muted-foreground">
+            Application status
+          </Label>
+          <Select value={statusFilter} onValueChange={onStatusChange}>
+            <SelectTrigger className="h-10 rounded-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {statusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="grid grid-cols-2 gap-4 max-w-md">
           <div className="space-y-1.5">

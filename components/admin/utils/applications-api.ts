@@ -33,8 +33,65 @@ export interface BulkUpdateRequest {
 
 import { BACKEND_URL } from "@/lib/config";
 
+/** CV download + detailed LLM scoring can exceed normal API latency. */
+export const AI_RANK_TIMEOUT_MS = 180_000;
+
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
+    return AbortSignal.timeout(timeoutMs);
+  }
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
+function formatRequestTimeoutError(timeoutMs?: number): Error {
+  const seconds = timeoutMs ? Math.round(timeoutMs / 1000) : 180;
+  return new Error(
+    `AI ranking timed out after ${seconds}s. CV analysis can take a few minutes — please try again.`
+  );
+}
+
+function wrapFetchError(error: unknown, timeoutMs?: number): Error {
+  if (error instanceof Error) {
+    if (
+      error.name === "AbortError" ||
+      error.name === "TimeoutError" ||
+      /signal timed out/i.test(error.message)
+    ) {
+      return formatRequestTimeoutError(timeoutMs);
+    }
+    return error;
+  }
+  return new Error("Request failed");
+}
+
 class AdminApplicationsApi {
   private baseUrl = BACKEND_URL;
+
+  private buildRequestInit(
+    options: RequestInit,
+    token: string,
+    timeoutMs?: number
+  ): RequestInit {
+    const init: RequestInit = {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    };
+
+    if (timeoutMs) {
+      init.signal = createTimeoutSignal(timeoutMs);
+    }
+
+    return init;
+  }
 
   private async makeRequest<T>(
     endpoint: string,
@@ -51,26 +108,15 @@ class AdminApplicationsApi {
       useAdminEndpoint ? "/admin" : ""
     }${endpoint}`;
 
-    const defaultHeaders = {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.token}`,
-      Accept: "application/json",
+    const fetchWithAuth = async (token: string) => {
+      try {
+        return await fetch(url, this.buildRequestInit(options, token, timeoutMs));
+      } catch (error) {
+        throw wrapFetchError(error, timeoutMs);
+      }
     };
 
-    const requestOptions: RequestInit = {
-      ...options,
-      credentials: "include",
-      headers: {
-        ...defaultHeaders,
-        ...options.headers,
-      },
-    };
-
-    if (timeoutMs && typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
-      requestOptions.signal = AbortSignal.timeout(timeoutMs);
-    }
-
-    let response = await fetch(url, requestOptions);
+    let response = await fetchWithAuth(session.token);
 
     // Handle token refresh
     if (response.status === 401) {
@@ -80,14 +126,7 @@ class AdminApplicationsApi {
         throw new Error("Session expired");
       }
 
-      // Retry with new token
-      requestOptions.headers = {
-        ...defaultHeaders,
-        Authorization: `Bearer ${refreshed.access_token}`,
-        ...options.headers,
-      };
-
-      response = await fetch(url, requestOptions);
+      response = await fetchWithAuth(refreshed.access_token);
     }
 
     if (!response.ok) {
@@ -391,7 +430,7 @@ class AdminApplicationsApi {
     }>("/applications/ai-rank", {
       method: "POST",
       body: JSON.stringify(request),
-    }, true, 120_000);
+    }, true, AI_RANK_TIMEOUT_MS);
   }
 }
 
