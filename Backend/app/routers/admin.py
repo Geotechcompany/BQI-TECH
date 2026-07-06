@@ -3075,6 +3075,11 @@ async def ai_rank_applications(
                 results.append(result)
             except Exception as error:
                 error_message = format_exception_message(error)
+                if "timed out" in error_message.lower():
+                    error_message = (
+                        "AI analysis took too long and was stopped. "
+                        "Try again in a moment — ranking one candidate at a time often works better."
+                    )
                 logger.exception("AI rank failed for %s: %s", application_id, error_message)
                 errors.append({"id": str(application_id), "error": error_message})
 

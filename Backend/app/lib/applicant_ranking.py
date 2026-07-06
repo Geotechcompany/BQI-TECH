@@ -17,8 +17,14 @@ from app.lib.error_utils import extract_json_object, format_exception_message
 
 logger = logging.getLogger(__name__)
 
-MAX_CV_CHARS = 12_000
-MAX_ANSWER_CHARS = 6_000
+MAX_CV_CHARS = 8_000
+MAX_ANSWER_CHARS = 4_000
+MAX_JOB_FIELD_CHARS = 2_000
+
+# LLM call budget — keep client AI_RANK_TIMEOUT_MS above CV fetch + (timeout × (retries + 1)).
+LLM_RANK_TIMEOUT_S = 270.0
+LLM_RANK_RETRIES = 1
+LLM_RANK_MAX_TOKENS = 3200
 
 # Stricter fit buckets (aligned with admin filters and UI).
 STRONG_FIT_MIN = 88.0
@@ -132,7 +138,7 @@ def _build_job_summary(job: Optional[Dict[str, Any]], fallback_position: str) ->
     for field in ("description", "requirements", "responsibilities", "qualifications", "summary"):
         value = job.get(field)
         if isinstance(value, str) and value.strip():
-            parts.append(f"{field.title()}: {value.strip()[:3500]}")
+            parts.append(f"{field.title()}: {value.strip()[:MAX_JOB_FIELD_CHARS]}")
     return "\n".join(parts)
 
 
@@ -470,9 +476,9 @@ CV TEXT:
             {"role": "user", "content": prompt},
         ],
         temperature=0.35,
-        max_tokens=3200,
-        timeout=145.0,
-        retries=0,
+        max_tokens=LLM_RANK_MAX_TOKENS,
+        timeout=LLM_RANK_TIMEOUT_S,
+        retries=LLM_RANK_RETRIES,
     )
 
     parsed = _parse_ai_json(content)

@@ -166,7 +166,10 @@ async def nvidia_chat_completion(
                     json=body,
                 )
         except httpx.TimeoutException as error:
-            last_error = f"AI request timed out after {timeout:.0f}s"
+            last_error = (
+                f"AI analysis timed out after {timeout:.0f}s. "
+                "The model may be under heavy load — wait a moment and try again."
+            )
             if attempt < retries:
                 continue
             raise ValueError(last_error) from error

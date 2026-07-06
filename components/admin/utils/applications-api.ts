@@ -33,8 +33,11 @@ export interface BulkUpdateRequest {
 
 import { BACKEND_URL } from "@/lib/config";
 
-/** CV download + detailed LLM scoring can exceed normal API latency. */
-export const AI_RANK_TIMEOUT_MS = 180_000;
+/**
+ * CV download + detailed LLM scoring can exceed normal API latency.
+ * Must exceed Backend LLM_RANK_TIMEOUT_S × (retries + 1) plus CV fetch overhead.
+ */
+export const AI_RANK_TIMEOUT_MS = 360_000;
 
 function createTimeoutSignal(timeoutMs: number): AbortSignal {
   if (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal) {
@@ -47,9 +50,9 @@ function createTimeoutSignal(timeoutMs: number): AbortSignal {
 }
 
 function formatRequestTimeoutError(timeoutMs?: number): Error {
-  const seconds = timeoutMs ? Math.round(timeoutMs / 1000) : 180;
+  const seconds = timeoutMs ? Math.round(timeoutMs / 1000) : 360;
   return new Error(
-    `AI ranking timed out after ${seconds}s. CV analysis can take a few minutes — please try again.`
+    `AI ranking timed out after ${seconds}s. Large CVs can take several minutes — keep this tab open and try again.`
   );
 }
 
