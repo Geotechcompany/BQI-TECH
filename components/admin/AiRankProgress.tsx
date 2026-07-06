@@ -25,7 +25,13 @@ export interface AiRankProgressState {
   candidateName?: string;
   phase: AiRankPhase;
   mode: "batch" | "single";
+  /** When the current candidate's API call started (for time-based creep + long-wait UI). */
+  candidateStartedAt?: number;
 }
+
+const LLM_PROGRESS_CAP = 92;
+const SAVING_PROGRESS = 97;
+const LONG_WAIT_MS = 3000;
 
 const PHASES: Array<{
   id: AiRankPhase;
@@ -47,8 +53,8 @@ const PHASES: Array<{
   },
   {
     id: "scoring",
-    label: "Scoring",
-    description: "Calculating AI fit score and recommendation",
+    label: "Scoring with AI",
+    description: "Calculating fit score and recommendation",
     icon: Sparkles,
   },
   {
@@ -65,26 +71,97 @@ function useMounted() {
   return mounted;
 }
 
-function progressPercent(progress: AiRankProgressState): number {
+const LLM_PHASES: AiRankPhase[] = ["extracting", "analyzing", "scoring"];
+
+function progressPercent(progress: AiRankProgressState, now = Date.now()): number {
   if (progress.total <= 0) return 0;
-  const phaseIndex = Math.max(0, PHASES.findIndex((p) => p.id === progress.phase));
-  const withinCandidate = (phaseIndex + 1) / PHASES.length;
-  const overall = (progress.current + withinCandidate) / progress.total;
-  return Math.min(100, Math.round(overall * 100));
+
+  if (progress.phase === "saving") {
+    return SAVING_PROGRESS;
+  }
+
+  const phaseIndex = Math.max(0, LLM_PHASES.indexOf(progress.phase));
+  const withinCandidate = (phaseIndex + 1) / LLM_PHASES.length;
+  const base = ((progress.current + withinCandidate) / progress.total) * LLM_PROGRESS_CAP;
+
+  const elapsed = progress.candidateStartedAt ? now - progress.candidateStartedAt : 0;
+  const timeBonus = Math.min(
+    LLM_PROGRESS_CAP - base,
+    (elapsed / 180_000) * (LLM_PROGRESS_CAP * 0.12)
+  );
+
+  return Math.min(LLM_PROGRESS_CAP, Math.round(base + timeBonus));
 }
 
 function useMonotonicPercent(progress: AiRankProgressState): number {
-  const raw = progressPercent(progress);
-  const [display, setDisplay] = useState(raw);
+  const [display, setDisplay] = useState(() => progressPercent(progress));
   const peakRef = useRef(0);
+  const sessionTotalRef = useRef(progress.total);
 
   useEffect(() => {
+    if (sessionTotalRef.current !== progress.total) {
+      sessionTotalRef.current = progress.total;
+      peakRef.current = 0;
+    }
+    const raw = progressPercent(progress);
     const next = Math.max(peakRef.current, raw);
     peakRef.current = next;
     setDisplay(next);
-  }, [raw, progress.current, progress.total, progress.phase, progress.applicationId]);
+  }, [
+    progress.current,
+    progress.total,
+    progress.phase,
+    progress.applicationId,
+    progress.candidateStartedAt,
+  ]);
+
+  useEffect(() => {
+    if (!progress.isActive || progress.phase === "saving") return;
+    const id = window.setInterval(() => {
+      const raw = progressPercent(progress);
+      const next = Math.max(peakRef.current, raw);
+      peakRef.current = next;
+      setDisplay(next);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [
+    progress.isActive,
+    progress.phase,
+    progress.current,
+    progress.total,
+    progress.applicationId,
+    progress.candidateStartedAt,
+  ]);
 
   return display;
+}
+
+function useLongWait(progress: AiRankProgressState): boolean {
+  const [isLongWait, setIsLongWait] = useState(false);
+
+  useEffect(() => {
+    if (!progress.candidateStartedAt || progress.phase === "saving") {
+      setIsLongWait(false);
+      return;
+    }
+
+    const check = () => {
+      setIsLongWait(Date.now() - progress.candidateStartedAt! > LONG_WAIT_MS);
+    };
+    check();
+    const id = window.setInterval(check, 500);
+    return () => window.clearInterval(id);
+  }, [progress.candidateStartedAt, progress.phase, progress.applicationId]);
+
+  return isLongWait;
+}
+
+function phaseDisplayLabel(progress: AiRankProgressState, isLongWait: boolean): string {
+  if (progress.phase === "scoring" && isLongWait) {
+    return "Scoring with AI…";
+  }
+  const index = PHASES.findIndex((p) => p.id === progress.phase);
+  return PHASES[index]?.label ?? "Ranking";
 }
 
 function ProgressCore({
@@ -95,8 +172,11 @@ function ProgressCore({
   compact?: boolean;
 }) {
   const percent = useMonotonicPercent(progress);
+  const isLongWait = useLongWait(progress);
   const activePhaseIndex = PHASES.findIndex((p) => p.id === progress.phase);
   const ActiveIcon = PHASES[activePhaseIndex]?.icon ?? Sparkles;
+  const label = phaseDisplayLabel(progress, isLongWait);
+  const showWorkingPulse = isLongWait && progress.phase !== "saving";
 
   return (
     <div className={compact ? "space-y-3" : "space-y-5"}>
@@ -133,7 +213,7 @@ function ProgressCore({
             compact ? "text-sm" : "text-lg"
           }`}
         >
-          {PHASES[activePhaseIndex]?.label}
+          {label}
           {progress.candidateName ? (
             <span className="font-normal text-muted-foreground">
               {" "}
@@ -143,15 +223,17 @@ function ProgressCore({
         </p>
         <AnimatePresence mode="wait">
           <motion.p
-            key={`${progress.candidateName}-${progress.phase}`}
+            key={`${progress.candidateName}-${progress.phase}-${isLongWait}`}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             className={`text-muted-foreground ${compact ? "text-xs" : "text-sm"}`}
           >
-            {progress.candidateName
-              ? `Evaluating against role requirements`
-              : PHASES[activePhaseIndex]?.description}
+            {showWorkingPulse
+              ? "Still working — detailed CVs can take a few minutes"
+              : progress.candidateName
+                ? `Evaluating against role requirements`
+                : PHASES[activePhaseIndex]?.description}
           </motion.p>
         </AnimatePresence>
       </div>
@@ -167,9 +249,19 @@ function ProgressCore({
             {percent}%
           </span>
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-violet-100/70 dark:bg-violet-950/50">
+        <div className="relative h-2 overflow-hidden rounded-full bg-violet-100/70 dark:bg-violet-950/50">
+          {showWorkingPulse ? (
+            <motion.div
+              className="absolute inset-y-0 w-1/3 rounded-full bg-gradient-to-r from-transparent via-white/40 to-transparent"
+              animate={{ x: ["-100%", "300%"] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "linear" }}
+              aria-hidden
+            />
+          ) : null}
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-violet-500 via-indigo-500 to-violet-400"
+            className={`h-full rounded-full bg-gradient-to-r from-violet-500 via-indigo-500 to-violet-400 ${
+              showWorkingPulse ? "opacity-90" : ""
+            }`}
             animate={{ width: `${percent}%` }}
             transition={{ type: "spring", stiffness: 140, damping: 22 }}
           />
@@ -231,7 +323,8 @@ function AiRankFloatingPill({
   onExpand: () => void;
 }) {
   const percent = useMonotonicPercent(progress);
-  const phaseLabel = PHASES.find((p) => p.id === progress.phase)?.label ?? "Ranking";
+  const isLongWait = useLongWait(progress);
+  const phaseLabel = phaseDisplayLabel(progress, isLongWait);
 
   return (
     <motion.button
@@ -397,10 +490,19 @@ export function AiRankInlineProgress({
 
 export function AiRankHeaderIndicator() {
   const { progress, isBackground, isRanking, expandOverlay } = useAiRank();
+  const fallback: AiRankProgressState = {
+    isActive: false,
+    current: 0,
+    total: 1,
+    phase: "extracting",
+    mode: "single",
+  };
+  const percent = useMonotonicPercent(progress ?? fallback);
+  const isLongWait = useLongWait(progress ?? fallback);
 
   if (!isRanking || !isBackground || !progress) return null;
 
-  const percent = useMonotonicPercent(progress);
+  const phaseLabel = phaseDisplayLabel(progress, isLongWait);
 
   return (
     <button
@@ -412,14 +514,15 @@ export function AiRankHeaderIndicator() {
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-500 opacity-60" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" />
       </span>
-      AI rank {percent}%
+      {phaseLabel} {percent}%
     </button>
   );
 }
 
 export function cycleAiRankPhase(phase: AiRankPhase): AiRankPhase {
-  const order: AiRankPhase[] = ["extracting", "analyzing", "scoring", "saving"];
-  const index = order.indexOf(phase);
-  if (index < 0 || index >= order.length - 1) return phase;
-  return order[index + 1];
+  if (phase === "saving") return "saving";
+  const index = LLM_PHASES.indexOf(phase);
+  if (index < 0) return "extracting";
+  if (index >= LLM_PHASES.length - 1) return "scoring";
+  return LLM_PHASES[index + 1];
 }

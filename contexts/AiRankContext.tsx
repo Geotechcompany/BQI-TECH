@@ -54,6 +54,9 @@ interface AiRankContextValue {
 
 const AiRankContext = createContext<AiRankContextValue | null>(null);
 
+const LLM_PHASE_INTERVAL_MS = 2200;
+const SAVE_FLASH_MS = 450;
+
 export function AiRankProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<AiRankProgressState | null>(null);
@@ -156,6 +159,7 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
             options?.candidateName && targetIds.length === 1
               ? options.candidateName
               : resolveName?.(applicationId) ?? "Candidate";
+          const candidateStartedAt = Date.now();
 
           setProgress({
             isActive: true,
@@ -165,20 +169,32 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
             mode,
             applicationId,
             candidateName,
+            candidateStartedAt,
           });
 
-          const phaseInterval = window.setInterval(() => {
-            setProgress((current) =>
-              current?.isActive
-                ? { ...current, phase: cycleAiRankPhase(current.phase) }
-                : current
-            );
-          }, 1600);
+          let phaseInterval: ReturnType<typeof window.setInterval> | undefined;
 
           try {
+            phaseInterval = window.setInterval(() => {
+              setProgress((current) =>
+                current?.isActive && current.phase !== "saving"
+                  ? { ...current, phase: cycleAiRankPhase(current.phase) }
+                  : current
+              );
+            }, LLM_PHASE_INTERVAL_MS);
+
             const result = await adminApplicationsApi.rankApplications({
               ids: [applicationId],
             });
+
+            window.clearInterval(phaseInterval);
+            phaseInterval = undefined;
+
+            setProgress((current) =>
+              current?.isActive ? { ...current, phase: "saving" } : current
+            );
+            await new Promise((resolve) => window.setTimeout(resolve, SAVE_FLASH_MS));
+
             if (result.results?.length) {
               allResults.push(...result.results);
             }
@@ -194,7 +210,9 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
               error: error instanceof Error ? error.message : "AI ranking failed",
             });
           } finally {
-            window.clearInterval(phaseInterval);
+            if (phaseInterval !== undefined) {
+              window.clearInterval(phaseInterval);
+            }
             inFlightIdsRef.current.delete(applicationId);
             setInFlightApplicationIds(Array.from(inFlightIdsRef.current));
           }
@@ -209,6 +227,7 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
               applicationId: targetIds[index + 1],
               candidateName:
                 resolveName?.(targetIds[index + 1]) ?? "Candidate",
+              candidateStartedAt: Date.now(),
             });
           }
         }
