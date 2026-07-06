@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Application } from "@/types/application";
 import { Button } from "@/components/ui/button";
 import { Eye, Pencil, Trash2, ClipboardList, Settings, Archive, ArchiveRestore, Sparkles, Loader2 } from "lucide-react";
-import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl } from "./utils/table-utils";
+import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl, getStatusDateValue } from "./utils/table-utils";
 import { CVCell } from "@/components/admin/CVCell";
 import { AiRankScoreCell } from "@/components/admin/AiRankCell";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -100,7 +100,7 @@ export function UnifiedApplicationTable({
   const getDateValue = (application: Application) => {
     if (!dateField) return 'N/A';
     
-    const dateValue = (application as any)[dateField];
+    const dateValue = getStatusDateValue(application, dateField);
     if (dateValue) {
       try {
         const date = new Date(dateValue);

@@ -199,15 +199,18 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
             setInFlightApplicationIds(Array.from(inFlightIdsRef.current));
           }
 
-          setProgress({
-            isActive: true,
-            current: index + 1,
-            total: targetIds.length,
-            phase: "saving",
-            mode,
-            applicationId,
-            candidateName,
-          });
+          if (index + 1 < targetIds.length) {
+            setProgress({
+              isActive: true,
+              current: index + 1,
+              total: targetIds.length,
+              phase: "extracting",
+              mode,
+              applicationId: targetIds[index + 1],
+              candidateName:
+                resolveName?.(targetIds[index + 1]) ?? "Candidate",
+            });
+          }
         }
 
         const payload: AiRankCompletePayload = {

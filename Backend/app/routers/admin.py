@@ -3153,13 +3153,26 @@ async def update_admin_application(
 
         update_data = dict(update_data or {})
         previous_status = existing.get("status")
-        update_data["updatedAt"] = datetime.utcnow()
+        current_time = datetime.utcnow()
+        update_data["updatedAt"] = current_time
+
+        new_status = update_data.get("status")
+        if new_status and new_status != previous_status:
+            if new_status == "Shortlisted":
+                update_data["shortlistedDate"] = current_time
+            elif new_status == "Interviewing":
+                update_data["interviewDate"] = current_time
+            elif new_status == "Hired":
+                update_data["hiredDate"] = current_time
+            elif new_status == "Rejected":
+                update_data["rejectedDate"] = current_time
+            elif new_status == "Disqualified":
+                update_data["disqualifiedDate"] = current_time
 
         result = await db.applications.update_one({"_id": obj_id}, {"$set": update_data})
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Application not found")
 
-        new_status = update_data.get("status")
         if new_status and new_status != previous_status:
             applicant = applicant_display_name(existing)
             position = existing.get("position") or update_data.get("position") or "a role"

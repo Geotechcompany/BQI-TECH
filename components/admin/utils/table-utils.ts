@@ -221,6 +221,37 @@ export const getNameDisplay = (row: Application): string => {
   return extractDataFromAnswers(row.answers || [], 'name', row.user);
 };
 
+const DATE_FIELD_STATUS_MAP: Record<string, string> = {
+  shortlistedDate: "Shortlisted",
+  interviewDate: "Interviewing",
+  hiredDate: "Hired",
+  hireDate: "Hired",
+  disqualifiedDate: "Disqualified",
+  appliedDate: "New",
+  archivedAt: "Archived",
+};
+
+/** Resolve a status-specific date from the legacy field or statusHistory. */
+export const getStatusDateValue = (
+  application: Application,
+  dateField: string
+): string | Date | null | undefined => {
+  const direct = (application as Record<string, unknown>)[dateField];
+  if (direct) return direct as string | Date;
+
+  const status = DATE_FIELD_STATUS_MAP[dateField];
+  if (!status || !application.statusHistory?.length) return undefined;
+
+  const matches = application.statusHistory
+    .filter((entry) => entry.status === status && entry.date)
+    .map((entry) => ({ date: entry.date, time: new Date(entry.date).getTime() }))
+    .filter((entry) => !Number.isNaN(entry.time));
+
+  if (!matches.length) return undefined;
+  matches.sort((a, b) => b.time - a.time);
+  return matches[0].date;
+};
+
 // Enhanced email extraction
 export const getEmailDisplay = (row: Application): string => {
   // First priority: Use existing email field (cleaned)

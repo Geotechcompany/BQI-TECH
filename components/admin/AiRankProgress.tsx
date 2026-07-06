@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Brain,
@@ -67,10 +67,24 @@ function useMounted() {
 
 function progressPercent(progress: AiRankProgressState): number {
   if (progress.total <= 0) return 0;
-  const base = progress.current / progress.total;
-  const phaseIndex = PHASES.findIndex((p) => p.id === progress.phase);
-  const phaseFraction = (phaseIndex + 1) / PHASES.length / progress.total;
-  return Math.min(100, Math.round((base + phaseFraction * 0.85) * 100));
+  const phaseIndex = Math.max(0, PHASES.findIndex((p) => p.id === progress.phase));
+  const withinCandidate = (phaseIndex + 1) / PHASES.length;
+  const overall = (progress.current + withinCandidate) / progress.total;
+  return Math.min(100, Math.round(overall * 100));
+}
+
+function useMonotonicPercent(progress: AiRankProgressState): number {
+  const raw = progressPercent(progress);
+  const [display, setDisplay] = useState(raw);
+  const peakRef = useRef(0);
+
+  useEffect(() => {
+    const next = Math.max(peakRef.current, raw);
+    peakRef.current = next;
+    setDisplay(next);
+  }, [raw, progress.current, progress.total, progress.phase, progress.applicationId]);
+
+  return display;
 }
 
 function ProgressCore({
@@ -80,7 +94,7 @@ function ProgressCore({
   progress: AiRankProgressState;
   compact?: boolean;
 }) {
-  const percent = progressPercent(progress);
+  const percent = useMonotonicPercent(progress);
   const activePhaseIndex = PHASES.findIndex((p) => p.id === progress.phase);
   const ActiveIcon = PHASES[activePhaseIndex]?.icon ?? Sparkles;
 
@@ -216,7 +230,7 @@ function AiRankFloatingPill({
   progress: AiRankProgressState;
   onExpand: () => void;
 }) {
-  const percent = progressPercent(progress);
+  const percent = useMonotonicPercent(progress);
   const phaseLabel = PHASES.find((p) => p.id === progress.phase)?.label ?? "Ranking";
 
   return (
@@ -386,7 +400,7 @@ export function AiRankHeaderIndicator() {
 
   if (!isRanking || !isBackground || !progress) return null;
 
-  const percent = progressPercent(progress);
+  const percent = useMonotonicPercent(progress);
 
   return (
     <button
@@ -406,5 +420,6 @@ export function AiRankHeaderIndicator() {
 export function cycleAiRankPhase(phase: AiRankPhase): AiRankPhase {
   const order: AiRankPhase[] = ["extracting", "analyzing", "scoring", "saving"];
   const index = order.indexOf(phase);
-  return order[(index + 1) % order.length];
+  if (index < 0 || index >= order.length - 1) return phase;
+  return order[index + 1];
 }
