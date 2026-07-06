@@ -36,6 +36,23 @@ const SORT_LABELS: Record<CvVaultSort, string> = {
   name_desc: "Name (Z–A)",
 }
 
+function FilterField({
+  label,
+  children,
+  className,
+}: {
+  label: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  )
+}
+
 function TriChip({
   label,
   value,
@@ -52,19 +69,23 @@ function TriChip({
   ]
 
   return (
-    <div className="space-y-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5">
       <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
-      <div className="inline-flex rounded-lg border border-border/80 bg-muted/30 p-0.5">
+      <div
+        className="flex w-full rounded-md border border-border bg-background p-0.5"
+        role="group"
+        aria-label={label}
+      >
         {options.map((opt) => (
           <button
             key={opt.v}
             type="button"
             onClick={() => onChange(opt.v)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-all",
+              "flex-1 rounded-sm px-2 py-1.5 text-xs font-medium transition-colors",
               value === opt.v
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}
           >
             {opt.label}
@@ -102,6 +123,8 @@ export interface CvVaultFiltersProps {
   hasActiveFilters: boolean
   activeFilterCount: number
 }
+
+const selectTriggerClass = "h-9 w-full"
 
 export function CvVaultFilters({
   search,
@@ -141,37 +164,36 @@ export function CvVaultFilters({
     applicationStatuses.length > 0 ? applicationStatuses : [...FALLBACK_APPLICATION_STATUSES]
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-sm overflow-hidden">
-      <div className="border-b border-border/50 bg-gradient-to-r from-violet-500/5 via-transparent to-[#31CDFF]/5 px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
-              <Filter className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            </div>
-            Search & filters
-            {activeFilterCount > 0 && (
-              <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-700 dark:text-violet-300">
-                {activeFilterCount} active
-              </span>
-            )}
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+            <Filter className="h-4 w-4 text-primary" />
           </div>
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={onReset} className="h-8 text-xs">
-              <X className="h-3.5 w-3.5 mr-1" />
-              Clear all
-            </Button>
+          Search & filters
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+              {activeFilterCount} active
+            </span>
           )}
         </div>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={onReset} className="h-8 text-xs">
+            <X className="mr-1 h-3.5 w-3.5" />
+            Clear all
+          </Button>
+        )}
       </div>
 
-      <div className="p-4 sm:p-5 space-y-5">
+      <div className="space-y-4 p-4 sm:p-5">
+        {/* Row 1: Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search by name, email, filename, or Dropbox path…"
-            className="h-11 pl-10 pr-10 rounded-xl border-border/80 bg-muted/20 focus-visible:ring-violet-500/30"
+            className="h-10 w-full pl-10 pr-10"
           />
           {search && (
             <button
@@ -185,11 +207,11 @@ export function CvVaultFilters({
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label className="text-xs font-medium text-muted-foreground">Sort by</Label>
+        {/* Row 2: Sort, Contact, Source, Application status */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <FilterField label="Sort by">
             <Select value={sort} onValueChange={(v) => onSortChange(v as CvVaultSort)}>
-              <SelectTrigger className="h-10 rounded-xl">
+              <SelectTrigger className={selectTriggerClass}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -200,17 +222,16 @@ export function CvVaultFilters({
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </FilterField>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Contact</Label>
+          <FilterField label="Contact">
             <Select
               value={contactFilter}
               onValueChange={(v) =>
                 onContactFilterChange(v as "all" | "complete" | "missing")
               }
             >
-              <SelectTrigger className="h-10 rounded-xl">
+              <SelectTrigger className={selectTriggerClass}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -219,17 +240,16 @@ export function CvVaultFilters({
                 <SelectItem value="missing">Missing info</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </FilterField>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Source</Label>
+          <FilterField label="Source">
             <Select
               value={sourceFilter}
               onValueChange={(v) =>
                 onSourceChange(v as "all" | "application" | "dropbox")
               }
             >
-              <SelectTrigger className="h-10 rounded-xl">
+              <SelectTrigger className={selectTriggerClass}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -238,70 +258,66 @@ export function CvVaultFilters({
                 <SelectItem value="dropbox">Dropbox only</SelectItem>
               </SelectContent>
             </Select>
+          </FilterField>
+
+          <FilterField label="Application status">
+            <Select value={statusFilter} onValueChange={onStatusChange}>
+              <SelectTrigger className={selectTriggerClass}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                {statusOptions.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+        </div>
+
+        {/* Row 3: Profile attribute toggles */}
+        <div className="rounded-lg border border-border/60 bg-muted/30 p-3 sm:p-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <TriChip label="Has email" value={hasEmailFilter} onChange={onHasEmailChange} />
+            <TriChip label="Has name" value={hasNameFilter} onChange={onHasNameChange} />
+            <TriChip label="Linked" value={linkedFilter} onChange={onLinkedChange} />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <TriChip label="Has email" value={hasEmailFilter} onChange={onHasEmailChange} />
-          <TriChip label="Has name" value={hasNameFilter} onChange={onHasNameChange} />
-          <TriChip label="Linked to application" value={linkedFilter} onChange={onLinkedChange} />
-        </div>
-
-        <div className="space-y-1.5 max-w-md">
-          <Label className="text-xs font-medium text-muted-foreground">
-            Application status
-          </Label>
-          <Select value={statusFilter} onValueChange={onStatusChange}>
-            <SelectTrigger className="h-10 rounded-xl">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              {statusOptions.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 max-w-md">
-          <div className="space-y-1.5">
-            <Label htmlFor="cv-vault-date-from" className="text-xs font-medium text-muted-foreground">
-              Applied from
-            </Label>
+        {/* Row 4: Date range */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <FilterField label="Applied from">
             <Input
               id="cv-vault-date-from"
               type="date"
               value={dateFrom}
               max={dateTo || undefined}
               onChange={(e) => onDateFromChange(e.target.value)}
-              className="h-10 rounded-xl"
+              className="h-9 w-full"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cv-vault-date-to" className="text-xs font-medium text-muted-foreground">
-              Applied to
-            </Label>
+          </FilterField>
+          <FilterField label="Applied to">
             <Input
               id="cv-vault-date-to"
               type="date"
               value={dateTo}
               min={dateFrom || undefined}
               onChange={(e) => onDateToChange(e.target.value)}
-              className="h-10 rounded-xl"
+              className="h-9 w-full"
             />
-          </div>
+          </FilterField>
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
-          <span className="text-xs text-muted-foreground self-center mr-1">Quick:</span>
+        {/* Row 5: Quick filter pills */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+          <span className="mr-1 text-xs font-medium text-muted-foreground">Quick filters</span>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="rounded-full h-8 text-xs"
+            className="h-8 rounded-full text-xs"
             onClick={() => {
               onSortChange("complete_first")
               onContactFilterChange("complete")
@@ -315,7 +331,7 @@ export function CvVaultFilters({
             type="button"
             variant="outline"
             size="sm"
-            className="rounded-full h-8 text-xs"
+            className="h-8 rounded-full text-xs"
             onClick={() => {
               onSortChange("dropbox_newest")
               onContactFilterChange("all")
@@ -327,7 +343,7 @@ export function CvVaultFilters({
             type="button"
             variant="outline"
             size="sm"
-            className="rounded-full h-8 text-xs"
+            className="h-8 rounded-full text-xs"
             onClick={() => {
               onContactFilterChange("missing")
               onHasEmailChange("no")
