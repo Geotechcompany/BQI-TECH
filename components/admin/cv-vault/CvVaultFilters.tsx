@@ -82,6 +82,10 @@ export interface CvVaultFiltersProps {
   onSourceChange: (v: "all" | "application" | "dropbox") => void
   statusFilter: string
   onStatusChange: (v: string) => void
+  dateFrom: string
+  onDateFromChange: (v: string) => void
+  dateTo: string
+  onDateToChange: (v: string) => void
   applicationStatuses: string[]
   sortOptions?: Array<{ value: CvVaultSort; label: string }>
   onReset: () => void
@@ -106,6 +110,10 @@ export function CvVaultFilters({
   onSourceChange,
   statusFilter,
   onStatusChange,
+  dateFrom,
+  onDateFromChange,
+  dateTo,
+  onDateToChange,
   applicationStatuses,
   sortOptions,
   onReset,
@@ -246,6 +254,35 @@ export function CvVaultFilters({
             </Select>
           </div>
         )}
+
+        <div className="grid grid-cols-2 gap-4 max-w-md">
+          <div className="space-y-1.5">
+            <Label htmlFor="cv-vault-date-from" className="text-xs font-medium text-muted-foreground">
+              Applied from
+            </Label>
+            <Input
+              id="cv-vault-date-from"
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => onDateFromChange(e.target.value)}
+              className="h-10 rounded-xl"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cv-vault-date-to" className="text-xs font-medium text-muted-foreground">
+              Applied to
+            </Label>
+            <Input
+              id="cv-vault-date-to"
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => onDateToChange(e.target.value)}
+              className="h-10 rounded-xl"
+            />
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
           <span className="text-xs text-muted-foreground self-center mr-1">Quick:</span>

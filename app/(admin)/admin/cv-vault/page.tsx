@@ -1,14 +1,29 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout"
 import { useAuth } from "@/contexts/AuthContext"
 import { authService } from "@/lib/auth-backend"
 import { CVCell } from "@/components/admin/CVCell"
+import { AiRankScoreCell } from "@/components/admin/AiRankCell"
+import {
+  AiRankProgressOverlay,
+  type AiRankProgressState,
+  cycleAiRankPhase,
+} from "@/components/admin/AiRankProgress"
+import { adminApplicationsApi } from "@/components/admin/utils/applications-api"
+import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   ExternalLink,
   FileArchive,
@@ -38,6 +53,16 @@ const baseUrl = () =>
   )
 
 const DEFAULT_SORT: CvVaultSort = "complete_first"
+
+const STATUS_OPTIONS = [
+  "New",
+  "Shortlisted",
+  "Technical Assessment",
+  "Interviewing",
+  "Hired",
+  "Rejected",
+  "Disqualified",
+] as const
 
 function parseApiError(body: unknown, status: number): string {
   if (body && typeof body === "object" && "detail" in body) {
@@ -71,6 +96,8 @@ function buildQueryParams(params: CvVaultListParams): string {
   if (params.application_status && params.application_status !== "all") {
     qs.set("application_status", params.application_status)
   }
+  if (params.date_from) qs.set("date_from", params.date_from)
+  if (params.date_to) qs.set("date_to", params.date_to)
   return qs.toString()
 }
 
@@ -165,8 +192,14 @@ export default function CvVaultPage() {
   const [hasNameFilter, setHasNameFilter] = useState<TriFilter>("all")
   const [linkedFilter, setLinkedFilter] = useState<TriFilter>("all")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
   const [extractPdf, setExtractPdf] = useState(false)
+  const [aiRankProgress, setAiRankProgress] = useState<AiRankProgressState | null>(null)
+  const [rankingApplicationId, setRankingApplicationId] = useState<string | null>(null)
+  const aiRankInFlightRef = useRef(false)
   const queryClient = useQueryClient()
+  const { isUnconfigured: aiUnconfigured } = useAiStatus()
 
   const listParams: CvVaultListParams = useMemo(
     () => ({

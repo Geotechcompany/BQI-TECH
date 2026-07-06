@@ -11,6 +11,8 @@ export interface CvVaultEntry {
   appliedDate?: string | null
   modifiedAt?: string | null
   size?: number | null
+  aiRankScore?: number | null
+  aiRankRecommendation?: string | null
 }
 
 export type CvVaultSort =
@@ -35,6 +37,8 @@ export interface CvVaultListParams {
   source?: CvVaultSourceFilter
   contact_filter?: CvVaultContactFilter
   application_status?: string
+  date_from?: string
+  date_to?: string
 }
 
 export interface CvVaultResponse {

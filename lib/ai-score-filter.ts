@@ -13,8 +13,8 @@ export const AI_SCORE_FILTER_OPTIONS: {
 }[] = [
   { label: "All AI Scores", value: "all" },
   { label: "Not Ranked", value: "not_ranked" },
-  { label: "Strong Fit (85+)", value: "strong" },
-  { label: "Good Fit (70–84)", value: "good" },
-  { label: "Moderate Fit (50–69)", value: "moderate" },
-  { label: "Weak Fit (<50)", value: "weak" },
+  { label: "Strong Fit (88+)", value: "strong" },
+  { label: "Good Fit (72–87)", value: "good" },
+  { label: "Moderate Fit (52–71)", value: "moderate" },
+  { label: "Weak Fit (<52)", value: "weak" },
 ];

@@ -8,10 +8,14 @@ import {
 } from "@/components/ui/tooltip";
 
 function getScoreStyles(score: number): string {
-  if (score >= 85) return "bg-emerald-100 text-emerald-800 ring-emerald-200";
-  if (score >= 70) return "bg-violet-100 text-violet-800 ring-violet-200";
-  if (score >= 50) return "bg-amber-100 text-amber-800 ring-amber-200";
+  if (score >= 88) return "bg-emerald-100 text-emerald-800 ring-emerald-200";
+  if (score >= 72) return "bg-violet-100 text-violet-800 ring-violet-200";
+  if (score >= 52) return "bg-amber-100 text-amber-800 ring-amber-200";
   return "bg-red-100 text-red-800 ring-red-200";
+}
+
+function formatAiRankScore(score: number): string {
+  return Number.isInteger(score) ? String(score) : score.toFixed(1);
 }
 
 interface AiRankScoreCellProps {
@@ -55,7 +59,7 @@ export function AiRankScoreCell({
             <span
               className={`inline-flex w-fit items-center px-2.5 py-1 rounded-full text-xs font-bold ring-1 ring-inset ${getScoreStyles(score)}`}
             >
-              {score}/100
+              {formatAiRankScore(score)}/100
             </span>
             {recommendation && (
               <span className="text-[11px] text-muted-foreground line-clamp-1 max-w-[120px]">

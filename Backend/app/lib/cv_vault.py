@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse, unquote
 
@@ -152,6 +152,8 @@ async def build_application_index(db) -> Dict[str, Dict[str, Any]]:
             "status": 1,
             "appliedDate": 1,
             "user": 1,
+            "aiRankScore": 1,
+            "aiRankRecommendation": 1,
         },
     )
     async for app in cursor:
@@ -179,6 +181,8 @@ async def build_application_index(db) -> Dict[str, Dict[str, Any]]:
             "status": app.get("status", ""),
             "appliedDate": app.get("appliedDate"),
             "cvUrl": cv_url,
+            "aiRankScore": app.get("aiRankScore"),
+            "aiRankRecommendation": app.get("aiRankRecommendation"),
         }
     return index
 
@@ -326,6 +330,8 @@ def entry_to_db_doc(entry: Dict[str, Any], synced_at: datetime) -> Dict[str, Any
         "appliedDate": _serialize_date(entry.get("appliedDate")),
         "modifiedAt": entry.get("modifiedAt"),
         "size": entry.get("size"),
+        "aiRankScore": entry.get("aiRankScore"),
+        "aiRankRecommendation": entry.get("aiRankRecommendation"),
         "syncedAt": synced_at,
         "updatedAt": synced_at,
         **quality,
@@ -445,6 +451,33 @@ def _not_linked_application_match() -> Dict[str, Any]:
     }
 
 
+def _parse_iso_date(value: Optional[str]) -> Optional[datetime]:
+    if not value or not str(value).strip():
+        return None
+    try:
+        text = str(value).strip()
+        if len(text) == 10:
+            return datetime.fromisoformat(text)
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_applied_date_clause(
+    date_from: Optional[str], date_to: Optional[str]
+) -> Optional[Dict[str, Any]]:
+    from_dt = _parse_iso_date(date_from)
+    to_dt = _parse_iso_date(date_to)
+    if not from_dt and not to_dt:
+        return None
+    range_filter: Dict[str, Any] = {}
+    if from_dt:
+        range_filter["$gte"] = from_dt.strftime("%Y-%m-%d")
+    if to_dt:
+        range_filter["$lt"] = (to_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+    return {"appliedDate": range_filter}
+
+
 def _build_vault_match_query(
     *,
     search: str = "",
@@ -454,6 +487,8 @@ def _build_vault_match_query(
     source: Optional[str] = None,
     contact_filter: str = "all",
     application_status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ) -> Dict[str, Any]:
     clauses: List[Dict[str, Any]] = []
 
@@ -496,6 +531,10 @@ def _build_vault_match_query(
 
     if application_status and application_status != "all":
         clauses.append({"applicationStatus": application_status})
+
+    date_clause = _build_applied_date_clause(date_from, date_to)
+    if date_clause:
+        clauses.append(date_clause)
 
     if not clauses:
         return {}
@@ -610,7 +649,58 @@ def db_doc_to_entry(doc: Dict[str, Any]) -> Dict[str, Any]:
         "appliedDate": doc.get("appliedDate"),
         "modifiedAt": doc.get("modifiedAt"),
         "size": doc.get("size"),
+        "aiRankScore": doc.get("aiRankScore"),
+        "aiRankRecommendation": doc.get("aiRankRecommendation"),
     }
+
+
+async def _enrich_vault_items_with_application_data(
+    db, items: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Overlay live application status, AI rank, and applied date on cached vault rows."""
+    from bson import ObjectId
+
+    app_ids = [item["applicationId"] for item in items if item.get("applicationId")]
+    if not app_ids:
+        return items
+
+    object_ids = []
+    for app_id in app_ids:
+        try:
+            object_ids.append(ObjectId(app_id))
+        except Exception:
+            continue
+    if not object_ids:
+        return items
+
+    app_map: Dict[str, Dict[str, Any]] = {}
+    cursor = db.applications.find(
+        {"_id": {"$in": object_ids}},
+        {
+            "status": 1,
+            "aiRankScore": 1,
+            "aiRankRecommendation": 1,
+            "appliedDate": 1,
+        },
+    )
+    async for doc in cursor:
+        app_map[str(doc["_id"])] = doc
+
+    for item in items:
+        app_id = item.get("applicationId")
+        if not app_id or app_id not in app_map:
+            continue
+        app = app_map[app_id]
+        if app.get("status"):
+            item["applicationStatus"] = app["status"]
+        if app.get("aiRankScore") is not None:
+            item["aiRankScore"] = app["aiRankScore"]
+        if app.get("aiRankRecommendation"):
+            item["aiRankRecommendation"] = app["aiRankRecommendation"]
+        if app.get("appliedDate"):
+            item["appliedDate"] = _serialize_date(app["appliedDate"])
+
+    return items
 
 
 def _compute_stats(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -704,6 +794,8 @@ async def list_cv_vault_from_db(
     source: Optional[str] = None,
     contact_filter: str = "all",
     application_status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Read CV vault entries from MongoDB with filters and sorting."""
     if sort not in VALID_SORTS:
@@ -722,6 +814,8 @@ async def list_cv_vault_from_db(
         source=source,
         contact_filter=contact_filter,
         application_status=application_status,
+        date_from=date_from,
+        date_to=date_to,
     )
 
     collection = db[CV_VAULT_COLLECTION]
@@ -729,6 +823,8 @@ async def list_cv_vault_from_db(
     items: List[Dict[str, Any]] = []
     async for doc in cursor:
         items.append(db_doc_to_entry(doc))
+
+    items = await _enrich_vault_items_with_application_data(db, items)
 
     meta = await db[CV_VAULT_META_COLLECTION].find_one({"_id": CV_VAULT_META_ID})
     last_synced = None
@@ -763,6 +859,8 @@ async def list_cv_vault_from_db(
             "source": source or "all",
             "contact_filter": contact_filter,
             "application_status": application_status or "all",
+            "date_from": date_from,
+            "date_to": date_to,
         },
     }
 
@@ -780,6 +878,8 @@ async def sync_cv_vault_from_dropbox(
     source: Optional[str] = None,
     contact_filter: str = "all",
     application_status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Sync Dropbox CVs into MongoDB and return the vault payload."""
     entries = await build_cv_vault_entries(db, dbx, extract_pdf=extract_pdf)
@@ -799,6 +899,8 @@ async def sync_cv_vault_from_dropbox(
         source=source,
         contact_filter=contact_filter,
         application_status=application_status,
+        date_from=date_from,
+        date_to=date_to,
     )
     payload["cached"] = False
     payload["sync"] = sync_result
@@ -868,6 +970,8 @@ def merge_vault_entries(
             "appliedDate": app_meta.get("appliedDate"),
             "modifiedAt": None,
             "size": None,
+            "aiRankScore": app_meta.get("aiRankScore"),
+            "aiRankRecommendation": app_meta.get("aiRankRecommendation"),
         }
 
     # Dropbox files
@@ -909,6 +1013,8 @@ def merge_vault_entries(
             "appliedDate": existing.get("appliedDate"),
             "modifiedAt": modified,
             "size": meta.size,
+            "aiRankScore": existing.get("aiRankScore"),
+            "aiRankRecommendation": existing.get("aiRankRecommendation"),
         }
 
     result = list(entries.values())

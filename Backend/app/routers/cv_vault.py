@@ -57,6 +57,8 @@ async def list_cv_vault(
         description="Contact filter: all, complete, missing",
     ),
     application_status: str = Query("all", description="Application status filter"),
+    date_from: Optional[str] = Query(None, description="Applied date from (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Applied date to (YYYY-MM-DD)"),
     sync: bool = Query(False, description="Force sync from Dropbox before returning"),
 ) -> Dict[str, Any]:
     """List CVs from MongoDB cache. Syncs from Dropbox if cache is empty or sync=true."""
@@ -81,6 +83,8 @@ async def list_cv_vault(
         "application_status": application_status
         if application_status != "all"
         else None,
+        "date_from": date_from,
+        "date_to": date_to,
     }
 
     count = await db[CV_VAULT_COLLECTION].count_documents({})
@@ -111,6 +115,8 @@ async def sync_cv_vault(
     source: str = Query("all"),
     contact_filter: str = Query("all"),
     application_status: str = Query("all"),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     """Pull latest CVs from Dropbox, extract metadata, and store in MongoDB."""
     db = get_database()
@@ -138,4 +144,6 @@ async def sync_cv_vault(
         application_status=application_status
         if application_status != "all"
         else None,
+        date_from=date_from,
+        date_to=date_to,
     )

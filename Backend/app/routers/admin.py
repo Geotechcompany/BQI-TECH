@@ -1901,10 +1901,10 @@ def _append_ai_score_filter(pipeline: list, ai_score_filter: Optional[str]) -> N
         return
 
     score_ranges = {
-        "strong": {"aiRankScore": {"$gte": 85}},
-        "good": {"aiRankScore": {"$gte": 70, "$lt": 85}},
-        "moderate": {"aiRankScore": {"$gte": 50, "$lt": 70}},
-        "weak": {"aiRankScore": {"$lt": 50, "$gte": 0}},
+        "strong": {"aiRankScore": {"$gte": 88}},
+        "good": {"aiRankScore": {"$gte": 72, "$lt": 88}},
+        "moderate": {"aiRankScore": {"$gte": 52, "$lt": 72}},
+        "weak": {"aiRankScore": {"$lt": 52, "$gte": 0}},
     }
     match_query = score_ranges.get(ai_score_filter)
     if match_query:
