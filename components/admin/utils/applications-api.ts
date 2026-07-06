@@ -373,6 +373,17 @@ class AdminApplicationsApi {
         aiRankSummary?: string;
         aiRankStrengths?: string[];
         aiRankGaps?: string[];
+        aiRankRequirements?: Array<{
+          requirement: string;
+          jdQuote?: string;
+          category?: string;
+          criticality?: number;
+          match: string;
+          score?: number;
+          evidence?: string;
+          gapNote?: string;
+        }>;
+        aiRankScoreReason?: string;
         aiRankRecommendation?: string;
         aiRankedAt?: string;
       }>;

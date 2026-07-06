@@ -6,7 +6,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Application } from "@/types/application";
+import { Application, AiRankRequirement } from "@/types/application";
 import { getPositionDisplay, getCvUrl } from "./utils/table-utils";
 import { APPLICATION_STATUS_OPTIONS, getStatusColor } from "./application-status";
 import { AiRankInlineProgress, type AiRankProgressState } from "./AiRankProgress";
@@ -26,6 +26,28 @@ import {
 import { Button } from "@/components/ui/button";
 import { CVPreviewFrame } from "./CVPreviewFrame";
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
+
+function aiMatchLabel(match: AiRankRequirement["match"]): string {
+  const labels: Record<AiRankRequirement["match"], string> = {
+    full: "Met",
+    partial: "Partial",
+    weak: "Weak",
+    none: "Missing",
+    unknown: "Not evidenced",
+  };
+  return labels[match] ?? match;
+}
+
+function aiMatchBadgeClass(match: AiRankRequirement["match"]): string {
+  const styles: Record<AiRankRequirement["match"], string> = {
+    full: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    partial: "bg-amber-100 text-amber-800 border-amber-200",
+    weak: "bg-orange-100 text-orange-800 border-orange-200",
+    none: "bg-red-100 text-red-800 border-red-200",
+    unknown: "bg-gray-100 text-gray-700 border-gray-200",
+  };
+  return styles[match] ?? "bg-gray-100 text-gray-700 border-gray-200";
+}
 import {
   Select,
   SelectContent,
@@ -173,6 +195,12 @@ export function ViewApplicationModal({
                             {application.aiRankSummary}
                           </p>
                         )}
+                        {application.aiRankScoreReason && (
+                          <p className="text-sm text-gray-600 leading-relaxed border-l-2 border-violet-200 pl-3">
+                            <span className="font-medium text-gray-700">Why this score: </span>
+                            {application.aiRankScoreReason}
+                          </p>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                           {application.aiRankStrengths &&
                             application.aiRankStrengths.length > 0 && (
@@ -196,6 +224,60 @@ export function ViewApplicationModal({
                             </div>
                           )}
                         </div>
+                        {application.aiRankRequirements &&
+                          application.aiRankRequirements.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium text-gray-700">
+                                Requirement assessment
+                              </p>
+                              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                {application.aiRankRequirements.map((req, index) => (
+                                  <div
+                                    key={index}
+                                    className="rounded-lg border border-gray-200 bg-white/70 p-3 text-sm"
+                                  >
+                                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                                      <span
+                                        className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${aiMatchBadgeClass(req.match)}`}
+                                      >
+                                        {aiMatchLabel(req.match)}
+                                      </span>
+                                      {req.criticality === 3 && (
+                                        <span className="text-[11px] font-medium text-red-600">
+                                          Must-have
+                                        </span>
+                                      )}
+                                      {req.score != null && (
+                                        <span className="text-[11px] text-gray-500">
+                                          {req.score}/100
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-gray-800 font-medium leading-snug">
+                                      {req.requirement}
+                                    </p>
+                                    {req.jdQuote && req.jdQuote !== req.requirement && (
+                                      <p className="text-xs text-gray-500 mt-1 italic">
+                                        JD: &ldquo;{req.jdQuote}&rdquo;
+                                      </p>
+                                    )}
+                                    {req.evidence && (
+                                      <p className="text-xs text-gray-600 mt-1.5">
+                                        <span className="font-medium text-gray-700">Evidence: </span>
+                                        {req.evidence}
+                                      </p>
+                                    )}
+                                    {req.gapNote && (
+                                      <p className="text-xs text-amber-800 mt-1">
+                                        <span className="font-medium">Gap: </span>
+                                        {req.gapNote}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         {application.aiRankedAt && (
                           <p className="text-xs text-gray-500">
                             Ranked {formatDate(application.aiRankedAt)}

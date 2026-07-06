@@ -340,6 +340,9 @@ export function UnifiedApplicationTable({
                     <AiRankScoreCell
                       score={application.aiRankScore}
                       recommendation={application.aiRankRecommendation}
+                      summary={application.aiRankSummary}
+                      scoreReason={application.aiRankScoreReason}
+                      requirements={application.aiRankRequirements}
                       onRank={onRank ? () => onRank(application.id) : undefined}
                       isRanking={rankingApplicationId === application.id}
                       disabledReason={

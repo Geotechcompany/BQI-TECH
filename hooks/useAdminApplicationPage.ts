@@ -622,6 +622,8 @@ export function useAdminApplicationPage({
                 aiRankSummary: rankedResult.aiRankSummary,
                 aiRankStrengths: rankedResult.aiRankStrengths,
                 aiRankGaps: rankedResult.aiRankGaps,
+                aiRankRequirements: rankedResult.aiRankRequirements,
+                aiRankScoreReason: rankedResult.aiRankScoreReason,
                 aiRankRecommendation: rankedResult.aiRankRecommendation,
                 aiRankedAt: rankedResult.aiRankedAt,
               }
@@ -656,6 +658,8 @@ export function useAdminApplicationPage({
             aiRankSummary: rankedItem.aiRankSummary,
             aiRankStrengths: rankedItem.aiRankStrengths,
             aiRankGaps: rankedItem.aiRankGaps,
+            aiRankRequirements: rankedItem.aiRankRequirements,
+            aiRankScoreReason: rankedItem.aiRankScoreReason,
             aiRankRecommendation: rankedItem.aiRankRecommendation,
             aiRankedAt: rankedItem.aiRankedAt,
           });
