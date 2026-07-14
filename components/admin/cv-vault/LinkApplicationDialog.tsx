@@ -51,6 +51,17 @@ interface JobPostingOption {
   isActive?: boolean
 }
 
+/** Fields needed to render / select an application in the link dialog */
+type ApplicationListItem = Pick<
+  Application,
+  "name" | "email" | "position" | "status"
+> & {
+  id?: string
+  _id?: string
+  appliedDate?: Date | string | null
+  cvUrl?: string
+}
+
 interface LinkApplicationDialogProps {
   entry: CvVaultEntry | null
   open: boolean
@@ -58,7 +69,7 @@ interface LinkApplicationDialogProps {
   onLinked: (entry: CvVaultEntry) => void
 }
 
-function applicationLabel(app: Pick<Application, "name" | "email" | "position" | "status">) {
+function applicationLabel(app: Pick<ApplicationListItem, "name" | "email" | "position" | "status">) {
   const parts = [app.name || "Unknown"]
   if (app.email) parts.push(app.email)
   if (app.position) parts.push(app.position)
@@ -242,7 +253,7 @@ export function LinkApplicationDialog({
       .filter((job) => job.id)
   }, [jobsData])
 
-  const applications = useMemo(() => {
+  const applications = useMemo((): ApplicationListItem[] => {
     const fromSearch = searchResults?.applications ?? []
     if (fromSearch.length > 0) return fromSearch
 
@@ -254,7 +265,7 @@ export function LinkApplicationDialog({
       status: s.status,
       appliedDate: s.appliedDate,
       cvUrl: s.hasCvUrl ? "linked" : "",
-    })) as Application[]
+    }))
   }, [searchResults, suggestions])
 
   const linkMutation = useMutation({
