@@ -236,8 +236,8 @@ export const getStatusDateValue = (
   application: Application,
   dateField: string
 ): string | Date | null | undefined => {
-  const direct = (application as Record<string, unknown>)[dateField];
-  if (direct) return direct as string | Date;
+  const direct = application[dateField as keyof Application];
+  if (typeof direct === "string" || direct instanceof Date) return direct;
 
   const status = DATE_FIELD_STATUS_MAP[dateField];
   if (!status || !application.statusHistory?.length) return undefined;

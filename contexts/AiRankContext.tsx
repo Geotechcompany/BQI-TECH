@@ -173,7 +173,7 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
             candidateStartedAt,
           });
 
-          let phaseInterval: ReturnType<typeof window.setInterval> | undefined;
+          let phaseInterval: number | undefined;
 
           try {
             phaseInterval = window.setInterval(() => {
