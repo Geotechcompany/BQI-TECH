@@ -10,6 +10,8 @@ export interface CvVaultEntry {
   source: "application" | "dropbox" | string
   applicationId?: string | null
   applicationStatus?: string | null
+  position?: string | null
+  jobId?: string | null
   appliedDate?: string | null
   modifiedAt?: string | null
   size?: number | null

@@ -725,7 +725,7 @@ def db_doc_to_entry(doc: Dict[str, Any]) -> Dict[str, Any]:
 async def _enrich_vault_items_with_application_data(
     db, items: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    """Overlay live application status, AI rank, and applied date on cached vault rows."""
+    """Overlay live application status, position, AI rank, and applied date on cached vault rows."""
     from bson import ObjectId
 
     app_ids = [item["applicationId"] for item in items if item.get("applicationId")]
@@ -746,6 +746,8 @@ async def _enrich_vault_items_with_application_data(
         {"_id": {"$in": object_ids}},
         {
             "status": 1,
+            "position": 1,
+            "jobId": 1,
             "aiRankScore": 1,
             "aiRankRecommendation": 1,
             "appliedDate": 1,
@@ -761,6 +763,11 @@ async def _enrich_vault_items_with_application_data(
         app = app_map[app_id]
         if app.get("status"):
             item["applicationStatus"] = app["status"]
+        if app.get("position"):
+            item["position"] = app["position"]
+        job_id = app.get("jobId")
+        if job_id is not None:
+            item["jobId"] = str(job_id)
         if app.get("aiRankScore") is not None:
             item["aiRankScore"] = app["aiRankScore"]
         if app.get("aiRankRecommendation"):
