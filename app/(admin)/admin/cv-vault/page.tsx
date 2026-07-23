@@ -8,7 +8,6 @@ import { useAuth } from "@/contexts/AuthContext"
 import { authService } from "@/lib/auth-backend"
 import { CVCell } from "@/components/admin/CVCell"
 import { AiRankScoreCell } from "@/components/admin/AiRankCell"
-import { adminApplicationsApi } from "@/components/admin/utils/applications-api"
 import { useAiRank } from "@/contexts/AiRankContext"
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext"
 import { Badge } from "@/components/ui/badge"
@@ -22,19 +21,13 @@ import {
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
   ExternalLink,
   FileArchive,
   Link2,
   Loader2,
   Mail,
+  Pencil,
   RefreshCw,
-  Settings,
   Sparkles,
 } from "lucide-react"
 import {
@@ -42,6 +35,7 @@ import {
   type TriFilter,
 } from "@/components/admin/cv-vault/CvVaultFilters"
 import { LinkApplicationDialog } from "@/components/admin/cv-vault/LinkApplicationDialog"
+import { UpdateCandidateDialog } from "@/components/admin/cv-vault/UpdateCandidateDialog"
 import type {
   CvVaultFilterOptions,
   CvVaultEntry,
@@ -83,16 +77,6 @@ function contactSourceBadge(source?: string | null) {
     </Badge>
   )
 }
-
-const STATUS_OPTIONS = [
-  "New",
-  "Shortlisted",
-  "Technical Assessment",
-  "Interviewing",
-  "Hired",
-  "Rejected",
-  "Disqualified",
-] as const
 
 function parseApiError(body: unknown, status: number): string {
   if (body && typeof body === "object" && "detail" in body) {
@@ -232,6 +216,8 @@ export default function CvVaultPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [linkEntry, setLinkEntry] = useState<CvVaultEntry | null>(null)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
+  const [updateEntries, setUpdateEntries] = useState<CvVaultEntry[]>([])
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const queryClient = useQueryClient()
   const { isUnconfigured: aiUnconfigured } = useAiStatus()
   const { rankApplication, inFlightApplicationIds, isRanking: isAnyRanking } = useAiRank()
@@ -334,38 +320,6 @@ export default function CvVaultPage() {
     },
   })
 
-  const statusMutation = useMutation({
-    mutationFn: ({
-      applicationId,
-      status,
-    }: {
-      applicationId: string
-      status: string
-    }) => adminApplicationsApi.bulkUpdateStatus({ ids: [applicationId], status }),
-    onSuccess: (_, { status }) => {
-      queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
-      queryClient.invalidateQueries({ queryKey: ["admin-notifications"] })
-      toast.success(`Status set to ${status}`)
-    },
-    onError: () => {
-      toast.error("Failed to update status")
-    },
-  })
-
-  const bulkStatusMutation = useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: string }) =>
-      adminApplicationsApi.bulkUpdateStatus({ ids, status }),
-    onSuccess: (_, { ids, status }) => {
-      queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
-      queryClient.invalidateQueries({ queryKey: ["admin-notifications"] })
-      toast.success(`Updated ${ids.length} application(s) to ${status}`)
-      setSelectedIds(new Set())
-    },
-    onError: () => {
-      toast.error("Failed to update status")
-    },
-  })
-
   const handleRankApplication = useCallback(
     async (applicationId: string, candidateName?: string) => {
       if (aiUnconfigured) {
@@ -451,12 +405,14 @@ export default function CvVaultPage() {
     setSelectedIds(next)
   }
 
-  const handleBulkStatusUpdate = (status: string) => {
-    if (eligibleApplicationIds.length === 0) {
+  const openUpdateDialog = (entries: CvVaultEntry[]) => {
+    const linked = entries.filter((e) => e.applicationId)
+    if (linked.length === 0) {
       toast.error("No selected CVs have a linked application")
       return
     }
-    bulkStatusMutation.mutate({ ids: eligibleApplicationIds, status })
+    setUpdateEntries(linked)
+    setUpdateDialogOpen(true)
   }
 
   const openLinkDialog = (entry: CvVaultEntry) => {
@@ -469,6 +425,12 @@ export default function CvVaultPage() {
 
   const handleLinked = () => {
     queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
+    setSelectedIds(new Set())
+  }
+
+  const handleUpdated = () => {
+    queryClient.invalidateQueries({ queryKey: ["cv-vault"] })
+    queryClient.invalidateQueries({ queryKey: ["admin-notifications"] })
     setSelectedIds(new Set())
   }
 
@@ -624,31 +586,15 @@ export default function CvVaultPage() {
                     Link application
                   </Button>
                 )}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        eligibleApplicationIds.length === 0 ||
-                        bulkStatusMutation.isPending
-                      }
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Bulk Update Status
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    {STATUS_OPTIONS.map((status) => (
-                      <DropdownMenuItem
-                        key={status}
-                        onClick={() => handleBulkStatusUpdate(status)}
-                      >
-                        {status}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={eligibleApplicationIds.length === 0}
+                  onClick={() => openUpdateDialog(selectedEntries)}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Update status & position
+                </Button>
               </div>
             )}
             <div className="overflow-x-auto">
@@ -672,7 +618,10 @@ export default function CvVaultPage() {
                     <th className="text-left p-3 font-medium hidden lg:table-cell">
                       Source
                     </th>
-                    <th className="text-left p-3 font-medium hidden lg:table-cell">
+                    <th className="text-left p-3 font-medium hidden lg:table-cell min-w-[140px]">
+                      Position
+                    </th>
+                    <th className="text-left p-3 font-medium hidden lg:table-cell min-w-[160px]">
                       Status
                     </th>
                     <th className="text-left p-3 font-medium hidden lg:table-cell min-w-[100px]">
@@ -688,7 +637,7 @@ export default function CvVaultPage() {
                   {items.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         className="p-8 text-center text-muted-foreground"
                       >
                         No CVs match your filters
@@ -759,27 +708,28 @@ export default function CvVaultPage() {
                         </td>
                         <td className="p-3 hidden lg:table-cell">
                           {entry.applicationId ? (
-                            <Select
-                              value={entry.applicationStatus || "New"}
-                              onValueChange={(status) =>
-                                statusMutation.mutate({
-                                  applicationId: entry.applicationId!,
-                                  status,
-                                })
-                              }
-                              disabled={statusMutation.isPending}
+                            <span className="text-sm truncate max-w-[160px] block" title={entry.position || undefined}>
+                              {entry.position || (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-3 hidden lg:table-cell">
+                          {entry.applicationId ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs max-w-[180px] justify-between gap-1"
+                              onClick={() => openUpdateDialog([entry])}
                             >
-                              <SelectTrigger className="h-8 w-[160px] text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {STATUS_OPTIONS.map((status) => (
-                                  <SelectItem key={status} value={status}>
-                                    {status}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              <span className="truncate">
+                                {entry.applicationStatus || "New"}
+                              </span>
+                              <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            </Button>
                           ) : (
                             <Button
                               variant="outline"
@@ -932,6 +882,12 @@ export default function CvVaultPage() {
         open={linkDialogOpen}
         onOpenChange={setLinkDialogOpen}
         onLinked={handleLinked}
+      />
+      <UpdateCandidateDialog
+        entries={updateEntries}
+        open={updateDialogOpen}
+        onOpenChange={setUpdateDialogOpen}
+        onUpdated={handleUpdated}
       />
     </AdminPageLayout>
   )
