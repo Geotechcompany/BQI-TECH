@@ -54,6 +54,24 @@ interface AiRankContextValue {
 
 const AiRankContext = createContext<AiRankContextValue | null>(null);
 
+const EMPTY_RANK_RESULT: AiRankCompletePayload = {
+  ranked: 0,
+  errors: [],
+  results: [],
+};
+
+const AI_RANK_FALLBACK: AiRankContextValue = {
+  progress: null,
+  isBackground: false,
+  isRanking: false,
+  inFlightApplicationIds: [],
+  rankingApplicationId: null,
+  rankApplications: async () => EMPTY_RANK_RESULT,
+  rankApplication: async () => EMPTY_RANK_RESULT,
+  sendToBackground: () => {},
+  expandOverlay: () => {},
+};
+
 const LLM_PHASE_INTERVAL_MS = 2200;
 const SAVE_FLASH_MS = 450;
 const COMPLETE_FLASH_MS = 500;
@@ -307,8 +325,7 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
 
 export function useAiRank() {
   const context = useContext(AiRankContext);
-  if (!context) {
-    throw new Error("useAiRank must be used within AiRankProvider");
-  }
-  return context;
+  // Shared admin modals (e.g. ViewApplicationModal) also render on the user
+  // dashboard, which has no AiRankProvider — return a safe no-op there.
+  return context ?? AI_RANK_FALLBACK;
 }
