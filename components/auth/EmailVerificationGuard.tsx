@@ -16,6 +16,7 @@ interface EmailVerificationGuardProps {
 // Paths that don't require email verification
 const noVerificationPaths = [
   '/auth/verify-email',
+  '/auth/setup-2fa',
   '/login',
   '/manage/login',
   '/sign-up',

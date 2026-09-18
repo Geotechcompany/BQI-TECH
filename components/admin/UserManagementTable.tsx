@@ -3,6 +3,7 @@
 import { User as UserType } from "@/src/types/user";
 import { Button } from "@/components/ui/button";
 import {
+  KeyRound,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -33,7 +34,9 @@ interface UserManagementTableProps {
   isLoading?: boolean;
   noDataMessage?: string;
   resendingUserId?: string;
+  sendingResetUserId?: string;
   onResendInvite?: (userId: string) => void;
+  onSendPasswordReset?: (user: UserType) => void;
   onEdit?: (user: UserType) => void;
   onDelete?: (userId: string) => void;
 }
@@ -89,7 +92,9 @@ export function UserManagementTable({
   isLoading,
   noDataMessage = "No users found",
   resendingUserId,
+  sendingResetUserId,
   onResendInvite,
+  onSendPasswordReset,
   onEdit,
   onDelete,
 }: UserManagementTableProps) {
@@ -235,6 +240,19 @@ export function UserManagementTable({
                           <Pencil className="mr-2 h-4 w-4" />
                           Edit permissions
                         </DropdownMenuItem>
+                        {onSendPasswordReset && (
+                          <DropdownMenuItem
+                            onSelect={() => onSendPasswordReset(user)}
+                            disabled={sendingResetUserId === user.id}
+                          >
+                            {sendingResetUserId === user.id ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <KeyRound className="mr-2 h-4 w-4" />
+                            )}
+                            Send password reset link
+                          </DropdownMenuItem>
+                        )}
                         {isAdminRole(user.role) && (
                           <DropdownMenuItem disabled>
                             <Shield className="mr-2 h-4 w-4" />

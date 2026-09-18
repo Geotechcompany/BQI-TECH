@@ -20,6 +20,7 @@ export function PortalAuthCard({
   backLabel = "Back to Home",
 }: PortalAuthCardProps) {
   const reduceMotion = useReducedMotion();
+  const showBack = Boolean(backHref);
 
   const cardMotion = reduceMotion
     ? {
@@ -57,15 +58,17 @@ export function PortalAuthCard({
             "motion-reduce:backdrop-blur-none motion-reduce:bg-white"
           )}
         >
-          <div className="mb-6">
-            <Link
-              href={backHref}
-              className="inline-flex items-center gap-0.5 text-[13px] font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f]"
-            >
-              <ChevronLeft className="h-4 w-4" aria-hidden />
-              {backLabel}
-            </Link>
-          </div>
+          {showBack ? (
+            <div className="mb-6">
+              <Link
+                href={backHref}
+                className="inline-flex items-center gap-0.5 text-[13px] font-medium text-[#6e6e73] transition-colors hover:text-[#1d1d1f]"
+              >
+                <ChevronLeft className="h-4 w-4" aria-hidden />
+                {backLabel}
+              </Link>
+            </div>
+          ) : null}
           {children}
         </div>
       </motion.div>

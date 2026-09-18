@@ -15,6 +15,11 @@ import { User } from "@/types/user";
 import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
 import { isAdmin2faChallenge } from "@/lib/auth-backend";
 import {
+  buildUser2faSetupUrl,
+  isUser2faSetupExemptPath,
+  needsUserTwoFactorSetup,
+} from "@/lib/user-2fa-gate";
+import {
   DEFAULT_ADMIN_BASE,
   adminHref,
   isPublicAdminPath,
@@ -198,6 +203,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [authState.isAuthenticated, authState.user, authState.authLoading]);
+
+  // Post-signup 2FA gate for normal users (admins use /manage policy)
+  useEffect(() => {
+    if (
+      !authState.isAuthenticated ||
+      !authState.user ||
+      authState.authLoading
+    ) {
+      return;
+    }
+    if (typeof window === "undefined") return;
+
+    const currentPath = window.location.pathname;
+    if (isUser2faSetupExemptPath(currentPath)) return;
+    if (
+      !currentPath.startsWith("/dashboard") &&
+      !currentPath.startsWith("/employee")
+    ) {
+      return;
+    }
+
+    if (needsUserTwoFactorSetup(authState.user)) {
+      router.push(buildUser2faSetupUrl(currentPath));
+    }
+  }, [
+    authState.isAuthenticated,
+    authState.user,
+    authState.authLoading,
+    router,
+  ]);
 
   // Handle authentication errors
   const handleAuthError = (error: any) => {

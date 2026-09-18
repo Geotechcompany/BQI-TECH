@@ -7,6 +7,14 @@ import {
   isValidAdminPathSlug,
   normalizeAdminPathSlug,
 } from "@/lib/admin-path";
+import {
+  buildUser2faSetupUrl,
+  isAdminRole,
+  isUser2faSetupExemptPath,
+  needsUserTwoFactorSetup,
+  USER_2FA_SETUP_PATH,
+  userHasEnrolledTwoFactor,
+} from "@/lib/user-2fa-gate";
 
 // Paths that don't require authentication
 const publicPaths = [
@@ -348,10 +356,51 @@ export async function middleware(request: NextRequest) {
       return finish(NextResponse.redirect(verifyUrl));
     }
 
+    // Post-signup 2FA gate for normal users (admins use /manage policy)
+    const isSetup2faPath =
+      pathname === USER_2FA_SETUP_PATH ||
+      pathname.startsWith(`${USER_2FA_SETUP_PATH}/`);
+    if (
+      isEmailVerified &&
+      !isAdminRole(user?.role) &&
+      !isAdminRoute &&
+      !isUser2faSetupExemptPath(pathname) &&
+      !isSetup2faPath &&
+      needsUserTwoFactorSetup({
+        role: user?.role,
+        isEmailVerified: Boolean(isEmailVerified),
+        totpEnabled: user?.totpEnabled,
+        email2faEnabled: user?.email2faEnabled,
+        admin2faFactors: user?.admin2faFactors,
+      })
+    ) {
+      // Soft middleware gate: only redirect when session clearly lacks factors.
+      // Client guard still confirms via /auth/2fa/status for stale sessions.
+      if (!userHasEnrolledTwoFactor(user)) {
+        const setupUrl = new URL(
+          buildUser2faSetupUrl(pathname),
+          request.url
+        );
+        return finish(NextResponse.redirect(setupUrl));
+      }
+    }
+
+    // Authenticated users who already enrolled should leave the setup page
+    if (
+      isSetup2faPath &&
+      isEmailVerified &&
+      !isAdminRole(user?.role) &&
+      userHasEnrolledTwoFactor(user)
+    ) {
+      return finish(
+        NextResponse.redirect(new URL("/dashboard", request.url))
+      );
+    }
+
     // Check admin access for admin routes (case-insensitive)
     const role = String(user?.role ?? "").toUpperCase();
-    const isAdminRole = role === "ADMIN" || role === "SUPER_ADMIN";
-    if (isAdminRoute && !isAdminRole) {
+    const isAdminRoleCheck = role === "ADMIN" || role === "SUPER_ADMIN";
+    if (isAdminRoute && !isAdminRoleCheck) {
       return finish(
         NextResponse.redirect(new URL("/dashboard", request.url))
       );

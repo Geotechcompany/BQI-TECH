@@ -24,6 +24,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/auth-backend";
 import { resolveEmailVerified } from "@/lib/resolve-email-verified";
+import {
+  buildUser2faSetupUrl,
+  needsUserTwoFactorSetup,
+  userHasEnrolledTwoFactor,
+} from "@/lib/user-2fa-gate";
 import { cn } from "@/lib/utils";
 
 const otpSchema = z.object({
@@ -245,7 +250,21 @@ function EmailVerificationContent() {
             toast.success("Email already verified. Redirecting...");
             hasShownAlreadyVerifiedToastRef.current = true;
           }
-          router.replace(isAdmin ? "/manage/overview" : "/dashboard");
+          if (isAdmin) {
+            router.replace("/manage/overview");
+          } else {
+            const sessionUser = authService.getSession()?.user;
+            const destination = needsUserTwoFactorSetup({
+              role: sessionUser?.role,
+              isEmailVerified: true,
+              totpEnabled: sessionUser?.totpEnabled,
+              email2faEnabled: sessionUser?.email2faEnabled,
+              admin2faFactors: sessionUser?.admin2faFactors,
+            })
+              ? buildUser2faSetupUrl("/dashboard")
+              : "/dashboard";
+            router.replace(destination);
+          }
           return true;
         }
       } catch (error) {
@@ -354,10 +373,29 @@ function EmailVerificationContent() {
         // Clear verification tracking for this email
         clearVerificationTracking(email);
 
-        // Clean redirect to login after verification
-        const redirectPath = `/login?verified=1${
+        // Authenticated users go straight to 2FA setup; otherwise sign in first
+        const sessionUser = authService.getSession()?.user;
+        let redirectPath = `/login?verified=1${
           email ? `&email=${encodeURIComponent(email)}` : ""
         }`;
+        if (isAuthenticated && sessionUser) {
+          if (isAdmin) {
+            redirectPath = "/manage/overview";
+          } else if (
+            needsUserTwoFactorSetup({
+              role: sessionUser.role,
+              isEmailVerified: true,
+              totpEnabled: sessionUser.totpEnabled,
+              email2faEnabled: sessionUser.email2faEnabled,
+              admin2faFactors: sessionUser.admin2faFactors,
+            }) ||
+            !userHasEnrolledTwoFactor(sessionUser)
+          ) {
+            redirectPath = buildUser2faSetupUrl("/dashboard");
+          } else {
+            redirectPath = "/dashboard";
+          }
+        }
         setTimeout(() => {
           router.replace(redirectPath);
         }, 1000);
@@ -372,7 +410,14 @@ function EmailVerificationContent() {
         isVerifyingRef.current = false;
       }
     },
-    [email, router, updateEmailVerificationStatus, status]
+    [
+      email,
+      router,
+      updateEmailVerificationStatus,
+      status,
+      isAuthenticated,
+      isAdmin,
+    ]
   );
 
   // Effect to handle email retrieval and redirect logic

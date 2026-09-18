@@ -24,6 +24,7 @@ export default function ClientLayout({
     "/forgot-password",
     "/reset-password",
     "/auth/verify-email",
+    "/auth/setup-2fa",
     "/employee",
   ].some((path) => pathname?.startsWith(path));
   // Browser URL may be `/manage/...` or a rewritten custom slug (e.g. `/manage/...`)

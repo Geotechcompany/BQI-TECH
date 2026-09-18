@@ -163,36 +163,20 @@ async def login(
         needs_password_setup = bool(user.get("needsPasswordSetup")) or not user.get("password")
         if needs_password_setup:
             from app.lib.cors import resolve_frontend_url
-            from app.lib.email import send_password_reset_email
+            from app.lib.password_reset import issue_password_reset_email
 
-            token = _generate_reset_token()
-            canonical_email = _normalize_email(user.get("email", email))
-            expires_at = datetime.utcnow() + timedelta(hours=1)
-            await db.password_resets.update_one(
-                {"email": canonical_email},
-                {
-                    "$set": {
-                        "email": canonical_email,
-                        "userId": str(user["_id"]),
-                        "token": token,
-                        "expiresAt": expires_at,
-                        "createdAt": datetime.utcnow(),
-                    }
-                },
-                upsert=True,
-            )
-            reset_link = (
-                f"{resolve_frontend_url(request.headers.get('origin'))}"
-                f"/reset-password?token={token}"
-            )
             try:
-                await send_password_reset_email(
-                    email=canonical_email,
-                    reset_link=reset_link,
+                await issue_password_reset_email(
+                    db,
+                    user,
                     frontend_url=resolve_frontend_url(request.headers.get("origin")),
                 )
             except Exception as e:
-                logger.warning("Failed sending password setup email to %s: %s", canonical_email, e)
+                logger.warning(
+                    "Failed sending password setup email to %s: %s",
+                    _normalize_email(user.get("email", email)),
+                    e,
+                )
 
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -361,6 +345,7 @@ async def login(
         # Get verification status (standardize on isEmailVerified)
         is_verified = await resolve_email_verified(db, user)
         avatar = await resolve_user_avatar_url(db, user)
+        login_factors = enrolled_factors(user)
 
         # Format user data
         user_data = {
@@ -372,7 +357,9 @@ async def login(
             "isEmailVerified": is_verified,
             "avatar": avatar,
             "avatarUrl": avatar,
-            "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
+            "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None,
+            "totpEnabled": login_factors["totp"],
+            "email2faEnabled": login_factors["email"],
         }
         
         # Get origin from request headers
@@ -1027,9 +1014,7 @@ async def verify_email(
 
 
 # ---------------------- Password Reset Flow ----------------------
-def _generate_reset_token() -> str:
-    import secrets
-    return secrets.token_urlsafe(48)
+from app.lib.password_reset import issue_password_reset_email
 
 
 @router.post("/forgot-password")
@@ -1043,37 +1028,15 @@ async def forgot_password(request: Request, data: ForgotPasswordRequest):
         user = await _find_user_by_email(db, email)
 
         if user:
-            token = _generate_reset_token()
-            expires_at = datetime.utcnow() + timedelta(hours=1)
-            canonical_email = _normalize_email(user.get("email", email))
-            await db.password_resets.update_one(
-                {"email": canonical_email},
-                {
-                    "$set": {
-                        "email": canonical_email,
-                        "userId": str(user["_id"]),
-                        "token": token,
-                        "expiresAt": expires_at,
-                        "createdAt": datetime.utcnow(),
-                    }
-                },
-                upsert=True,
-            )
-
-            # Build reset link for frontend
             from app.lib.cors import resolve_frontend_url
 
-            reset_link = (
-                f"{resolve_frontend_url(request.headers.get('origin'))}"
-                f"/reset-password?token={token}"
-            )
-            from app.lib.email import send_password_reset_email
-
+            frontend_url = resolve_frontend_url(request.headers.get("origin"))
             try:
-                await send_password_reset_email(
-                    email=email,
-                    reset_link=reset_link,
-                    frontend_url=resolve_frontend_url(request.headers.get("origin")),
+                await issue_password_reset_email(
+                    db,
+                    user,
+                    frontend_url=frontend_url,
+                    email_override=email,
                 )
             except Exception as e:
                 logging.warning(f"Failed sending reset email to {email}: {e}")

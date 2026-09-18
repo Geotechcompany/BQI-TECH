@@ -24,6 +24,7 @@ import type { Employee } from "@/types/employee";
 import { PlatformTourProvider } from "@/components/admin/tour/PlatformTour";
 import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { EmployeeQuickStartChecklist } from "@/components/employee/EmployeeQuickStartChecklist";
+import { TwoFactorSetupGuard } from "@/components/auth/TwoFactorSetupGuard";
 import { getEmployeeTourIdForPath } from "@/lib/employee-tours";
 import {
   EMPLOYEE_LEAVE_NAV,
@@ -128,40 +129,42 @@ export default function EmployeePortalLayout({
   }
 
   return (
-    <PlatformTourProvider>
-      <div
-        id="employee-root"
-        className="flex h-screen w-screen flex-col overflow-hidden bg-gray-100 dark:bg-gray-950 md:flex-row"
-      >
-        <EmployeePortalSidebar />
+    <TwoFactorSetupGuard requireSetup={true}>
+      <PlatformTourProvider>
+        <div
+          id="employee-root"
+          className="flex h-screen w-screen flex-col overflow-hidden bg-gray-100 dark:bg-gray-950 md:flex-row"
+        >
+          <EmployeePortalSidebar />
 
-        {/* Spacer mirrors fixed dual-rail width so content tracks the spring */}
-        <motion.div
-          aria-hidden
-          className="hidden shrink-0 md:block"
-          initial={false}
-          animate={{ width: shellOffset }}
-          transition={shellSpring}
-          style={{ willChange: "width" }}
-        />
-
-        <main className="flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden bg-gray-100 pb-20 dark:bg-gray-950 md:pb-0">
-          <EmployeePortalHeader
-            title={pageTitle(pathname)}
-            tourId={tourId}
+          {/* Spacer mirrors fixed dual-rail width so content tracks the spring */}
+          <motion.div
+            aria-hidden
+            className="hidden shrink-0 md:block"
+            initial={false}
+            animate={{ width: shellOffset }}
+            transition={shellSpring}
+            style={{ willChange: "width" }}
           />
 
-          <div className="h-full w-full flex-1 overflow-x-hidden overflow-y-auto">
-            <div className="h-full w-full p-4 sm:p-6 md:p-8">
-              {tourId ? <TourPageHelper tourId={tourId} /> : null}
-              {children}
-            </div>
-          </div>
-        </main>
+          <main className="flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden bg-gray-100 pb-20 dark:bg-gray-950 md:pb-0">
+            <EmployeePortalHeader
+              title={pageTitle(pathname)}
+              tourId={tourId}
+            />
 
-        <EmployeeMobileBottomTabs />
-        <EmployeeQuickStartChecklist />
-      </div>
-    </PlatformTourProvider>
+            <div className="h-full w-full flex-1 overflow-x-hidden overflow-y-auto">
+              <div className="h-full w-full p-4 sm:p-6 md:p-8">
+                {tourId ? <TourPageHelper tourId={tourId} /> : null}
+                {children}
+              </div>
+            </div>
+          </main>
+
+          <EmployeeMobileBottomTabs />
+          <EmployeeQuickStartChecklist />
+        </div>
+      </PlatformTourProvider>
+    </TwoFactorSetupGuard>
   );
 }

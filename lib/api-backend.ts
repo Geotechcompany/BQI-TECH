@@ -502,6 +502,9 @@ export const adminApi = {
   resendAdminInviteForUser: (userId: string) =>
     backendApi.post(`/api/admin/users/${userId}/resend-invite`),
 
+  sendPasswordReset: (userId: string) =>
+    backendApi.post(`/api/admin/users/${userId}/send-password-reset`),
+
   revokeAdminInvite: (inviteId: string) =>
     backendApi.delete(`/api/admin/users/invites/${inviteId}`),
 

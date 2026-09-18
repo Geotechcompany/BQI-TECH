@@ -28,8 +28,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { employeePortalApi } from "@/lib/api-backend";
-import { getLoginToastFromError } from "@/lib/auth-backend";
+import { authService, getLoginToastFromError } from "@/lib/auth-backend";
 import { markPostLoginLoader } from "@/lib/post-login-loader";
+import {
+  buildUser2faSetupUrl,
+  needsUserTwoFactorSetup,
+} from "@/lib/user-2fa-gate";
 import { cn } from "@/lib/utils";
 
 type LoginFormValues = {
@@ -52,7 +56,7 @@ function isNoEmployeeAccountError(error: unknown): boolean {
 
 export default function EmployeeLoginPage() {
   const router = useRouter();
-  const { login, logout, isAuthenticated, authLoading } = useAuth();
+  const { login, logout, isAuthenticated, authLoading, user } = useAuth();
   const {
     register,
     handleSubmit,
@@ -69,7 +73,11 @@ export default function EmployeeLoginPage() {
       markPostLoginLoader();
       setShowPostLoginLoader(true);
     });
-    router.replace("/employee");
+    const sessionUser = authService.getSession()?.user ?? user;
+    const destination = needsUserTwoFactorSetup(sessionUser)
+      ? buildUser2faSetupUrl("/employee")
+      : "/employee";
+    router.replace(destination);
   };
 
   const verifyEmployeeAccess = async () => {

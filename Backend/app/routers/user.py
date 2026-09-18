@@ -77,14 +77,24 @@ async def get_user_profile(
         }
 
         try:
-            from app.lib.admin_2fa import build_user_payload_extras, get_admin_2fa_policy
+            from app.lib.admin_2fa import (
+                build_user_payload_extras,
+                enrolled_factors,
+                get_admin_2fa_policy,
+            )
             from app.lib.roles import is_admin_role
+
+            # Always expose enrollment flags so the post-signup 2FA gate works
+            # for normal users (admins get the full policy payload below).
+            factors = enrolled_factors(user)
+            profile["totpEnabled"] = factors["totp"]
+            profile["email2faEnabled"] = factors["email"]
 
             if is_admin_role(user.get("role")):
                 policy = await get_admin_2fa_policy(db)
                 profile.update(build_user_payload_extras(user, policy))
         except Exception as exc:
-            logger.warning("Could not attach admin 2FA profile fields: %s", exc)
+            logger.warning("Could not attach 2FA profile fields: %s", exc)
         
         # Apply encryption if enabled, otherwise obfuscation
         if should_encrypt_response():

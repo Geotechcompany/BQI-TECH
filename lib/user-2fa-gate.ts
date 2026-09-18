@@ -1,0 +1,71 @@
+/**
+ * Post-signup 2FA gate for normal (non-admin) users.
+ * Admins continue to use org policy via /manage (AdminTwoFactorSetup).
+ */
+
+export const USER_2FA_SETUP_PATH = "/auth/setup-2fa";
+
+/** Paths allowed while email-verified but 2FA is not yet enrolled. */
+export const USER_2FA_SETUP_EXEMPT_PATHS = [
+  "/auth/verify-email",
+  "/auth/setup-2fa",
+  "/login",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+  "/logout",
+  "/employee/login",
+  "/manage/login",
+  "/admin/login",
+] as const;
+
+export function isAdminRole(role?: string | null): boolean {
+  if (!role) return false;
+  const upper = String(role).toUpperCase();
+  return upper === "ADMIN" || upper === "SUPER_ADMIN";
+}
+
+export function userHasEnrolledTwoFactor(user?: {
+  totpEnabled?: boolean;
+  email2faEnabled?: boolean;
+  admin2faFactors?: { email?: boolean; totp?: boolean };
+} | null): boolean {
+  if (!user) return false;
+  if (user.totpEnabled || user.email2faEnabled) return true;
+  const factors = user.admin2faFactors;
+  if (factors?.totp || factors?.email) return true;
+  return false;
+}
+
+/**
+ * True when a normal user has verified email but has not enrolled any 2FA factor.
+ * Admins are excluded — they use admin 2FA policy on /manage.
+ */
+export function needsUserTwoFactorSetup(user?: {
+  role?: string;
+  isEmailVerified?: boolean;
+  totpEnabled?: boolean;
+  email2faEnabled?: boolean;
+  admin2faFactors?: { email?: boolean; totp?: boolean };
+} | null): boolean {
+  if (!user) return false;
+  if (isAdminRole(user.role)) return false;
+  if (!user.isEmailVerified) return false;
+  return !userHasEnrolledTwoFactor(user);
+}
+
+export function isUser2faSetupExemptPath(pathname: string): boolean {
+  return USER_2FA_SETUP_EXEMPT_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  );
+}
+
+export function buildUser2faSetupUrl(next?: string | null): string {
+  if (!next || next.startsWith(USER_2FA_SETUP_PATH)) {
+    return USER_2FA_SETUP_PATH;
+  }
+  if (!next.startsWith("/") || next.startsWith("//")) {
+    return USER_2FA_SETUP_PATH;
+  }
+  return `${USER_2FA_SETUP_PATH}?next=${encodeURIComponent(next)}`;
+}

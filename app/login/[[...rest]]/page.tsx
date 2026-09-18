@@ -12,9 +12,13 @@ import {
   USER_LOADING_PHRASES,
 } from "@/components/admin/PremiumDashboardLoader";
 import { markPostLoginLoader } from "@/lib/post-login-loader";
+import {
+  buildUser2faSetupUrl,
+  needsUserTwoFactorSetup,
+} from "@/lib/user-2fa-gate";
 
 export default function LoginPage() {
-  const { isAuthenticated, authLoading } = useAuth();
+  const { isAuthenticated, authLoading, user, isAdmin } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo");
@@ -45,13 +49,28 @@ export default function LoginPage() {
     if (authLoading || !isAuthenticated || redirectedRef.current) return;
 
     redirectedRef.current = true;
-    const destination = redirectTo || "/dashboard";
+    let destination = redirectTo || "/dashboard";
+    if (isAdmin) {
+      destination = redirectTo?.startsWith("/manage")
+        ? redirectTo
+        : "/manage/overview";
+    } else if (needsUserTwoFactorSetup(user)) {
+      destination = buildUser2faSetupUrl(redirectTo || "/dashboard");
+    }
+
     flushSync(() => {
       markPostLoginLoader();
       setShowPostLoginLoader(true);
     });
     router.replace(destination);
-  }, [isAuthenticated, authLoading, redirectTo, router]);
+  }, [
+    isAuthenticated,
+    authLoading,
+    redirectTo,
+    router,
+    user,
+    isAdmin,
+  ]);
 
   if (showPostLoginLoader || authLoading || isAuthenticated) {
     return <PremiumDashboardLoader phrases={USER_LOADING_PHRASES} />;
@@ -73,7 +92,7 @@ export default function LoginPage() {
       {showPasswordResetSuccess && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
           <Alert className="shadow-lg border-emerald-200 bg-emerald-50">
-            <CheckCircle className="h-4 w-4 text-emerald-600" />
+            <CheckCircle className="h-4 w-4 text-emerald-700" />
             <AlertTitle>Password updated</AlertTitle>
             <AlertDescription>
               Your password was reset successfully. Sign in with your new

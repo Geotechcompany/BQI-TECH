@@ -31,6 +31,10 @@ interface AdminTwoFactorSetupProps {
   required?: boolean;
   onComplete: (result?: AdminTwoFactorSetupCompleteResult) => void;
   onSkip?: () => void;
+  /** Override default admin-centric headline */
+  title?: string;
+  /** Override default admin-centric description */
+  description?: string;
 }
 
 type SetupStep = "choose" | "totp_scan" | "totp_confirm" | "email_confirm";
@@ -41,6 +45,8 @@ export function AdminTwoFactorSetup({
   required = true,
   onComplete,
   onSkip,
+  title,
+  description,
 }: AdminTwoFactorSetupProps) {
   const [step, setStep] = useState<SetupStep>("choose");
   const [qrDataUrl, setQrDataUrl] = useState("");
@@ -48,6 +54,15 @@ export function AdminTwoFactorSetup({
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const heading =
+    title ||
+    (required ? "Protect your admin account" : "Add two-factor authentication");
+  const body =
+    description ||
+    (required
+      ? `Organization policy (${policy.replace("_", " ")}) requires two-factor authentication before you can use the admin dashboard.`
+      : "Add an authenticator or email code for stronger account protection.");
 
   const startTotp = async () => {
     setBusy(true);
@@ -135,13 +150,9 @@ export function AdminTwoFactorSetup({
     <div className="space-y-6">
       <div className="space-y-1.5">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Protect your admin account
+          {heading}
         </h2>
-        <p className="text-sm text-muted-foreground">
-          {required
-            ? `Organization policy (${policy.replace("_", " ")}) requires two-factor authentication before you can use the admin dashboard.`
-            : "Add an authenticator or email code for stronger account protection."}
-        </p>
+        <p className="text-sm text-muted-foreground">{body}</p>
       </div>
 
       {step === "choose" ? (

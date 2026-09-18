@@ -46,6 +46,7 @@ export default function UserManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null);
+  const [resetTarget, setResetTarget] = useState<UserType | null>(null);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
@@ -146,11 +147,30 @@ export default function UserManagementPage() {
     onError: (error) => showInviteEmailError(error),
   });
 
+  const sendPasswordReset = useMutation({
+    mutationFn: (userId: string) => adminApi.sendPasswordReset(userId),
+    onSuccess: (data) => {
+      const email = (data as { email?: string })?.email;
+      toast.success(
+        email
+          ? `Password reset link sent to ${email}`
+          : "Password reset link sent"
+      );
+      setResetTarget(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to send password reset link");
+    },
+  });
+
   const resendingInviteId = resendInvite.isPending
     ? (resendInvite.variables as string | undefined)
     : undefined;
   const resendingUserId = resendInviteForUser.isPending
     ? (resendInviteForUser.variables as string | undefined)
+    : undefined;
+  const sendingResetUserId = sendPasswordReset.isPending
+    ? (sendPasswordReset.variables as string | undefined)
     : undefined;
 
   const stats = [
@@ -306,7 +326,9 @@ export default function UserManagementPage() {
               users={users}
               isLoading={isLoading || deleteUser.isPending}
               resendingUserId={resendingUserId}
+              sendingResetUserId={sendingResetUserId}
               onResendInvite={(userId) => resendInviteForUser.mutate(userId)}
+              onSendPasswordReset={setResetTarget}
               onEdit={setEditingUser}
               onDelete={(userId) => {
                 const target = users.find((user) => user.id === userId) ?? null;
@@ -331,6 +353,10 @@ export default function UserManagementPage() {
         user={editingUser}
         open={!!editingUser}
         onOpenChange={(open) => !open && setEditingUser(null)}
+        onRequestPasswordReset={(user) => {
+          setEditingUser(null);
+          setResetTarget(user);
+        }}
       />
 
       <AlertDialog
@@ -353,6 +379,44 @@ export default function UserManagementPage() {
               onClick={() => deleteTarget && deleteUser.mutate(deleteTarget.id)}
             >
               Delete user
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!resetTarget}
+        onOpenChange={(open) => !open && setResetTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send password reset link?</AlertDialogTitle>
+            <AlertDialogDescription>
+              An email with a one-hour reset link will be sent to{" "}
+              <strong>{resetTarget?.email}</strong>
+              {resetTarget?.name ? ` (${resetTarget.name})` : ""}. The link is
+              delivered by email only.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sendPasswordReset.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={sendPasswordReset.isPending || !resetTarget}
+              onClick={(event) => {
+                event.preventDefault();
+                if (resetTarget) sendPasswordReset.mutate(resetTarget.id);
+              }}
+            >
+              {sendPasswordReset.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending…
+                </>
+              ) : (
+                "Send reset link"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

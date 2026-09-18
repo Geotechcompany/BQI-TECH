@@ -11,6 +11,7 @@ import UserDashboardSidebar, {
 } from "@/components/user/UserDashboardSidebar";
 import { DashboardHeader } from "@/components/user/DashboardHeader";
 import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
+import { TwoFactorSetupGuard } from "@/components/auth/TwoFactorSetupGuard";
 import { useRouter, usePathname } from "next/navigation";
 import {
   PremiumDashboardLoader,
@@ -70,37 +71,39 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <EmailVerificationGuard requireVerification={true}>
-      <PlatformTourProvider>
-        <div
-          id="user-root"
-          className="flex h-screen w-screen flex-col overflow-hidden bg-gray-100 dark:bg-gray-950 md:flex-row"
-        >
-          <UserDashboardSidebar />
+      <TwoFactorSetupGuard requireSetup={true}>
+        <PlatformTourProvider>
+          <div
+            id="user-root"
+            className="flex h-screen w-screen flex-col overflow-hidden bg-gray-100 dark:bg-gray-950 md:flex-row"
+          >
+            <UserDashboardSidebar />
 
-          {/* Spacer mirrors fixed dual-rail width so content tracks the spring */}
-          <motion.div
-            aria-hidden
-            className="hidden shrink-0 md:block"
-            initial={false}
-            animate={{ width: shellOffset }}
-            transition={shellSpring}
-            style={{ willChange: "width" }}
-          />
-
-          <main className="flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden bg-gray-100 pb-20 dark:bg-gray-950 md:pb-0">
-            <DashboardHeader
-              title={getPageTitle()}
-              tourId={guideInBanner ? undefined : tourId}
+            {/* Spacer mirrors fixed dual-rail width so content tracks the spring */}
+            <motion.div
+              aria-hidden
+              className="hidden shrink-0 md:block"
+              initial={false}
+              animate={{ width: shellOffset }}
+              transition={shellSpring}
+              style={{ willChange: "width" }}
             />
 
-            <div className="h-full w-full flex-1 overflow-x-hidden overflow-y-auto">
-              <div className="h-full w-full p-4 sm:p-6 md:p-8">{children}</div>
-            </div>
-          </main>
+            <main className="flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden bg-gray-100 pb-20 dark:bg-gray-950 md:pb-0">
+              <DashboardHeader
+                title={getPageTitle()}
+                tourId={guideInBanner ? undefined : tourId}
+              />
 
-          <MobileBottomTabs />
-        </div>
-      </PlatformTourProvider>
+              <div className="h-full w-full flex-1 overflow-x-hidden overflow-y-auto">
+                <div className="h-full w-full p-4 sm:p-6 md:p-8">{children}</div>
+              </div>
+            </main>
+
+            <MobileBottomTabs />
+          </div>
+        </PlatformTourProvider>
+      </TwoFactorSetupGuard>
     </EmailVerificationGuard>
   );
 }

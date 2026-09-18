@@ -21,6 +21,9 @@ from app.lib.email import (
     send_admin_invite_email,
     send_generic_email,
 )
+from app.lib.password_reset import issue_password_reset_email
+from slowapi import Limiter
+from app.utils.ip_utils import get_real_client_ip
 from app.lib.application_emails import (
     format_email_document,
     is_valid_email_address,
@@ -124,6 +127,14 @@ from app.auth import get_password_hash
 import secrets
 
 router = APIRouter(tags=["admin"])
+
+
+def _admin_rate_limit_key(request: Request) -> str:
+    real_ip = get_real_client_ip(request)
+    return real_ip or (request.client.host if request.client else "unknown")
+
+
+admin_limiter = Limiter(key_func=_admin_rate_limit_key)
 
 # Job Reference System Integration
 try:
@@ -1479,6 +1490,84 @@ async def resend_admin_invite_for_user(
         db, current_user, email=str(invite.get("email") or ""), action="resent"
     )
     return result
+
+
+@router.post("/users/{user_id}/send-password-reset")
+@admin_limiter.limit("10/minute")
+async def send_user_password_reset(
+    user_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Admin-triggered password reset email (same token/email flow as forgot-password)."""
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to manage users",
+        )
+
+    try:
+        ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    db = get_database()
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    email = str(user.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(
+            status_code=400,
+            detail="This user does not have a valid email address",
+        )
+
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Email service is not configured. Open Admin → Settings → Email delivery "
+                "and configure the Netlify relay (or another provider)."
+            ),
+        )
+
+    from app.lib.cors import resolve_frontend_url
+
+    frontend_url = resolve_frontend_url(request.headers.get("origin"))
+    try:
+        sent = await issue_password_reset_email(
+            db, user, frontend_url=frontend_url, email_override=email
+        )
+    except Exception as e:
+        logger.error("Failed sending admin password reset to %s: %s", email, e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not send the password reset email. Try again shortly.",
+        )
+
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not send the password reset email. Verify email settings and try again.",
+        )
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="password_reset_sent",
+        resource_type="user",
+        resource_id=user_id,
+        resource_title=email,
+        detail=email,
+    )
+
+    # Never include the reset token in the response
+    return {
+        "message": "Password reset link sent",
+        "email": email,
+        "emailSent": True,
+    }
 
 
 @router.post("/users/invite")

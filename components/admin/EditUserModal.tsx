@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, User } from "lucide-react";
+import { KeyRound, Loader2, User } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { User as UserType } from "@/src/types/user";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ interface EditUserModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  onRequestPasswordReset?: (user: UserType) => void;
 }
 
 type EditUserForm = {
@@ -48,6 +49,7 @@ export function EditUserModal({
   open,
   onOpenChange,
   onSuccess,
+  onRequestPasswordReset,
 }: EditUserModalProps) {
   const queryClient = useQueryClient();
   const { register, handleSubmit, reset, setValue, watch } =
@@ -150,20 +152,34 @@ export function EditUserModal({
             />
           )}
 
-          <div className="flex justify-end gap-2 border-t pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={updateUser.isPending}>
-              {updateUser.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Save changes
-            </Button>
+          <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+            {user && onRequestPasswordReset ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onRequestPasswordReset(user)}
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                Send password reset link
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateUser.isPending}>
+                {updateUser.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Save changes
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>
