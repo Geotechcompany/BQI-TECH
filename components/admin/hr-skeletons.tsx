@@ -17,7 +17,7 @@ export function EmployeeListSkeleton({
   return (
     <div className={cn("space-y-3", className)}>
       <Skeleton className="h-3 w-24" />
-      <TableSkeleton rows={rows} columns={6} />
+      <TableSkeleton rows={rows} columns={7} />
     </div>
   );
 }

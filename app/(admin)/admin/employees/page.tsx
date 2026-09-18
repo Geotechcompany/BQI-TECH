@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "react-hot-toast";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
 import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
@@ -27,16 +28,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Loader2, MoreHorizontal, Trash2, UserPlus } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { EmployeeListSkeleton } from "@/components/admin/hr-skeletons";
 
 export default function AllEmployeesPage() {
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [departmentId, setDepartmentId] = useState("all");
   const [status, setStatus] = useState("all");
   const [employmentType, setEmploymentType] = useState("all");
+  const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
   const debouncedSearch = useDebounce(search, 300);
 
   useEffect(() => {
@@ -66,6 +85,18 @@ export default function AllEmployeesPage() {
         employmentType: employmentType === "all" ? undefined : employmentType,
         limit: 200,
       }) as Promise<{ employees: Employee[]; total: number }>,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => adminApi.deleteEmployee(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-employees"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-departments"] });
+      toast.success("Employee deleted");
+      setDeleteTarget(null);
+    },
+    onError: (err: Error) =>
+      toast.error(err.message || "Could not delete employee"),
   });
 
   const rows = data?.employees ?? [];
@@ -185,6 +216,9 @@ export default function AllEmployeesPage() {
                       <th className="px-4 py-3 font-medium">Status</th>
                       <th className="px-4 py-3 font-medium">Location</th>
                       <th className="px-4 py-3 font-medium">Start</th>
+                      <th className="px-4 py-3 text-right font-medium">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -220,12 +254,36 @@ export default function AllEmployeesPage() {
                         </td>
                         <td className="px-4 py-3">{e.location}</td>
                         <td className="px-4 py-3">{e.startDate}</td>
+                        <td className="px-4 py-3 text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground active:scale-[0.97]"
+                                aria-label={`Actions for ${fullName(e)}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onSelect={() => setDeleteTarget(e)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete employee
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
                       </tr>
                     ))}
                     {rows.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="px-4 py-10 text-center text-muted-foreground"
                         >
                           No employees match these filters.
@@ -239,6 +297,45 @@ export default function AllEmployeesPage() {
           </>
         )}
       </div>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(next) => {
+          if (!next && !deleteMutation.isPending) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete employee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently remove{" "}
+              <strong>{deleteTarget ? fullName(deleteTarget) : ""}</strong>
+              {deleteTarget?.employeeNumber
+                ? ` (${deleteTarget.employeeNumber})`
+                : ""}
+              . This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 active:scale-[0.97]"
+              disabled={deleteMutation.isPending || !deleteTarget}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+              }}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminPageLayout>
   );
 }

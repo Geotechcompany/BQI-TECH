@@ -125,8 +125,9 @@ class AdminApplicationsApi {
       throw new Error("No authentication session");
     }
 
+    // Backend mounts recruitment routes at /api/admin/* (not the public UI base /manage).
     const url = `${this.baseUrl}/api${
-      useAdminEndpoint ? "/manage" : ""
+      useAdminEndpoint ? "/admin" : ""
     }${endpoint}`;
 
     const fetchWithAuth = async (token: string) => {

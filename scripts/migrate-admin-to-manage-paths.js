@@ -1,6 +1,12 @@
 const fs = require("fs");
 const path = require("path");
 
+/**
+ * One-shot UI path migrator: quoted `/admin` → `/manage`.
+ *
+ * CRITICAL: Backend API mounts stay at `/api/admin` forever.
+ * This script must NEVER rewrite `/api/admin` to `/api/manage`.
+ */
 const ROOT = process.cwd();
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -33,6 +39,8 @@ function transform(content, rel) {
   // Backend API routes stay under /api/admin
   if (rel.startsWith("Backend/")) return null;
 
+  // Freeze every `/api/admin` occurrence so UI `/admin` → `/manage` replaces
+  // cannot touch API mounts (e.g. `"/api/admin/..."` must stay intact).
   const placeholders = [];
   let s = content.replace(/\/api\/admin/g, (m) => {
     const key = `__API_ADMIN_${placeholders.length}__`;
@@ -40,7 +48,6 @@ function transform(content, rel) {
     return key;
   });
 
-  const before = s;
   s = s.replace(/(['"`])\/admin\//g, "$1/manage/");
   s = s.replace(/(['"`])\/admin(['"`])/g, "$1/manage$2");
 
@@ -48,7 +55,21 @@ function transform(content, rel) {
     s = s.split(`__API_ADMIN_${i}__`).join(val);
   });
 
-  return s === before ? null : s;
+  // Hard guards: never emit or destroy API admin prefixes.
+  if (/\/api\/manage\b/.test(s)) {
+    throw new Error(
+      `${rel}: refuse to write — transform would introduce /api/manage (API must stay /api/admin)`
+    );
+  }
+  const beforeCount = (content.match(/\/api\/admin/g) || []).length;
+  const afterCount = (s.match(/\/api\/admin/g) || []).length;
+  if (afterCount < beforeCount) {
+    throw new Error(
+      `${rel}: refuse to write — /api/admin count dropped (${beforeCount} → ${afterCount})`
+    );
+  }
+
+  return s === content ? null : s;
 }
 
 const files = walk(ROOT);
