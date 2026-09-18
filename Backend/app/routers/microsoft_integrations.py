@@ -68,13 +68,13 @@ async def microsoft_oauth_callback(
     if error:
         message = error_description or error or "Authorization was denied"
         return RedirectResponse(
-            url=ms_cal.frontend_settings_redirect(error=message),
+            url=await ms_cal.frontend_settings_redirect(error=message),
             status_code=302,
         )
 
     if not code or not state:
         return RedirectResponse(
-            url=ms_cal.frontend_settings_redirect(error="Missing authorization code"),
+            url=await ms_cal.frontend_settings_redirect(error="Missing authorization code"),
             status_code=302,
         )
 
@@ -82,7 +82,7 @@ async def microsoft_oauth_callback(
         admin_user_id = await ms_cal.consume_oauth_state(state)
         if not admin_user_id:
             return RedirectResponse(
-                url=ms_cal.frontend_settings_redirect(error="Invalid or expired OAuth state"),
+                url=await ms_cal.frontend_settings_redirect(error="Invalid or expired OAuth state"),
                 status_code=302,
             )
 
@@ -101,13 +101,13 @@ async def microsoft_oauth_callback(
             logger.warning("Initial Microsoft calendar sync failed: %s", sync_exc)
 
         return RedirectResponse(
-            url=ms_cal.frontend_settings_redirect(connected=True),
+            url=await ms_cal.frontend_settings_redirect(connected=True),
             status_code=302,
         )
     except Exception as exc:
         logger.error("microsoft oauth callback error: %s", exc)
         return RedirectResponse(
-            url=ms_cal.frontend_settings_redirect(error=str(exc)[:200]),
+            url=await ms_cal.frontend_settings_redirect(error=str(exc)[:200]),
             status_code=302,
         )
 

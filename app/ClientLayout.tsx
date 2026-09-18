@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { SessionProvider } from "next-auth/react"
 import { SettingsProvider } from "@/contexts/SettingsContext"
+import { AdminPathProvider } from "@/contexts/AdminPathContext"
 import { JsonLd } from '@/components/JsonLd'
 import ClientLayout from "@/components/ClientLayout"
 import CookieConsentBanner from '@/components/CookieConsentBanner'
@@ -39,6 +40,7 @@ export function ClientWrapper({ children }: { children: React.ReactNode }) {
         }}
       />
       <SettingsProvider>
+        <AdminPathProvider>
         <QueryClientProvider client={queryClient}>
           <SessionProvider>
             <ClientLayout>
@@ -49,6 +51,7 @@ export function ClientWrapper({ children }: { children: React.ReactNode }) {
           <ReactQueryDevtools initialIsOpen={false} />
           <JsonLd />
         </QueryClientProvider>
+        </AdminPathProvider>
       </SettingsProvider>
     
     </>

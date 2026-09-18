@@ -28,7 +28,7 @@ export function isBlogWizardAdminRoute(pathname: string | null): boolean {
 
 export function isCandidateProfileAdminRoute(pathname: string | null): boolean {
   if (!pathname) return false;
-  return /\/admin\/jobs\/[^/]+\/candidates\/[^/]+$/.test(pathname);
+  return /\/jobs\/[^/]+\/candidates\/[^/]+$/.test(pathname);
 }
 
 /** Login only — no admin chrome and no app providers. */

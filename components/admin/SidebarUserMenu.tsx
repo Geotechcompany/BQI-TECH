@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOptionalAdminLockScreen } from "@/contexts/AdminLockScreenContext";
+import { useAdminPath } from "@/contexts/AdminPathContext";
 import { canAccessAdminPath } from "@/lib/admin-permissions";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -183,6 +184,7 @@ export function SidebarUserMenu({
   changePhotoDisabled = false,
 }: SidebarUserMenuProps) {
   const { user, logout } = useAuth();
+  const { adminHref } = useAdminPath();
   const lockScreen = useOptionalAdminLockScreen();
 
   const displayName =
@@ -200,14 +202,14 @@ export function SidebarUserMenu({
       ? null
       : accountLinks.settings ?? null
     : canAccessAdminPath("/admin/settings", user?.role, user?.adminModules)
-      ? { href: "/admin/settings", label: "Settings" }
+      ? { href: adminHref("/admin/settings"), label: "Settings" }
       : null;
   const helpLink = useCustomLinks
     ? accountLinks.help === false
       ? null
       : accountLinks.help ?? null
     : canAccessAdminPath("/admin/help", user?.role, user?.adminModules)
-      ? { href: "/admin/help", label: "Help" }
+      ? { href: adminHref("/admin/help"), label: "Help" }
       : null;
 
   // Account flyout is always a solid light card — never inherit studio cyan/navy link skins.

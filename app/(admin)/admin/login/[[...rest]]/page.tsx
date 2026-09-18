@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { AdminLoginBrand } from "@/components/admin/AdminLoginBrand";
 import { PremiumDashboardLoader } from "@/components/admin/PremiumDashboardLoader";
+import { AdminTwoFactorChallenge } from "@/components/admin/auth/AdminTwoFactorChallenge";
+import { AdminTwoFactorSetup } from "@/components/admin/auth/AdminTwoFactorSetup";
 import { PortalAudienceSwitcher } from "@/components/auth/PortalAudienceSwitcher";
 import { PortalBrandPanel } from "@/components/auth/PortalBrandPanel";
 import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
@@ -37,11 +39,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { markPostLoginLoader } from "@/lib/post-login-loader";
+import { fetchAdmin2faStatus } from "@/lib/admin-2fa";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { flushSync } from "react-dom";
+import { useAdminPath } from "@/contexts/AdminPathContext";
 
 const BRAND_PANEL_BACKGROUND =
   "linear-gradient(160deg, hsl(222 47% 11%) 0%, hsl(222 84% 6%) 100%)";
@@ -240,6 +244,7 @@ const TechLoadingScreen = ({ message = "Loading..." }) => {
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const { adminHref } = useAdminPath();
   const { login, isAuthenticated, isAdmin, authLoading, user } = useAuth();
   const {
     register,
@@ -308,7 +313,7 @@ export default function AdminLoginPage() {
       markPostLoginLoader();
       setShowPostLoginLoader(true);
     });
-    router.replace("/admin/overview");
+    router.replace(adminHref("/admin/overview"));
   };
 
   useEffect(() => {

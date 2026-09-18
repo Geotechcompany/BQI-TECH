@@ -27,6 +27,7 @@ import {
   HardDrive,
   ScrollText,
   Users,
+  AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -88,6 +89,15 @@ import {
 import { MicrosoftIntegrationCard } from "@/components/admin/settings/MicrosoftIntegrationCard";
 import { DocuSignIntegrationCard } from "@/components/admin/settings/DocuSignIntegrationCard";
 import { LinearIntegrationCard } from "@/components/admin/settings/LinearIntegrationCard";
+import { AdminSecurity2faCard } from "@/components/admin/settings/AdminSecurity2faCard";
+import { useAdminPath } from "@/contexts/AdminPathContext";
+import {
+  APP_URL,
+} from "@/lib/config";
+import {
+  getPublicAdminBasePath,
+  validateAdminPathSlug,
+} from "@/lib/admin-path";
 
 interface AdminSettings {
   emailNotifications: boolean;
@@ -109,6 +119,8 @@ interface AdminSettings {
   theme: string;
   language: string;
   avatar: string;
+  admin_path_hidden: boolean;
+  admin_path_slug: string;
 }
 
 interface ContactSpamEvent {
@@ -151,7 +163,7 @@ const NAV_ITEMS: {
   {
     id: "security",
     label: "Security",
-    description: "Session & access",
+    description: "Session, access & admin URL",
     icon: Shield,
   },
   {
@@ -212,6 +224,8 @@ const defaultSettings: AdminSettings = {
   theme: "light",
   language: "en",
   avatar: "",
+  admin_path_hidden: false,
+  admin_path_slug: "",
 };
 
 function SettingsToggleRow({
@@ -380,9 +394,14 @@ function createEmptyAiProvider(): AiProvider {
 
 function SettingsPageContent() {
   const { user, updateUserAvatar } = useAuth();
+  const { applyConfig, adminHref, basePath } = useAdminPath();
   const searchParams = useSearchParams();
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
+  const [isSavingAdminPath, setIsSavingAdminPath] = useState(false);
+  const [adminPathDraftError, setAdminPathDraftError] = useState<string | null>(
+    null
+  );
 
   const relatedSettingsLinks = useMemo(() => {
     const links: {
@@ -523,6 +542,12 @@ function SettingsPageContent() {
             ...defaultSettings.contactProtection,
             ...(payload?.contactProtection ?? {}),
           },
+          admin_path_hidden: Boolean(payload?.admin_path_hidden),
+          admin_path_slug: String(payload?.admin_path_slug ?? ""),
+        });
+        applyConfig({
+          admin_path_hidden: Boolean(payload?.admin_path_hidden),
+          admin_path_slug: payload?.admin_path_slug ?? null,
         });
         setBqiIntelligence(
           normalizeBqiIntelligence(payload?.bqiIntelligence)
@@ -896,6 +921,73 @@ function SettingsPageContent() {
     }
   };
 
+  const handleSaveAdminPath = async () => {
+    if (isSavingAdminPath) return;
+
+    if (settings.admin_path_hidden) {
+      const validation = validateAdminPathSlug(settings.admin_path_slug);
+      if (!validation.ok) {
+        setAdminPathDraftError(validation.error || "Invalid slug");
+        toast.error(validation.error || "Invalid admin path slug");
+        return;
+      }
+      setAdminPathDraftError(null);
+    } else {
+      setAdminPathDraftError(null);
+    }
+
+    setIsSavingAdminPath(true);
+    try {
+      const slug = settings.admin_path_hidden
+        ? validateAdminPathSlug(settings.admin_path_slug).slug
+        : settings.admin_path_slug.trim()
+          ? validateAdminPathSlug(settings.admin_path_slug).slug
+          : null;
+
+      if (settings.admin_path_hidden && !slug) {
+        throw new Error("A valid custom slug is required when hiding /admin");
+      }
+
+      const payload = {
+        admin_path_hidden: Boolean(settings.admin_path_hidden),
+        admin_path_slug: slug,
+      };
+      const response = await adminApi.updateSettings(payload);
+      const next = (response as any)?.settings ?? payload;
+      applyConfig({
+        admin_path_hidden: Boolean(next.admin_path_hidden ?? payload.admin_path_hidden),
+        admin_path_slug: next.admin_path_slug ?? payload.admin_path_slug,
+      });
+      setSettings((prev) => ({
+        ...prev,
+        admin_path_hidden: Boolean(next.admin_path_hidden ?? payload.admin_path_hidden),
+        admin_path_slug: String(next.admin_path_slug ?? payload.admin_path_slug ?? ""),
+      }));
+
+      const nextBase = getPublicAdminBasePath({
+        admin_path_hidden: Boolean(next.admin_path_hidden ?? payload.admin_path_hidden),
+        admin_path_slug: next.admin_path_slug ?? payload.admin_path_slug,
+      });
+      toast.success(
+        nextBase === "/admin"
+          ? "Admin URL restored to /admin"
+          : `Admin URL updated. Use ${nextBase} from now on.`
+      );
+
+      // Keep the admin on the settings page under the new public path.
+      if (typeof window !== "undefined") {
+        const target = `${nextBase}/settings?section=security`;
+        if (window.location.pathname !== `${nextBase}/settings`) {
+          window.location.assign(target);
+        }
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to update admin URL");
+    } finally {
+      setIsSavingAdminPath(false);
+    }
+  };
+
   const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -1161,33 +1253,139 @@ function SettingsPageContent() {
 
       case "security":
         return (
-          <SettingsPanel
-            title="Session security"
-            description="Control automatic logout and session duration"
-          >
-            <SettingsField
-              label="Auto logout"
-              hint="Automatically sign out after a period of inactivity"
+          <div className="space-y-6">
+            <SettingsPanel
+              title="Two-factor authentication"
+              description="Authenticator apps, email codes, recovery codes, and org policy"
             >
-              <Select
-                value={settings.autoLogout.toString()}
-                onValueChange={(value) =>
-                  updateSetting("autoLogout", Number(value))
+              <AdminSecurity2faCard
+                canEditPolicy={
+                  String(user?.role || "").toUpperCase() === "SUPER_ADMIN"
                 }
+              />
+            </SettingsPanel>
+
+            <SettingsPanel
+              title="Session security"
+              description="Control automatic logout and session duration"
+            >
+              <SettingsField
+                label="Auto logout"
+                hint="Automatically sign out after a period of inactivity"
               >
-                <SelectTrigger className="max-w-xs">
-                  <SelectValue placeholder="Auto logout time" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="15">15 minutes</SelectItem>
-                  <SelectItem value="30">30 minutes</SelectItem>
-                  <SelectItem value="60">1 hour</SelectItem>
-                  <SelectItem value="120">2 hours</SelectItem>
-                  <SelectItem value="0">Never</SelectItem>
-                </SelectContent>
-              </Select>
-            </SettingsField>
-          </SettingsPanel>
+                <Select
+                  value={settings.autoLogout.toString()}
+                  onValueChange={(value) =>
+                    updateSetting("autoLogout", Number(value))
+                  }
+                >
+                  <SelectTrigger className="max-w-xs">
+                    <SelectValue placeholder="Auto logout time" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15 minutes</SelectItem>
+                    <SelectItem value="30">30 minutes</SelectItem>
+                    <SelectItem value="60">1 hour</SelectItem>
+                    <SelectItem value="120">2 hours</SelectItem>
+                    <SelectItem value="0">Never</SelectItem>
+                  </SelectContent>
+                </Select>
+              </SettingsField>
+            </SettingsPanel>
+
+            <SettingsPanel
+              title="Admin login URL"
+              description="Hide /admin behind a unique slug (WordPress-style). Only people who know the slug can reach the panel."
+            >
+              <SettingsToggleRow
+                label="Hide default /admin path"
+                description="When enabled, /admin and /admin/* return a generic 404. Use your custom slug instead."
+                checked={settings.admin_path_hidden}
+                onCheckedChange={(checked) => {
+                  updateSetting("admin_path_hidden", checked);
+                  setAdminPathDraftError(null);
+                }}
+              />
+
+              <SettingsField
+                label="Custom slug"
+                hint="Lowercase letters, numbers, and hyphens. Avoid reserved routes like api, login, blog, employee."
+              >
+                <div className="flex max-w-md items-center gap-2">
+                  <span className="shrink-0 text-sm text-muted-foreground">
+                    /
+                  </span>
+                  <Input
+                    value={settings.admin_path_slug}
+                    onChange={(e) => {
+                      updateSetting("admin_path_slug", e.target.value);
+                      setAdminPathDraftError(null);
+                    }}
+                    placeholder="my-secure-portal"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+                {adminPathDraftError ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {adminPathDraftError}
+                  </p>
+                ) : null}
+              </SettingsField>
+
+              <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3.5">
+                <p className="text-sm font-medium">Resulting admin URL</p>
+                <p className="mt-1 break-all font-mono text-sm text-muted-foreground">
+                  {(APP_URL || "").replace(/\/+$/, "")}
+                  {getPublicAdminBasePath({
+                    admin_path_hidden: settings.admin_path_hidden,
+                    admin_path_slug: settings.admin_path_slug || null,
+                  })}
+                  /login
+                </p>
+                {settings.admin_path_hidden ? (
+                  <p className="mt-3 flex gap-2 text-sm text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      Bookmark the new URL before saving. After the change,
+                      old /admin bookmarks will stop working and will not
+                      reveal that an admin panel exists.
+                    </span>
+                  </p>
+                ) : null}
+                {basePath !== "/admin" ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Current live base path (admins only):{" "}
+                    <span className="font-mono">{basePath}</span>
+                    {" · "}
+                    <a
+                      className="underline underline-offset-2"
+                      href={adminHref("/admin/settings")}
+                    >
+                      Open settings
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  onClick={() => void handleSaveAdminPath()}
+                  disabled={isSavingAdminPath}
+                >
+                  {isSavingAdminPath ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving URL…
+                    </>
+                  ) : (
+                    "Save admin URL"
+                  )}
+                </Button>
+              </div>
+            </SettingsPanel>
+          </div>
         );
 
       case "contact":

@@ -79,6 +79,12 @@ This guide will walk you through deploying the Python FastAPI backend to Render.
    DROPBOX_ACCESS_TOKEN=your_dropbox_access_token
    DROPBOX_REFRESH_TOKEN=your_dropbox_refresh_token
 
+   # Microsoft Graph (Settings → Integrations → Outlook calendar)
+   MICROSOFT_CLIENT_ID=your_azure_app_client_id
+   MICROSOFT_CLIENT_SECRET=your_azure_app_client_secret
+   MICROSOFT_TENANT_ID=organizations
+   MICROSOFT_REDIRECT_URI=https://your-app-name.onrender.com/api/admin/integrations/microsoft/callback
+
    # Pusher Configuration
    PUSHER_APP_ID=your_pusher_app_id
    PUSHER_KEY=your_pusher_key
@@ -115,6 +121,7 @@ Once deployed, update these environment variables with your actual Render URL:
 ```env
 APP_URL=https://your-app-name.onrender.com
 DROPBOX_REDIRECT_URI=https://your-app-name.onrender.com/api/exchange-token
+MICROSOFT_REDIRECT_URI=https://your-app-name.onrender.com/api/admin/integrations/microsoft/callback
 ```
 
 ### 2. Test Your Deployment

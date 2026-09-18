@@ -12,13 +12,47 @@ interface User {
   avatar?: string;
   adminModules?: string[];
   isEmailVerified: boolean;
+  totpEnabled?: boolean;
+  email2faEnabled?: boolean;
+  admin2faPolicy?: "prompt" | "require_one" | "require_both";
+  admin2faSatisfied?: boolean;
+  admin2faPrompt?: boolean;
+  admin2faFactors?: { email?: boolean; totp?: boolean };
 }
 
-interface AuthResponse {
+export interface Admin2faChallengePending {
+  requires_2fa: true;
+  challenge_token: string;
+  methods: Array<"email" | "totp" | "recovery">;
+  email_hint?: string;
+  user?: Partial<User> & { id?: string; email?: string; name?: string; role?: string };
+}
+
+export interface AuthResponse {
   access_token: string;
   token_type: string;
   user: User;
   refresh_token: string;
+  requires_2fa?: boolean;
+  requires_2fa_setup?: boolean;
+  admin_2fa_policy?: "prompt" | "require_one" | "require_both";
+  challenge_token?: string;
+  methods?: Array<"email" | "totp" | "recovery">;
+  email_hint?: string;
+}
+
+export type LoginResult = AuthResponse | Admin2faChallengePending;
+
+export function isAdmin2faChallenge(
+  result: LoginResult
+): result is Admin2faChallengePending {
+  return Boolean(
+    result &&
+      "requires_2fa" in result &&
+      result.requires_2fa &&
+      "challenge_token" in result &&
+      typeof result.challenge_token === "string"
+  );
 }
 
 interface SessionData {
@@ -358,7 +392,7 @@ class AuthService {
   }
 
   // Login with email and password
-  async login(email: string, password: string): Promise<AuthResponse> {
+  async login(email: string, password: string): Promise<LoginResult> {
     try {
       // Use URLSearchParams for form data as required by FastAPI
       const formData = new URLSearchParams();
@@ -387,11 +421,22 @@ class AuthService {
 
       const rawData = await response.json();
       // Try decryption first, then obfuscation decoding
-      let data: AuthResponse;
+      let data: AuthResponse & Partial<Admin2faChallengePending>;
       try {
         data = await ResponseDecryption.decrypt(rawData);
       } catch (error) {
         data = ResponseDecoder.decode(rawData);
+      }
+
+      // Password OK but MFA challenge required — do not create a session yet
+      if (data?.requires_2fa && data.challenge_token) {
+        return {
+          requires_2fa: true,
+          challenge_token: data.challenge_token,
+          methods: Array.isArray(data.methods) ? data.methods : [],
+          email_hint: data.email_hint || email,
+          user: data.user,
+        };
       }
 
       if (!data.access_token || !data.refresh_token || !data.user) {
@@ -404,6 +449,11 @@ class AuthService {
         ...data.user,
         id: data.user.id || data.user._id,
         isEmailVerified: resolveEmailVerified(data.user?.isEmailVerified, false),
+        admin2faSatisfied:
+          data.user.admin2faSatisfied ??
+          (data.requires_2fa_setup ? false : data.user.admin2faSatisfied),
+        admin2faPrompt: data.user.admin2faPrompt ?? Boolean(data.requires_2fa_setup),
+        admin2faPolicy: data.user.admin2faPolicy ?? data.admin_2fa_policy,
       };
 
       // Store session data
@@ -418,6 +468,7 @@ class AuthService {
       return {
         ...data,
         user,
+        requires_2fa_setup: Boolean(data.requires_2fa_setup),
       };
     } catch (error) {
       console.error("Login error:", error);
@@ -426,11 +477,30 @@ class AuthService {
     }
   }
 
+  /** Complete MFA challenge and persist the full admin session. */
+  async completeAdmin2faLogin(tokens: AuthResponse): Promise<AuthResponse> {
+    if (!tokens.access_token || !tokens.refresh_token || !tokens.user) {
+      throw new Error("Invalid 2FA verification response");
+    }
+    const user = {
+      ...tokens.user,
+      id: tokens.user.id || tokens.user._id,
+      isEmailVerified: resolveEmailVerified(tokens.user?.isEmailVerified, false),
+    };
+    this.setSession({
+      user,
+      token: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+    });
+    return { ...tokens, user };
+  }
+
   /**
    * Re-verify credentials for an already signed-in user (e.g. lock screen).
    * On failure, leaves the existing session intact.
    */
   async reauthenticate(email: string, password: string): Promise<AuthResponse> {
+    const existing = this.getSession();
     const formData = new URLSearchParams();
     formData.append("username", email.toLowerCase());
     formData.append("password", password);
@@ -455,11 +525,21 @@ class AuthService {
     }
 
     const rawData = await response.json();
-    let data: AuthResponse;
+    let data: AuthResponse & Partial<Admin2faChallengePending>;
     try {
       data = await ResponseDecryption.decrypt(rawData);
     } catch {
       data = ResponseDecoder.decode(rawData);
+    }
+
+    // Lock screen: password verified; keep the already-MFA-validated session.
+    if (data?.requires_2fa && existing?.token && existing?.refreshToken) {
+      return {
+        access_token: existing.token,
+        refresh_token: existing.refreshToken,
+        token_type: "bearer",
+        user: existing.user,
+      };
     }
 
     if (!data.access_token || !data.refresh_token || !data.user) {

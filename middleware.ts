@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  ADMIN_PATH_COOKIE,
+  DEFAULT_ADMIN_BASE,
+  isValidAdminPathSlug,
+  normalizeAdminPathSlug,
+} from "@/lib/admin-path";
 
 // Paths that don't require authentication
 const publicPaths = [
@@ -32,49 +38,165 @@ const noVerificationPaths = [
   "/api",
 ];
 
-function isPublicPath(pathname: string): boolean {
-  return publicPaths.some((path) => {
+type AdminPathGate = {
+  hidden: boolean;
+  slug: string | null;
+  publicBase: string;
+};
+
+let adminPathCache: { at: number; value: AdminPathGate } | null = null;
+const ADMIN_PATH_CACHE_MS = 30_000;
+
+async function loadAdminPathGate(request: NextRequest): Promise<AdminPathGate> {
+  const now = Date.now();
+  if (adminPathCache && now - adminPathCache.at < ADMIN_PATH_CACHE_MS) {
+    return adminPathCache.value;
+  }
+
+  const fallback: AdminPathGate = {
+    hidden: false,
+    slug: null,
+    publicBase: DEFAULT_ADMIN_BASE,
+  };
+
+  const parse = (data: any): AdminPathGate => {
+    const slug = normalizeAdminPathSlug(data?.admin_path_slug);
+    const hidden =
+      Boolean(data?.admin_path_hidden) && isValidAdminPathSlug(slug);
+    return {
+      hidden,
+      slug: hidden ? slug : slug,
+      publicBase: hidden && slug ? `/${slug}` : DEFAULT_ADMIN_BASE,
+    };
+  };
+
+  try {
+    const gateKey =
+      process.env.ADMIN_PATH_GATE_SECRET ||
+      process.env.SECRET_KEY ||
+      process.env.NEXTAUTH_SECRET ||
+      "";
+    const backend = (
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_PYTHON_API_URL ||
+      ""
+    ).replace(/\/+$/, "");
+
+    let response: Response | null = null;
+    if (backend && gateKey) {
+      response = await fetch(`${backend}/api/admin-path-config`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "X-Admin-Path-Key": gateKey,
+        },
+        cache: "no-store",
+      });
+    }
+
+    if (!response || !response.ok) {
+      const url = new URL("/api/internal/admin-path", request.nextUrl.origin);
+      response = await fetch(url.toString(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+      });
+    }
+
+    if (!response.ok) {
+      adminPathCache = { at: now, value: fallback };
+      return fallback;
+    }
+    const data = await response.json();
+    const value = parse(data);
+    adminPathCache = { at: now, value };
+    return value;
+  } catch {
+    if (adminPathCache) return adminPathCache.value;
+    return fallback;
+  }
+}
+
+function isPublicPath(pathname: string, adminLoginPublicPath: string): boolean {
+  const paths = [...publicPaths];
+  if (adminLoginPublicPath !== "/admin/login") {
+    paths.push(adminLoginPublicPath);
+  }
+  return paths.some((path) => {
     if (path === "/") return pathname === "/";
     return pathname === path || pathname.startsWith(`${path}/`);
   });
 }
 
-function isNoVerificationPath(pathname: string): boolean {
-  return noVerificationPaths.some(
+function isNoVerificationPath(
+  pathname: string,
+  adminLoginPublicPath: string
+): boolean {
+  const paths = [...noVerificationPaths];
+  if (adminLoginPublicPath !== "/admin/login") {
+    paths.push(adminLoginPublicPath);
+  }
+  return paths.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
 }
 
-// Helper function to get auth token from custom auth system
-function getAuthToken(request: NextRequest): string | null {
-  // Check for token in Authorization header
-  const authHeader = request.headers.get("authorization");
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    return authHeader.substring(7);
-  }
-
-  // Check for token in cookies (if stored there)
-  const tokenCookie = request.cookies.get("auth_token");
-  if (tokenCookie) {
-    return tokenCookie.value;
-  }
-
-  return null;
+function withAdminBaseCookie(
+  response: NextResponse,
+  publicBase: string
+): NextResponse {
+  response.cookies.set({
+    name: ADMIN_PATH_COOKIE,
+    value: publicBase,
+    path: "/",
+    sameSite: "lax",
+    httpOnly: false,
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  return response;
+}
+  response.cookies.set({
+    name: ADMIN_PATH_COOKIE,
+    value: publicBase,
+    path: "/",
+    sameSite: "lax",
+    httpOnly: false,
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  return response;
 }
 
-// Helper function to decode JWT token (basic decode without verification)
-function decodeToken(token: string): any {
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload;
-  } catch (error) {
-    return null;
-  }
+function clearAdminBaseCookie(response: NextResponse): NextResponse {
+  response.cookies.set({
+    name: ADMIN_PATH_COOKIE,
+    value: "",
+    path: "/",
+    sameSite: "lax",
+    httpOnly: false,
+    maxAge: 0,
+  });
+  return response;
 }
 
-export function middleware(request: NextRequest) {
+/** Generic 404 — do not reveal that an admin panel exists. */
+function opaqueNotFound(): NextResponse {
+  return new NextResponse("Not Found", {
+    status: 404,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const authSession = request.cookies.get("auth_session")?.value;
+
+  // Allow internal gate + other Next API routes without auth redirects
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
 
   // Allow static assets (served from /public) to bypass auth and other checks
   // This is critical because Next.js image optimizer fetches images without cookies.
@@ -94,24 +216,88 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow public paths without authentication
-  if (isPublicPath(pathname)) {
-    return NextResponse.next();
+  const gate = await loadAdminPathGate(request);
+  const publicAdminBase = gate.publicBase;
+  const adminLoginPublicPath = `${publicAdminBase}/login`;
+
+  // When hidden, never expose the default /admin tree.
+  if (
+    gate.hidden &&
+    (pathname === DEFAULT_ADMIN_BASE ||
+      pathname.startsWith(`${DEFAULT_ADMIN_BASE}/`))
+  ) {
+    return opaqueNotFound();
   }
+
+  // Rewrite custom slug → internal /admin routes (URL bar keeps the secret path).
+  let effectivePathname = pathname;
+  let rewriteUrl: URL | null = null;
+
+  if (
+    gate.hidden &&
+    gate.slug &&
+    (pathname === publicAdminBase ||
+      pathname.startsWith(`${publicAdminBase}/`))
+  ) {
+    const rest = pathname.slice(publicAdminBase.length) || "";
+    effectivePathname = `${DEFAULT_ADMIN_BASE}${rest}`;
+    rewriteUrl = request.nextUrl.clone();
+    rewriteUrl.pathname = effectivePathname;
+  }
+
+  const finish = (response: NextResponse) => {
+    if (gate.hidden && gate.slug) {
+      return withAdminBaseCookie(response, publicAdminBase);
+    }
+    // Keep cookie in sync when feature is off so clients don't stick to a stale slug.
+    if (request.cookies.get(ADMIN_PATH_COOKIE)?.value) {
+      return clearAdminBaseCookie(response);
+    }
+    return response;
+  };
+
+  const nextOrRewrite = () => {
+    if (rewriteUrl) {
+      return finish(NextResponse.rewrite(rewriteUrl));
+    }
+    return finish(NextResponse.next());
+  };
+
+  // Allow public paths without authentication (use public URL for login checks)
+  if (isPublicPath(pathname, adminLoginPublicPath)) {
+    return nextOrRewrite();
+  }
+  // Also treat rewritten internal login as public
+  if (
+    effectivePathname === "/admin/login" ||
+    effectivePathname.startsWith("/admin/login/")
+  ) {
+    return nextOrRewrite();
+  }
+
+  const authSession = request.cookies.get("auth_session")?.value;
 
   const isEmployeeRoute =
     pathname === "/employee" || pathname.startsWith("/employee/");
-  const isEmployeeLogin = pathname === "/employee/login" || pathname.startsWith("/employee/login/");
+  const isEmployeeLogin =
+    pathname === "/employee/login" || pathname.startsWith("/employee/login/");
+  const isAdminRoute =
+    effectivePathname === DEFAULT_ADMIN_BASE ||
+    effectivePathname.startsWith(`${DEFAULT_ADMIN_BASE}/`);
 
   // If no session, redirect to the matching login
   if (!authSession) {
     if (isEmployeeRoute && !isEmployeeLogin) {
-      return NextResponse.redirect(new URL("/employee/login", request.url));
+      return finish(
+        NextResponse.redirect(new URL("/employee/login", request.url))
+      );
     }
-    if (pathname.startsWith("/admin")) {
-      return NextResponse.redirect(new URL("/admin/login", request.url));
+    if (isAdminRoute) {
+      return finish(
+        NextResponse.redirect(new URL(adminLoginPublicPath, request.url))
+      );
     }
-    return NextResponse.redirect(new URL("/login", request.url));
+    return finish(NextResponse.redirect(new URL("/login", request.url)));
   }
 
   try {
@@ -122,37 +308,50 @@ export function middleware(request: NextRequest) {
 
     // If email is not verified and not on a verification-exempt path,
     // redirect to verification page with email
-    if (!isEmailVerified && !isNoVerificationPath(pathname)) {
+    if (
+      !isEmailVerified &&
+      !isNoVerificationPath(pathname, adminLoginPublicPath) &&
+      !(
+        effectivePathname === "/admin/login" ||
+        effectivePathname.startsWith("/admin/login/")
+      )
+    ) {
       const verifyUrl = new URL("/auth/verify-email", request.url);
       if (user?.email) {
         verifyUrl.searchParams.set("email", user.email);
       }
-      return NextResponse.redirect(verifyUrl);
+      return finish(NextResponse.redirect(verifyUrl));
     }
 
     // Check admin access for admin routes (case-insensitive)
     const role = String(user?.role ?? "").toUpperCase();
     const isAdminRole = role === "ADMIN" || role === "SUPER_ADMIN";
-    if (pathname.startsWith("/admin") && !isAdminRole) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (isAdminRoute && !isAdminRole) {
+      return finish(
+        NextResponse.redirect(new URL("/dashboard", request.url))
+      );
     }
 
     // Employee routes: auth required (roster/EMPLOYEE role enforced in layout + API).
     // Keep login public (handled above). Admins with employee records may enter.
     if (isEmployeeRoute && !isEmployeeLogin) {
       // Soft gate: session must exist (already true). Layout verifies roster match.
-      return NextResponse.next();
+      return nextOrRewrite();
     }
 
-    return NextResponse.next();
+    return nextOrRewrite();
   } catch (error) {
     console.error("Error parsing session:", error);
     // If session is invalid, clear it and redirect to login
     const loginPath =
-      isEmployeeRoute && !isEmployeeLogin ? "/employee/login" : "/login";
+      isEmployeeRoute && !isEmployeeLogin
+        ? "/employee/login"
+        : isAdminRoute
+          ? adminLoginPublicPath
+          : "/login";
     const response = NextResponse.redirect(new URL(loginPath, request.url));
     response.cookies.delete("auth_session");
-    return response;
+    return finish(response);
   }
 }
 

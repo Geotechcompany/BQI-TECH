@@ -16,6 +16,8 @@ services:
         value: HS256
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: 30
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -32,8 +34,9 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
+      # Set per service: prod → https://bqitech.com ; dev → https://bqitech-hr-dev.netlify.app
       - key: FRONTEND_URL
-        value: https://bqitech.com
+        sync: false
       - key: DEBUG
         value: false
       - key: HR_EMAIL

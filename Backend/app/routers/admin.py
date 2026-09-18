@@ -6476,6 +6476,8 @@ async def get_admin_settings(
                     "candidateSourcing": False,
                 },
                 "admin_2fa_policy": "require_one",
+                "admin_path_hidden": False,
+                "admin_path_slug": None,
             }
             try:
                 result = await db.settings.insert_one(settings)
@@ -6528,6 +6530,11 @@ async def update_admin_settings(
         settings_data = dict(settings_data or {})
         settings_data.pop("_id", None)
         settings_data.pop("id", None)
+        try:
+            from app.lib.admin_path import sanitize_admin_path_fields
+            settings_data = sanitize_admin_path_fields(settings_data)
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
         settings_data["updatedAt"] = datetime.utcnow()
         settings_data["type"] = "admin"
         

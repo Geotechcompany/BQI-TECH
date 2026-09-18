@@ -1,13 +1,54 @@
-from fastapi import APIRouter, HTTPException, Body, Query, Request
+from fastapi import APIRouter, HTTPException, Body, Query, Request, Header
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, Optional
 from app.database import get_database
 from app.utils.ip_utils import get_real_client_ip
+from app.config import settings
+from app.lib.admin_path import load_admin_path_config
 from datetime import datetime
 import logging
+import os
+import secrets
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["misc"])
+
+
+def _admin_path_gate_authorized(provided: Optional[str]) -> bool:
+    expected = (
+        os.getenv("ADMIN_PATH_GATE_SECRET")
+        or settings.SECRET_KEY
+        or ""
+    ).strip()
+    if not expected or not provided:
+        return False
+    try:
+        return secrets.compare_digest(provided.strip(), expected)
+    except Exception:
+        return False
+
+
+@router.get("/admin-path-config")
+async def admin_path_config(
+    request: Request,
+    x_admin_path_key: Optional[str] = Header(default=None, alias="X-Admin-Path-Key"),
+):
+    """
+    Internal config for Next.js middleware. Requires X-Admin-Path-Key matching
+    ADMIN_PATH_GATE_SECRET (or SECRET_KEY). Returns 404 on auth failure to avoid probing.
+    """
+    if not _admin_path_gate_authorized(x_admin_path_key):
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        db = get_database()
+        return await load_admin_path_config(db)
+    except Exception as e:
+        logger.error("admin_path_config error: %s", e)
+        return {
+            "admin_path_hidden": False,
+            "admin_path_slug": None,
+            "public_base": "/admin",
+        }
 
 @router.get("/ip-debug")
 async def debug_ip_address(request: Request):

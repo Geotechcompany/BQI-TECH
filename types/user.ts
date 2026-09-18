@@ -20,6 +20,12 @@ export interface User {
   experience?: any[];
   education?: any[];
   socialLinks?: Record<string, string>;
+  totpEnabled?: boolean;
+  email2faEnabled?: boolean;
+  admin2faPolicy?: "prompt" | "require_one" | "require_both";
+  admin2faSatisfied?: boolean;
+  admin2faPrompt?: boolean;
+  admin2faFactors?: { email?: boolean; totp?: boolean };
   settings?: {
     notifications: {
       email: boolean;

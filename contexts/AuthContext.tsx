@@ -12,6 +12,12 @@ import { authService } from "@/lib/auth-backend";
 import { resolveEmailVerified } from "@/lib/resolve-email-verified";
 import { User } from "@/types/user";
 import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
+import {
+  DEFAULT_ADMIN_BASE,
+  adminHref,
+  isPublicAdminPath,
+  readAdminBasePathCookie,
+} from "@/lib/admin-path";
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -19,7 +25,24 @@ interface AuthContextType {
   user: User | null;
   userRole?: string;
   authLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string
+  ) => Promise<
+    | { kind: "authenticated"; requiresSetup: boolean }
+    | {
+        kind: "challenge";
+        challenge_token: string;
+        methods: Array<"email" | "totp" | "recovery">;
+        email_hint?: string;
+      }
+  >;
+  completeAdmin2faLogin: (tokens: {
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    user: User;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
@@ -290,7 +313,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
+      const { isAdmin2faChallenge } = await import("@/lib/auth-backend");
       const response = await authService.login(email, password);
+
+      if (isAdmin2faChallenge(response)) {
+        setAuthState((prev) => ({
+          ...prev,
+          isAuthenticated: false,
+          isAdmin: false,
+          user: null,
+          userRole: undefined,
+          authLoading: false,
+        }));
+        return {
+          kind: "challenge" as const,
+          challenge_token: response.challenge_token,
+          methods: response.methods,
+          email_hint: response.email_hint,
+        };
+      }
+
       const updatedSession = await authService.refreshUserProfile();
       const activeUser = updatedSession?.user ?? response.user;
       if (updatedSession) {
@@ -305,6 +347,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRole: resolvedRole,
         authLoading: false,
       });
+
+      return {
+        kind: "authenticated" as const,
+        requiresSetup: Boolean(
+          response.requires_2fa_setup ||
+            activeUser.admin2faPrompt ||
+            activeUser.admin2faSatisfied === false
+        ),
+      };
     } catch (error) {
       console.error("Login error:", error);
       setAuthState((prev) => ({
@@ -317,6 +368,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }));
       throw error;
     }
+  };
+
+  const completeAdmin2faLogin = async (tokens: {
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    user: User;
+  }) => {
+    const response = await authService.completeAdmin2faLogin({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      token_type: tokens.token_type || "bearer",
+      user: tokens.user as any,
+    });
+    const updatedSession = await authService.refreshUserProfile();
+    const activeUser = updatedSession?.user ?? response.user;
+    if (updatedSession) {
+      authService.setSession(updatedSession);
+    }
+    setAuthState({
+      isAuthenticated: true,
+      isAdmin: roleIsAdmin(activeUser.role),
+      user: activeUser,
+      userRole: activeUser.role,
+      authLoading: false,
+    });
   };
 
   const register = async (email: string, password: string, name: string) => {
@@ -359,8 +436,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         typeof window !== "undefined"
           ? window.location.pathname
           : pathname || "";
-      if (currentPath.startsWith("/admin")) {
-        router.replace("/admin/login");
+      const adminBase = readAdminBasePathCookie() || DEFAULT_ADMIN_BASE;
+      if (
+        isPublicAdminPath(currentPath, adminBase) ||
+        isPublicAdminPath(currentPath, DEFAULT_ADMIN_BASE)
+      ) {
+        router.replace(adminHref("/login", adminBase));
       } else {
         router.replace("/login");
       }
@@ -622,6 +703,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         ...authState,
         login,
+        completeAdmin2faLogin,
         logout,
         refreshToken,
         register,

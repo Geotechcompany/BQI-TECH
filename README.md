@@ -65,7 +65,15 @@ Backend `Backend/.env` example:
 MONGODB_URI=mongodb+srv://<user>:<pass>@cluster/dbname
 JWT_SECRET=<random-64-bytes>
 ALLOWED_ORIGINS=http://localhost:3000
+
+# Optional — Settings → Integrations → Microsoft calendar sync
+MICROSOFT_CLIENT_ID=
+MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=organizations
+MICROSOFT_REDIRECT_URI=http://localhost:9000/api/admin/integrations/microsoft/callback
 ```
+
+After adding Microsoft env vars, **restart the backend** so new routes and credentials load.
 
 ### Run locally
 
@@ -85,6 +93,14 @@ pnpm dev
 
 Frontend: `http://localhost:3000`
 Backend: `http://localhost:9000/api`
+
+### Progressive Web App (PWA)
+
+Production builds register a service worker via `@ducanh2912/next-pwa` (disabled in `next dev`).
+
+- **Install:** open the production app in Chrome/Edge → address-bar install icon, or DevTools → Application → Manifest → Install.
+- **Verify:** Application → Manifest / Service Workers; Lighthouse → Progressive Web App. Offline fallback: `/offline`.
+- Icons live under `public/icons/`; manifest is generated from `app/manifest.ts`.
 
 ### Key features
 

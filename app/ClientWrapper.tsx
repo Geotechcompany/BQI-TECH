@@ -1,6 +1,7 @@
 "use client"
 
 import { SettingsProvider } from "@/contexts/SettingsContext"
+import { AdminPathProvider } from "@/contexts/AdminPathContext"
 import { JsonLd } from '@/components/JsonLd'
 import ClientLayout from "@/components/ClientLayout"
 import { CustomCursor } from "@/components/effects/CustomCursor"
@@ -26,12 +27,14 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         }}
       />
       <SettingsProvider>
-        <ClientLayout>
-          {children}
-        </ClientLayout>
+        <AdminPathProvider>
+          <ClientLayout>
+            {children}
+          </ClientLayout>
+        </AdminPathProvider>
       </SettingsProvider>
       <CustomCursor />
       <JsonLd />
     </>
   )
-} 
+}

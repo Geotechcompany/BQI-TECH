@@ -582,7 +582,7 @@ async def list_cached_events(
     return events
 
 
-def frontend_settings_redirect(
+async def frontend_settings_redirect(
     *,
     connected: bool = False,
     error: Optional[str] = None,
@@ -594,4 +594,18 @@ def frontend_settings_redirect(
     if error:
         params["microsoft"] = "error"
         params["microsoft_error"] = error[:200]
-    return f"{base}/admin/settings?{urlencode(params)}"
+    admin_base = "/admin"
+    try:
+        from app.lib.admin_path import get_public_admin_base_path
+
+        db = get_database()
+        doc = None
+        if db is not None:
+            doc = await db.settings.find_one(
+                {"type": "admin"},
+                {"admin_path_hidden": 1, "admin_path_slug": 1},
+            )
+        admin_base = get_public_admin_base_path(doc)
+    except Exception:
+        admin_base = "/admin"
+    return f"{base}{admin_base}/settings?{urlencode(params)}"

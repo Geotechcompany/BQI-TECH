@@ -11,7 +11,9 @@ import {
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useAdminPath } from "@/contexts/AdminPathContext";
 import { useAdminTheme } from "@/contexts/AdminThemeContext";
+import { adminHref as buildAdminHref } from "@/lib/admin-path";
 import { getSidebarSkin } from "@/lib/admin-sidebar-skin";
 import { SidebarVersionLabel } from "@/components/admin/AdminBrandTitle";
 import { SidebarUserMenu } from "@/components/admin/SidebarUserMenu";
@@ -81,14 +83,16 @@ interface DashboardSidebarProps {
 
 type Skin = ReturnType<typeof getSidebarSkin>;
 
-function groupRailHref(group: AdminNavGroup) {
-  return group.children[0]?.href ?? "/admin/overview";
+function groupRailHref(group: AdminNavGroup, publicBase: string) {
+  return buildAdminHref(group.children[0]?.href ?? "/admin/overview", publicBase);
 }
 
 export default function DashboardSidebar({
   className,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const { basePath, toInternal, adminHref } = useAdminPath();
+  const internalPathname = toInternal(pathname || "");
   const reducedMotion = useReducedMotion();
   const { sidebarCollapsed, updateSettings } = useSettings();
   const { theme } = useAdminTheme();
@@ -139,16 +143,16 @@ export default function DashboardSidebar({
 
   useEffect(() => {
     setExpandedOverrides({});
-  }, [pathname]);
+  }, [internalPathname]);
 
   const isGroupExpanded = useCallback(
     (group: AdminNavGroup) => {
       if (expandedOverrides[group.id] !== undefined) {
         return expandedOverrides[group.id];
       }
-      return isNavGroupDefaultExpanded(group, pathname);
+      return isNavGroupDefaultExpanded(group, internalPathname);
     },
-    [expandedOverrides, pathname]
+    [expandedOverrides, internalPathname]
   );
 
   const toggleGroup = (group: AdminNavGroup) => {
@@ -166,7 +170,9 @@ export default function DashboardSidebar({
     void updateSettings({ sidebarCollapsed: !sidebarCollapsed });
   };
 
-  if (pathname === "/admin/login") return null;
+  if (internalPathname === "/admin/login" || internalPathname.startsWith("/admin/login/")) {
+    return null;
+  }
 
   const avatarMenuProps = {
     onChangePhoto: openAvatarPicker,
@@ -270,10 +276,12 @@ export default function DashboardSidebar({
                     <GroupRailIcon
                       key={item.id}
                       item={item}
-                      pathname={pathname}
+                      pathname={internalPathname}
                       panelOpen={panelOpen}
                       skin={skin}
                       reducedMotion={!!reducedMotion}
+                      resolveHref={adminHref}
+                      publicBase={basePath}
                       onExpandPanel={() => {
                         if (!panelOpen) {
                           void updateSettings({ sidebarCollapsed: false });
@@ -284,7 +292,7 @@ export default function DashboardSidebar({
                   );
                 }
 
-                const active = isNavLinkActive(item, pathname);
+                const active = isNavLinkActive(item, internalPathname);
                 return (
                   <UiTooltip key={item.id}>
                     <TooltipTrigger asChild>
@@ -293,7 +301,7 @@ export default function DashboardSidebar({
                         transition={{ duration: 0.1, ease: "easeOut" }}
                       >
                         <Link
-                          href={item.href}
+                          href={adminHref(item.href)}
                           aria-label={item.name}
                           aria-current={active ? "page" : undefined}
                           className={railIconClass(skin, active)}
@@ -338,10 +346,12 @@ export default function DashboardSidebar({
                     <GroupRailIcon
                       key={item.id}
                       item={item}
-                      pathname={pathname}
+                      pathname={internalPathname}
                       panelOpen={panelOpen}
                       skin={skin}
                       reducedMotion={!!reducedMotion}
+                      resolveHref={adminHref}
+                      publicBase={basePath}
                       onExpandPanel={() => {
                         if (!panelOpen) {
                           void updateSettings({ sidebarCollapsed: false });
@@ -352,7 +362,7 @@ export default function DashboardSidebar({
                   );
                 }
 
-                const active = isNavLinkActive(item, pathname);
+                const active = isNavLinkActive(item, internalPathname);
                 return (
                   <UiTooltip key={item.id}>
                     <TooltipTrigger asChild>
@@ -361,7 +371,7 @@ export default function DashboardSidebar({
                         transition={{ duration: 0.1, ease: "easeOut" }}
                       >
                         <Link
-                          href={item.href}
+                          href={adminHref(item.href)}
                           aria-label={item.name}
                           aria-current={active ? "page" : undefined}
                           className={railIconClass(skin, active)}
@@ -437,12 +447,13 @@ export default function DashboardSidebar({
                           <ExpandedNavGroup
                             key={item.id}
                             group={item}
-                            pathname={pathname}
+                            pathname={internalPathname}
                             skin={skin}
                             expanded={isGroupExpanded(item)}
                             onToggle={() => toggleGroup(item)}
                             spring={spring}
                             reducedMotion={!!reducedMotion}
+                            resolveHref={adminHref}
                           />
                         );
                       }
@@ -451,8 +462,9 @@ export default function DashboardSidebar({
                         <FlatNavLink
                           key={item.id}
                           item={item}
-                          pathname={pathname}
+                          pathname={internalPathname}
                           skin={skin}
+                          resolveHref={adminHref}
                         />
                       );
                     })}
@@ -502,16 +514,18 @@ function FlatNavLink({
   pathname,
   skin,
   onNavigate,
+  resolveHref,
 }: {
   item: AdminNavLink;
   pathname: string;
   skin: Skin;
   onNavigate?: () => void;
+  resolveHref: (href: string) => string;
 }) {
   const active = isNavLinkActive(item, pathname);
   return (
     <Link
-      href={item.href}
+      href={resolveHref(item.href)}
       className={skin.navLink(active)}
       data-tour={item.tourAttr}
       aria-current={active ? "page" : undefined}
@@ -535,6 +549,7 @@ function ExpandedNavGroup({
   onNavigate,
   spring,
   reducedMotion,
+  resolveHref,
 }: {
   group: AdminNavGroup;
   pathname: string;
@@ -544,6 +559,7 @@ function ExpandedNavGroup({
   onNavigate?: () => void;
   spring: Transition;
   reducedMotion: boolean;
+  resolveHref: (href: string) => string;
 }) {
   const parentActive = isNavGroupPathActive(group, pathname);
 
@@ -600,7 +616,7 @@ function ExpandedNavGroup({
                 return (
                   <Link
                     key={child.id}
-                    href={child.href}
+                    href={resolveHref(child.href)}
                     className={skin.subLink(active)}
                     data-tour={child.tourAttr}
                     aria-current={active ? "page" : undefined}
@@ -627,6 +643,8 @@ function GroupRailIcon({
   skin,
   reducedMotion,
   onExpandPanel,
+  resolveHref,
+  publicBase,
 }: {
   item: AdminNavGroup;
   pathname: string;
@@ -634,6 +652,8 @@ function GroupRailIcon({
   skin: Skin;
   reducedMotion: boolean;
   onExpandPanel: () => void;
+  resolveHref: (href: string) => string;
+  publicBase: string;
 }) {
   const active = isNavGroupPathActive(item, pathname);
 
@@ -646,7 +666,7 @@ function GroupRailIcon({
             transition={{ duration: 0.1, ease: "easeOut" }}
           >
             <Link
-              href={groupRailHref(item)}
+              href={groupRailHref(item, publicBase)}
               aria-label={item.name}
               aria-current={active ? "page" : undefined}
               className={railIconClass(skin, active)}
@@ -707,7 +727,7 @@ function GroupRailIcon({
           return (
             <DropdownMenuItem key={child.id} asChild>
               <Link
-                href={child.href}
+                href={resolveHref(child.href)}
                 className={skin.flyoutLink(childActive)}
                 data-tour={child.tourAttr}
               >

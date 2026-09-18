@@ -1,3 +1,9 @@
+import {
+  DEFAULT_ADMIN_BASE,
+  readAdminBasePathCookie,
+  toInternalAdminPath,
+} from "@/lib/admin-path";
+
 export type AdminModuleKey =
   | "overview"
   | "help"
@@ -139,13 +145,17 @@ const ROUTE_MODULE_MAP: Record<string, AdminModuleKey> = {
 };
 
 export function resolveModuleForPath(pathname: string): AdminModuleKey | null {
-  if (!pathname.startsWith("/admin")) return null;
+  const internal = toInternalAdminPath(
+    pathname,
+    readAdminBasePathCookie() || DEFAULT_ADMIN_BASE
+  );
+  if (!internal.startsWith("/admin")) return null;
 
   const sortedRoutes = Object.keys(ROUTE_MODULE_MAP).sort(
     (a, b) => b.length - a.length
   );
   for (const route of sortedRoutes) {
-    if (pathname === route || pathname.startsWith(`${route}/`)) {
+    if (internal === route || internal.startsWith(`${route}/`)) {
       return ROUTE_MODULE_MAP[route];
     }
   }
