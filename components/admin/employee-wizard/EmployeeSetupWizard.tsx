@@ -21,6 +21,7 @@ import {
 import { renderEmployeeWizardStep } from "./wizard-steps";
 import { TourHelpButton } from "@/components/admin/tour/TourHelpButton";
 import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export function EmployeeSetupWizard() {
   const router = useRouter();
@@ -163,7 +164,7 @@ export function EmployeeSetupWizard() {
       if (docusignSent) {
         toast.success("Offer letter sent via DocuSign");
       }
-      router.push(`/manage/employees/${employee.id}`);
+      router.push(publicAdminHref(`/manage/employees/${employee.id}`));
     },
     onError: (err: Error) => {
       toast.error(err.message || "Could not add employee");
@@ -171,7 +172,7 @@ export function EmployeeSetupWizard() {
   });
 
   const handleClose = () => {
-    router.push("/manage/employees");
+    router.push(publicAdminHref("/manage/employees"));
   };
 
   const handleContinue = () => {

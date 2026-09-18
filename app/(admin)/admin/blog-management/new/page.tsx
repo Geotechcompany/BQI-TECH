@@ -3,12 +3,13 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function LegacyNewBlogPostPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/manage/blog-management/wizard");
+    router.replace(publicAdminHref("/manage/blog-management/wizard"));
   }, [router]);
 
   return (

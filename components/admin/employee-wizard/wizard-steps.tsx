@@ -39,6 +39,7 @@ import type {
 } from "./employee-wizard-config";
 import { EMPLOYEE_WIZARD_STEPS } from "./employee-wizard-config";
 import { EmployeeWizardRoleSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export interface StepProps {
   state: EmployeeWizardState;
@@ -862,8 +863,7 @@ export function DocumentsStep({ state, onChange }: StepProps) {
               <p className="text-xs text-muted-foreground">
                 Connect DocuSign in{" "}
                 <Link
-                  href="/manage/settings?section=integrations"
-                  className="font-medium text-[#31CDFF] hover:underline"
+                  href={publicAdminHref("/manage/settings?section=integrations")}className="font-medium text-[#31CDFF] hover:underline"
                 >
                   Settings → Integrations
                 </Link>

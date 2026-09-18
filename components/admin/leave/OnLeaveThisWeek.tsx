@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { OnLeaveEntry } from "@/types/leave";
 import { LeaveTypeTag } from "@/components/admin/leave/LeaveStatusBadge";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 function formatRange(start: string, end: string) {
   const s = new Date(start);
@@ -45,7 +46,7 @@ export function OnLeaveThisWeek({ entries, className }: OnLeaveThisWeekProps) {
           >
             <div className="min-w-0">
               <Link
-                href={`/manage/employees/${entry.employeeId}`}
+                href={publicAdminHref(`/manage/employees/${entry.employeeId}`)}
                 className="truncate text-sm font-medium text-[#272156] hover:underline dark:text-foreground"
               >
                 {entry.employeeName}

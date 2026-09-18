@@ -10,6 +10,7 @@ import { FailedStatusState } from "@/components/ui/failed-status-state";
 import { ChartSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
 import { adminApi } from "@/lib/api-backend";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function SurveyAnalyticsPage() {
   const params = useParams<{ id: string }>();
@@ -75,7 +76,7 @@ export default function SurveyAnalyticsPage() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => router.push("/manage/surveys")}
+                onClick={() => router.push(publicAdminHref("/manage/surveys"))}
               >
                 Back to Surveys
               </Button>

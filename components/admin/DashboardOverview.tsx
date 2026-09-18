@@ -3,12 +3,13 @@
 import { motion } from 'framer-motion';
 import { Users, FileText, CheckCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
+import { publicAdminHref } from "@/lib/admin-path";
 
 const overviewItems = [
-  { title: 'Total Applications', value: 150, icon: FileText, color: 'bg-blue-500', path: '/manage/candidates' },
-  { title: 'Shortlisted', value: 45, icon: CheckCircle, color: 'bg-green-500', path: '/manage/shortlisted' },
-  { title: 'Technical Assessment', value: 30, icon: XCircle, color: 'bg-red-500', path: '/manage/assessments' },
-  { title: 'In Review', value: 75, icon: Users, color: 'bg-yellow-500', path: '/manage/reviews' },
+  { title: 'Total Applications', value: 150, icon: FileText, color: 'bg-blue-500', path: publicAdminHref('/manage/candidates') },
+  { title: 'Shortlisted', value: 45, icon: CheckCircle, color: 'bg-green-500', path: publicAdminHref('/manage/shortlisted') },
+  { title: 'Technical Assessment', value: 30, icon: XCircle, color: 'bg-red-500', path: publicAdminHref('/manage/assessments') },
+  { title: 'In Review', value: 75, icon: Users, color: 'bg-yellow-500', path: publicAdminHref('/manage/reviews') },
 ];
 
 export default function DashboardOverview() {

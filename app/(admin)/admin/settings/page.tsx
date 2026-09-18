@@ -94,10 +94,8 @@ import { useAdminPath } from "@/contexts/AdminPathContext";
 import {
   APP_URL,
 } from "@/lib/config";
-import {
-  getPublicAdminBasePath,
-  validateAdminPathSlug,
-} from "@/lib/admin-path";
+import { getPublicAdminBasePath,
+  validateAdminPathSlug, publicAdminHref } from "@/lib/admin-path";
 
 interface AdminSettings {
   emailNotifications: boolean;
@@ -418,7 +416,7 @@ function SettingsPageContent() {
       )
     ) {
       links.push({
-        href: "/manage/user-management",
+        href: publicAdminHref("/manage/user-management"),
         label: "User Management",
         description: "Invite admins and manage roles",
         icon: Users,
@@ -432,7 +430,7 @@ function SettingsPageContent() {
       )
     ) {
       links.push({
-        href: "/manage/email-broadcast",
+        href: publicAdminHref("/manage/email-broadcast"),
         label: "Email Broadcast",
         description: "Send announcements to recipients",
         icon: Mail,
@@ -440,7 +438,7 @@ function SettingsPageContent() {
     }
     if (canAccessAdminPath("/manage/audit-logs", user?.role, user?.adminModules)) {
       links.push({
-        href: "/manage/audit-logs",
+        href: publicAdminHref("/manage/audit-logs"),
         label: "Admin Activity",
         description: "Review admin actions and audit history",
         icon: ScrollText,
@@ -448,7 +446,7 @@ function SettingsPageContent() {
     }
     if (canAccessAdminPath("/manage/backup", user?.role, user?.adminModules)) {
       links.push({
-        href: "/manage/backup",
+        href: publicAdminHref("/manage/backup"),
         label: "Backup",
         description: "Schedules, runs, and off-site exports",
         icon: HardDrive,

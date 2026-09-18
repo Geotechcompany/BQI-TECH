@@ -21,6 +21,7 @@ import {
   UserMinus,
 } from "lucide-react";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { publicAdminHref } from "@/lib/admin-path";
 import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
 import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { ResumeCvPanel } from "@/components/admin/candidate-profile/ResumeCvPanel";
@@ -471,9 +472,12 @@ export function ApplicantsWorkspace() {
     if (selectedJobId) params.set("jobId", selectedJobId);
     if (selectedApplicationId) params.set("applicationId", selectedApplicationId);
     const qs = params.toString();
-    router.replace(qs ? `/manage/applicants?${qs}` : "/manage/applicants", {
-      scroll: false,
-    });
+    router.replace(
+      publicAdminHref(qs ? `/manage/applicants?${qs}` : "/manage/applicants"),
+      {
+        scroll: false,
+      }
+    );
   }, [selectedJobId, selectedApplicationId, searchParams, router]);
   const statusMutation = useMutation({
     mutationFn: ({
@@ -642,7 +646,9 @@ export function ApplicantsWorkspace() {
     : null;
   const profileHref =
     selectedApplication && selectedJobId
-      ? `/manage/jobs/${selectedJobId}/candidates/${selectedApplication.id}`
+      ? publicAdminHref(
+          `/manage/jobs/${selectedJobId}/candidates/${selectedApplication.id}`
+        )
       : null;
   const appliedRelative = selectedApplication?.appliedDate
     ? (() => {

@@ -24,6 +24,7 @@ import {
   isValidAdminPathSlug,
   normalizeAdminPathSlug,
   readAdminBasePathCookie,
+  toCanonicalAdminPath,
   toInternalAdminPath,
   writeAdminBasePathCookie,
   type AdminPathConfig,
@@ -36,6 +37,7 @@ type AdminPathContextValue = {
   isLoading: boolean;
   adminHref: (path?: string) => string;
   toInternal: (pathname: string) => string;
+  toCanonical: (pathname: string) => string;
   refresh: () => Promise<void>;
   applyConfig: (config: Partial<AdminPathConfig>) => void;
 };
@@ -150,6 +152,11 @@ export function AdminPathProvider({ children }: { children: ReactNode }) {
     [basePath]
   );
 
+  const toCanonical = useCallback(
+    (path: string) => toCanonicalAdminPath(path, basePath),
+    [basePath]
+  );
+
   // Remap stale /admin (internal) or /manage links when the live public base differs.
   useEffect(() => {
     if (basePath === DEFAULT_ADMIN_BASE && !isHidden) return;
@@ -200,6 +207,7 @@ export function AdminPathProvider({ children }: { children: ReactNode }) {
       isLoading,
       adminHref,
       toInternal,
+      toCanonical,
       refresh,
       applyConfig,
     }),
@@ -211,6 +219,7 @@ export function AdminPathProvider({ children }: { children: ReactNode }) {
       isLoading,
       refresh,
       slug,
+      toCanonical,
       toInternal,
     ]
   );
@@ -226,18 +235,17 @@ export function useAdminPath() {
   const ctx = useContext(AdminPathContext);
   if (!ctx) {
     // Safe fallback when provider is missing (e.g. isolated stories).
+    const fallbackBase = readAdminBasePathCookie() || DEFAULT_ADMIN_BASE;
     return {
-      basePath: readAdminBasePathCookie() || DEFAULT_ADMIN_BASE,
+      basePath: fallbackBase,
       isHidden: false,
       slug: null,
       isLoading: false,
-      adminHref: (path: string = "") =>
-        buildAdminHref(path, readAdminBasePathCookie() || DEFAULT_ADMIN_BASE),
+      adminHref: (path: string = "") => buildAdminHref(path, fallbackBase),
       toInternal: (path: string) =>
-        toInternalAdminPath(
-          path,
-          readAdminBasePathCookie() || DEFAULT_ADMIN_BASE
-        ),
+        toInternalAdminPath(path, fallbackBase),
+      toCanonical: (path: string) =>
+        toCanonicalAdminPath(path, fallbackBase),
       refresh: async () => {},
       applyConfig: () => {},
     } satisfies AdminPathContextValue;

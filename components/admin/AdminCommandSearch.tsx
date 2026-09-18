@@ -31,6 +31,7 @@ import {
 } from "@/lib/admin-permissions";
 import { LAST_PIPELINE_JOB_KEY } from "@/components/admin/pipeline/pipeline-utils";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 type SearchDestination = {
   name: string;
@@ -46,7 +47,7 @@ type SearchDestination = {
 const PRIMARY_DESTINATIONS: SearchDestination[] = [
   {
     name: "Overview",
-    href: "/manage/overview",
+    href: publicAdminHref("/manage/overview"),
     icon: LayoutDashboard,
     group: "Pages",
     moduleKey: "overview",
@@ -54,7 +55,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Inbox",
-    href: "/manage/inbox",
+    href: publicAdminHref("/manage/inbox"),
     icon: Inbox,
     group: "Pages",
     moduleKey: "candidates",
@@ -62,7 +63,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Tasks",
-    href: "/manage/tasks",
+    href: publicAdminHref("/manage/tasks"),
     icon: ListTodo,
     group: "Pages",
     moduleKey: "candidates",
@@ -70,7 +71,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Communications",
-    href: "/manage/communications",
+    href: publicAdminHref("/manage/communications"),
     icon: MessagesSquare,
     group: "Pages",
     anyModuleKeys: ["email_broadcast", "candidates"],
@@ -78,7 +79,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Calendar",
-    href: "/manage/calendar",
+    href: publicAdminHref("/manage/calendar"),
     icon: CalendarDays,
     group: "Pages",
     moduleKey: "candidates",
@@ -86,7 +87,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Reports",
-    href: "/manage/reports",
+    href: publicAdminHref("/manage/reports"),
     icon: ChartColumnIncreasing,
     group: "Pages",
     moduleKey: "overview",
@@ -94,7 +95,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Help",
-    href: "/manage/help",
+    href: publicAdminHref("/manage/help"),
     icon: HelpCircle,
     group: "Pages",
     moduleKey: "help",

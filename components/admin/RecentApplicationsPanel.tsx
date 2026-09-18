@@ -18,6 +18,7 @@ import {
   getPositionDisplay,
 } from "@/components/admin/utils/table-utils";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const statusStyles: Record<
   string,
@@ -98,7 +99,7 @@ export function RecentApplicationsPanel({
   applications,
   jobTitles,
   onView,
-  viewAllHref = "/manage/candidates",
+  viewAllHref = publicAdminHref("/manage/candidates"),
   maxItems = 4,
   subtitle = "Latest candidates across all positions",
   className,

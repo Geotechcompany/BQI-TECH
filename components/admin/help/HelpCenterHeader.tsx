@@ -5,6 +5,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const COVER_SRC = "/images/admin-login-cover.png";
 
@@ -24,9 +25,9 @@ export function HelpCenterHeader({
     event.preventDefault();
     const trimmed = query.trim();
     if (trimmed) {
-      router.push(`/manage/help?q=${encodeURIComponent(trimmed)}`);
+      router.push(publicAdminHref(`/manage/help?q=${encodeURIComponent(trimmed)}`));
     } else {
-      router.push("/manage/help");
+      router.push(publicAdminHref("/manage/help"));
     }
   };
 
@@ -52,8 +53,7 @@ export function HelpCenterHeader({
 
       <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center gap-5 text-center">
         <Link
-          href="/manage/help"
-          className="text-2xl font-semibold tracking-tight text-white hover:text-[#31CDFF]"
+          href={publicAdminHref("/manage/help")}className="text-2xl font-semibold tracking-tight text-white hover:text-[#31CDFF]"
         >
           BQI HR
           <span className="ml-2 text-base font-normal text-white/70">

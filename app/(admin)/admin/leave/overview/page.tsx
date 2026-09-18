@@ -20,6 +20,7 @@ import { OnLeaveThisWeek } from "@/components/admin/leave/OnLeaveThisWeek";
 import { Button } from "@/components/ui/button";
 import { LeaveOverviewSkeleton } from "@/components/admin/hr-skeletons";
 import { leaveApi, type LeaveOverviewResponse } from "@/lib/leave";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function LeaveOverviewPage() {
   const [data, setData] = useState<LeaveOverviewResponse | null>(null);
@@ -67,7 +68,7 @@ export default function LeaveOverviewPage() {
             Export
           </Button>
           <Button asChild variant="outline" size="sm" className="border-[#272156]/20">
-            <Link href="/manage/leave/calendar">
+            <Link href={publicAdminHref("/manage/leave/calendar")}>
               <CalendarDays className="mr-1.5 h-4 w-4" />
               Calendar
             </Link>
@@ -77,7 +78,7 @@ export default function LeaveOverviewPage() {
             size="sm"
             className="bg-[#272156] text-white hover:bg-[#272156]/90"
           >
-            <Link href="/manage/leave/requests">
+            <Link href={publicAdminHref("/manage/leave/requests")}>
               <Plus className="mr-1.5 h-4 w-4" />
               Request leave
             </Link>

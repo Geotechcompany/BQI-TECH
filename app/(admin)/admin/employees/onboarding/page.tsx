@@ -44,6 +44,7 @@ import {
   Users,
 } from "lucide-react";
 import { OnboardingSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 ChartJS.register(
   CategoryScale,
@@ -359,7 +360,7 @@ export default function OnboardingPage() {
                       {stats.plan[bucket].slice(0, 5).map((e) => (
                         <li key={e.id}>
                           <Link
-                            href={`/manage/employees/${e.id}`}
+                            href={publicAdminHref(`/manage/employees/${e.id}`)}
                             className="hover:text-[#272156] hover:underline dark:hover:text-[#31CDFF]"
                           >
                             {fullName(e)}
@@ -381,7 +382,7 @@ export default function OnboardingPage() {
                   Active onboardings
                 </h3>
                 <Button asChild size="sm" variant="outline">
-                  <Link href="/manage/employees/new">
+                  <Link href={publicAdminHref("/manage/employees/new")}>
                     <UserPlus className="mr-1.5 h-3.5 w-3.5" />
                     Add employee
                   </Link>
@@ -459,7 +460,7 @@ export default function OnboardingPage() {
                                     </Button>
                                   ) : null}
                                   <Button asChild size="sm" variant="ghost">
-                                    <Link href={`/manage/employees/${e.id}`}>
+                                    <Link href={publicAdminHref(`/manage/employees/${e.id}`)}>
                                       View
                                     </Link>
                                   </Button>
@@ -496,7 +497,7 @@ export default function OnboardingPage() {
                               return (
                               <li key={e.id}>
                                 <Link
-                                  href={`/manage/employees/${e.id}`}
+                                  href={publicAdminHref(`/manage/employees/${e.id}`)}
                                   className="block rounded-lg border border-border/60 p-2 hover:border-[#31CDFF]/40"
                                 >
                                   <p className="text-sm font-medium">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export type PortalAudience = "admin" | "employee";
 
@@ -10,19 +11,19 @@ type PortalAudienceSwitcherProps = {
   className?: string;
 };
 
-const OPTIONS: {
-  id: PortalAudience;
-  label: string;
-  href: string;
-}[] = [
-  { id: "admin", label: "Admin", href: "/manage/login" },
-  { id: "employee", label: "Employee", href: "/employee/login" },
-];
-
 export function PortalAudienceSwitcher({
   active,
   className,
 }: PortalAudienceSwitcherProps) {
+  const options: {
+    id: PortalAudience;
+    label: string;
+    href: string;
+  }[] = [
+    { id: "admin", label: "Admin", href: publicAdminHref("/login") },
+    { id: "employee", label: "Employee", href: "/employee/login" },
+  ];
+
   return (
     <div
       role="tablist"
@@ -32,7 +33,7 @@ export function PortalAudienceSwitcher({
         className
       )}
     >
-      {OPTIONS.map((option) => {
+      {options.map((option) => {
         const isActive = option.id === active;
         return (
           <Link

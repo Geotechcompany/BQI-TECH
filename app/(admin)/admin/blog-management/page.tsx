@@ -152,6 +152,7 @@ export default function BlogManagementPage() {
 
   const togglePublishMutation = useMutation({
     mutationFn: async ({ id, published }: { id: string; published: boolean }) => {
+import { publicAdminHref } from "@/lib/admin-path";
       setIsUpdating(id)
       try {
         const session = authService.getSession()
@@ -292,7 +293,7 @@ export default function BlogManagementPage() {
           bannerKey="blog"
           actions={
             <Button
-              onClick={() => router.push('/manage/blog-management/wizard')}
+              onClick={() => router.push(publicAdminHref('/manage/blog-management/wizard'))}
               className="bg-white text-[#272055] hover:bg-white/90"
               data-tour="blog-create"
             >
@@ -355,14 +356,14 @@ export default function BlogManagementPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => router.push(`/manage/blog-management/${post.id}/view`)}
+                        onClick={() => router.push(publicAdminHref(`/manage/blog-management/${post.id}/view`))}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => router.push(`/manage/blog-management/${post.id}/wizard`)}
+                        onClick={() => router.push(publicAdminHref(`/manage/blog-management/${post.id}/wizard`))}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>

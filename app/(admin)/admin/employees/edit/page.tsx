@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { EmployeePickerSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function EditEmployeePickerPage() {
   const [search, setSearch] = useState("");
@@ -81,7 +82,7 @@ export default function EditEmployeePickerPage() {
                 </div>
                 <EmployeeStatusBadge status={e.status} />
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/manage/employees/${e.id}/edit`}>
+                  <Link href={publicAdminHref(`/manage/employees/${e.id}/edit`)}>
                     <Pencil className="mr-1.5 h-3.5 w-3.5" />
                     Edit
                   </Link>

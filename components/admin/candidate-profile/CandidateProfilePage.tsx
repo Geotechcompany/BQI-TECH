@@ -102,6 +102,7 @@ import {
   InlineEditableField,
   InlineTagsField,
 } from "./InlineEditableField";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const PLACEHOLDER_NAMES = new Set([
   "Incomplete Application",
@@ -553,7 +554,7 @@ export function CandidateProfilePage({
     return () => window.clearTimeout(timer);
   }, [applicationId, quickNote]);
 
-  const pipelineHref = `/manage/jobs/${jobId}/pipeline`;
+  const pipelineHref = publicAdminHref(`/manage/jobs/${jobId}/pipeline`);
 
   const leaveProfile = useCallback(() => {
     if (onClose) {
@@ -569,7 +570,7 @@ export function CandidateProfilePage({
         onNavigateSibling(targetId);
         return;
       }
-      router.push(`/manage/jobs/${jobId}/candidates/${targetId}`);
+      router.push(publicAdminHref(`/manage/jobs/${jobId}/candidates/${targetId}`));
     },
     [jobId, onNavigateSibling, router]
   );
@@ -699,7 +700,7 @@ export function CandidateProfilePage({
   }, [application.id, name, rankApplicationById]);
 
   const getProfileUrl = useCallback(() => {
-    const path = `/manage/jobs/${jobId}/candidates/${applicationId}`;
+    const path = publicAdminHref(`/manage/jobs/${jobId}/candidates/${applicationId}`);
     if (typeof window === "undefined") {
       return path;
     }
@@ -1002,7 +1003,7 @@ export function CandidateProfilePage({
             variant="ghost"
             size="icon"
             className="text-white hover:bg-white/10"
-            onClick={() => router.push("/manage/calendar")}
+            onClick={() => router.push(publicAdminHref("/manage/calendar"))}
             aria-label="Open calendar"
             title="Calendar"
           >
@@ -1359,7 +1360,7 @@ export function CandidateProfilePage({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push("/manage/calendar")}
+                    onClick={() => router.push(publicAdminHref("/manage/calendar"))}
                   >
                     Open calendar
                   </Button>
@@ -1448,7 +1449,7 @@ export function CandidateProfilePage({
                 className="h-9 w-9 text-[#272055] hover:bg-white"
                 aria-label="Open calendar"
                 title="Calendar"
-                onClick={() => router.push("/manage/calendar")}
+                onClick={() => router.push(publicAdminHref("/manage/calendar"))}
               >
                 <Calendar className="h-4 w-4" />
               </Button>
@@ -1493,7 +1494,7 @@ export function CandidateProfilePage({
                 icon={Briefcase}
                 label="Job position"
                 value={position}
-                href={`/manage/jobs/${jobId}/pipeline`}
+                href={publicAdminHref(`/manage/jobs/${jobId}/pipeline`)}
               />
               <SidebarRow
                 icon={Calendar}

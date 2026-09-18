@@ -30,6 +30,7 @@ import {
   userHasEnrolledTwoFactor,
 } from "@/lib/user-2fa-gate";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const otpSchema = z.object({
   code: z.string().length(6, "Code must be 6 digits"),
@@ -251,7 +252,7 @@ function EmailVerificationContent() {
             hasShownAlreadyVerifiedToastRef.current = true;
           }
           if (isAdmin) {
-            router.replace("/manage/overview");
+            router.replace(publicAdminHref("/manage/overview"));
           } else {
             const sessionUser = authService.getSession()?.user;
             const destination = needsUserTwoFactorSetup({
@@ -380,7 +381,7 @@ function EmailVerificationContent() {
         }`;
         if (isAuthenticated && sessionUser) {
           if (isAdmin) {
-            redirectPath = "/manage/overview";
+            redirectPath = publicAdminHref("/manage/overview");
           } else if (
             needsUserTwoFactorSetup({
               role: sessionUser.role,

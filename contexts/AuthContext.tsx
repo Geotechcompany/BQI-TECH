@@ -24,6 +24,7 @@ import {
   adminHref,
   isPublicAdminPath,
   readAdminBasePathCookie,
+  resolvePublicAdminBase,
 } from "@/lib/admin-path";
 
 interface AuthContextType {
@@ -100,10 +101,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const isProtectedRoute = (path: string) =>
-    path.startsWith("/dashboard") ||
-    path.startsWith("/manage") ||
-    path.startsWith("/login");
+  const isProtectedRoute = (path: string) => {
+    const adminBase = resolvePublicAdminBase();
+    return (
+      path.startsWith("/dashboard") ||
+      isPublicAdminPath(path, adminBase) ||
+      isPublicAdminPath(path, DEFAULT_ADMIN_BASE) ||
+      path.startsWith("/login")
+    );
+  };
 
   // Session timeout configuration (in minutes)
   const SESSION_TIMEOUT_MINUTES = 30; // 30 minutes
@@ -194,9 +200,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Only check verification for dashboard and admin routes
       const currentPath =
         typeof window !== "undefined" ? window.location.pathname : "";
+      const adminBase = resolvePublicAdminBase();
       const requiresVerification =
         currentPath.startsWith("/dashboard") ||
-        currentPath.startsWith("/manage");
+        isPublicAdminPath(currentPath, adminBase) ||
+        isPublicAdminPath(currentPath, DEFAULT_ADMIN_BASE);
 
       if (requiresVerification && !authState.user.isEmailVerified) {
         console.log("User not verified, redirecting from:", currentPath);

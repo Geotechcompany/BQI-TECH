@@ -20,6 +20,7 @@ import {
   PremiumDashboardLoader,
   USER_LOADING_PHRASES,
 } from "@/components/admin/PremiumDashboardLoader";
+import { publicAdminHref } from "@/lib/admin-path";
 
 function safeNextPath(raw: string | null): string {
   if (!raw || !raw.startsWith("/") || raw.startsWith("//")) {
@@ -73,7 +74,7 @@ function Setup2faContent() {
 
     // Admins use the manage-area enrollment flow
     if (isAdmin) {
-      leaveGate("/manage/overview");
+      leaveGate(publicAdminHref("/manage/overview"));
       return;
     }
 

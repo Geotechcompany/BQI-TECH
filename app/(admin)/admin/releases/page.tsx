@@ -7,6 +7,7 @@ import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanne
 import { FEATURE_RELEASES } from "@/lib/feature-releases";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function FeatureReleasesPage() {
   return (
@@ -20,7 +21,7 @@ export default function FeatureReleasesPage() {
               variant="secondary"
               className="bg-white text-[#272055] hover:bg-white/90"
             >
-              <Link href="/manage/whats-new">View changelog</Link>
+              <Link href={publicAdminHref("/manage/whats-new")}>View changelog</Link>
             </Button>
           }
         />
@@ -60,7 +61,7 @@ export default function FeatureReleasesPage() {
                   ))}
                 </div>
                 <Button asChild className="bg-violet-600 hover:bg-violet-700">
-                  <Link href={`/manage/releases/${release.slug}`}>
+                  <Link href={publicAdminHref(`/manage/releases/${release.slug}`)}>
                     Read release
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>

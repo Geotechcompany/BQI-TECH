@@ -19,6 +19,7 @@ import {
   questionnairesFromQuestions,
   wizardStateToPayload,
 } from "./job-wizard-config";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const API_BASE = process.env.NEXT_PUBLIC_PYTHON_API_URL;
 
@@ -123,7 +124,7 @@ export function useJobWizard(jobId?: string) {
       } catch (error) {
         console.error(error);
         toast.error("Failed to load position");
-        router.push("/manage/job-postings");
+        router.push(publicAdminHref("/manage/job-postings"));
       } finally {
         if (!cancelled) setIsLoading(false);
       }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { useAiStatus } from "@/contexts/AiStatusContext";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const DISMISS_KEY = "bqi.aiConfigBanner.dismissed";
 
@@ -32,8 +33,7 @@ export function AiConfigBanner() {
           BQI Intelligence features are turned off because no provider API key is
           set. Add one in{" "}
           <Link
-            href="/manage/settings?section=ai"
-            className="font-semibold underline underline-offset-2 hover:opacity-80"
+            href={publicAdminHref("/manage/settings?section=ai")}className="font-semibold underline underline-offset-2 hover:opacity-80"
           >
             Settings → AI providers
           </Link>{" "}

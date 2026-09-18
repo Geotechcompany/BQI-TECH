@@ -10,6 +10,7 @@ import { adminApi } from "@/lib/api-backend";
 import type { Employee } from "@/types/employee";
 import { Button } from "@/components/ui/button";
 import { EmployeeProfileSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -46,7 +47,7 @@ export default function EmployeeProfilePage() {
               Retry
             </Button>
             <Button asChild className="bg-[#272156] text-white">
-              <Link href="/manage/employees">Back to employees</Link>
+              <Link href={publicAdminHref("/manage/employees")}>Back to employees</Link>
             </Button>
           </div>
         </div>

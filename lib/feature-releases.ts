@@ -9,6 +9,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export interface FeatureReleaseHighlight {
   title: string;
@@ -63,7 +64,7 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
     summary:
       "This release tightens the daily hiring workflow: configure AI providers from Settings, slice applicants with advanced filters and sorting, archive and restore candidates reliably, and meet every new feature through a first-login preview that shows exactly how to try it.",
     heroAccent: "from-primary via-primary/95 to-primary/70",
-    ctaHref: "/manage/settings",
+    ctaHref: publicAdminHref("/manage/settings"),
     ctaLabel: "Open Settings",
     features: [
       {
@@ -71,7 +72,7 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
         description:
           "Choose your AI provider, store its API key, and pick a model for applicant ranking from one Settings panel. Switch providers without touching code.",
         icon: Settings2,
-        href: "/manage/settings",
+        href: publicAdminHref("/manage/settings"),
         ctaLabel: "Open Settings",
         imageUrl:
           "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80&auto=format&fit=crop",
@@ -90,7 +91,7 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
         description:
           "Narrow the applications list by status, job, and score, then reorder results and flip the sort direction with a single click.",
         icon: SlidersHorizontal,
-        href: "/manage/candidates",
+        href: publicAdminHref("/manage/candidates"),
         ctaLabel: "Open Applications",
         imageUrl:
           "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80&auto=format&fit=crop",
@@ -109,7 +110,7 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
         description:
           "Archiving and restoring applications now updates instantly and stays consistent across every pipeline view, with no stale rows left behind.",
         icon: ArchiveRestore,
-        href: "/manage/archived",
+        href: publicAdminHref("/manage/archived"),
         ctaLabel: "View Archived",
         imageUrl:
           "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80&auto=format&fit=crop",
@@ -128,7 +129,7 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
         description:
           "This popup. It showcases what shipped and gives you concise how-to-test steps, then sends you straight to the right page. It returns only when a newer release ships.",
         icon: Megaphone,
-        href: "/manage/whats-new",
+        href: publicAdminHref("/manage/whats-new"),
         ctaLabel: "View What's New",
         imageUrl:
           "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=800&q=80&auto=format&fit=crop",

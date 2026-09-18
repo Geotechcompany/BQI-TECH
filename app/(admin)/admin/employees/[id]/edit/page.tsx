@@ -10,6 +10,7 @@ import { fullName } from "@/lib/employees";
 import type { Employee } from "@/types/employee";
 import { Button } from "@/components/ui/button";
 import { EmployeeFormSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function EditEmployeePage() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +40,7 @@ export default function EditEmployeePage() {
             {(error as Error)?.message}
           </p>
           <Button asChild className="mt-6 bg-[#272156] text-white">
-            <Link href="/manage/employees">Back to employees</Link>
+            <Link href={publicAdminHref("/manage/employees")}>Back to employees</Link>
           </Button>
         </div>
       </AdminPageLayout>

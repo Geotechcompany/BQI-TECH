@@ -3,12 +3,13 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function LegacyNewJobPostingPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/manage/job-postings/wizard");
+    router.replace(publicAdminHref("/manage/job-postings/wizard"));
   }, [router]);
 
   return (

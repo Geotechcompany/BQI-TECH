@@ -5,6 +5,7 @@ import { Users } from "lucide-react";
 import type { LeavePolicy } from "@/types/leave";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 function formatUpdated(isoDate: string) {
   return new Date(isoDate).toLocaleDateString(undefined, {
@@ -82,7 +83,7 @@ export function LeavePolicyCard({ policy, className }: LeavePolicyCardProps) {
           variant="outline"
           className="border-[#272156]/20 text-[#272156] hover:bg-[#31CDFF]/10 dark:text-foreground"
         >
-          <Link href={`/manage/leave/policies?id=${policy.id}`}>Open</Link>
+          <Link href={publicAdminHref(`/manage/leave/policies?id=${policy.id}`)}>Open</Link>
         </Button>
       </div>
     </article>

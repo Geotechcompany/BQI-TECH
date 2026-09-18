@@ -10,6 +10,7 @@ import {
   createEmptyBlogWizardState,
   wizardStateToBlogPayload,
 } from "./blog-wizard-config";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const API_BASE = process.env.NEXT_PUBLIC_PYTHON_API_URL;
 
@@ -91,7 +92,7 @@ export function useBlogWizard(postId?: string) {
       } catch (error) {
         console.error(error);
         toast.error("Failed to load blog post");
-        router.push("/manage/blog-management");
+        router.push(publicAdminHref("/manage/blog-management"));
       } finally {
         if (!cancelled) setIsLoading(false);
       }

@@ -209,6 +209,35 @@ function opaqueNotFound(request: NextRequest): NextResponse {
   return response;
 }
 
+/**
+ * Legacy `/admin` auth entrypoints must never redirect to the public admin
+ * base (e.g. `/manage/login`) — that would expose the login URL. Same for
+ * the bare `/admin` root. Deep-link paths (applicants, jobs, …) still redirect.
+ */
+const HIDDEN_LEGACY_ADMIN_AUTH_SEGMENTS = new Set([
+  "login",
+  "sign-in",
+  "signin",
+  "sign-up",
+  "signup",
+  "forgot-password",
+  "reset-password",
+]);
+
+function isOpaqueLegacyAdminPath(pathname: string): boolean {
+  if (
+    pathname === INTERNAL_ADMIN_BASE ||
+    pathname === `${INTERNAL_ADMIN_BASE}/`
+  ) {
+    return true;
+  }
+  if (!pathname.startsWith(`${INTERNAL_ADMIN_BASE}/`)) return false;
+  const firstSegment =
+    pathname.slice(INTERNAL_ADMIN_BASE.length + 1).split("/")[0]?.toLowerCase() ??
+    "";
+  return HIDDEN_LEGACY_ADMIN_AUTH_SEGMENTS.has(firstSegment);
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -255,10 +284,15 @@ export async function middleware(request: NextRequest) {
 
   // Legacy /admin bookmarks, emails, and stored notification links → public base.
   // Do not serve the internal App Router tree under /admin (URL must stay public).
+  // Auth entrypoints and bare /admin stay opaque (custom 404) so the login URL
+  // is never revealed via redirect to /manage/login (or a custom public base).
   if (
     pathname === INTERNAL_ADMIN_BASE ||
     pathname.startsWith(`${INTERNAL_ADMIN_BASE}/`)
   ) {
+    if (isOpaqueLegacyAdminPath(pathname)) {
+      return opaqueNotFound(request);
+    }
     const rest = pathname.slice(INTERNAL_ADMIN_BASE.length) || "";
     const url = request.nextUrl.clone();
     url.pathname = `${publicAdminBase}${rest}`;

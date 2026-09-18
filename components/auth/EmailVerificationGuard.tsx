@@ -7,6 +7,11 @@ import { authService } from '@/lib/auth-backend';
 import { BACKEND_URL } from '@/lib/config';
 import { resolveEmailVerified } from '@/lib/resolve-email-verified';
 import { PremiumDashboardLoader } from '@/components/admin/PremiumDashboardLoader';
+import {
+  DEFAULT_ADMIN_BASE,
+  INTERNAL_ADMIN_BASE,
+  resolvePublicAdminBase,
+} from '@/lib/admin-path';
 
 interface EmailVerificationGuardProps {
   children: React.ReactNode;
@@ -18,12 +23,21 @@ const noVerificationPaths = [
   '/auth/verify-email',
   '/auth/setup-2fa',
   '/login',
-  '/manage/login',
+  `${DEFAULT_ADMIN_BASE}/login`,
+  `${INTERNAL_ADMIN_BASE}/login`,
   '/sign-up',
   '/forgot-password',
   '/reset-password',
   '/logout'
 ];
+
+function isVerificationExemptPath(pathname: string): boolean {
+  if (noVerificationPaths.some((path) => pathname.startsWith(path))) {
+    return true;
+  }
+  const adminLogin = `${resolvePublicAdminBase()}/login`;
+  return pathname === adminLogin || pathname.startsWith(`${adminLogin}/`);
+}
 
 export function EmailVerificationGuard({ 
   children, 
@@ -37,7 +51,7 @@ export function EmailVerificationGuard({
   useEffect(() => {
     const checkVerification = async () => {
       // Skip verification check if disabled or on exempt paths
-      if (!requireVerification || noVerificationPaths.some(path => pathname.startsWith(path))) {
+      if (!requireVerification || isVerificationExemptPath(pathname)) {
         setIsChecking(false);
         return;
       }

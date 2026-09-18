@@ -12,6 +12,7 @@ import Loader from "../Loader";
 import { FailedStatusState } from "@/components/ui/failed-status-state";
 import { Application } from "@/types/application";
 import { useRouter } from "next/router";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -59,7 +60,7 @@ export default function ApplicationsPage() {
 
       // Redirect based on the new status
       if (updatedApplication.status !== "Application") {
-        router.push(`/manage/${updatedApplication.status.toLowerCase().replace(' ', '-')}`);
+        router.push(publicAdminHref(`/manage/${updatedApplication.status.toLowerCase().replace(' ', '-')}`));
       }
     } catch (error) {
       console.error("Failed to update application:", error);

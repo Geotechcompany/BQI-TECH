@@ -10,6 +10,7 @@ import { adminApi } from "@/lib/api-backend";
 import { Button } from "@/components/ui/button";
 import { CalendarCheck, Clock, Plane, Timer } from "lucide-react";
 import { AttendanceSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 type AttendanceOverview = {
   totals: {
@@ -124,7 +125,7 @@ export default function AttendanceOverviewPage() {
                       >
                         <td className="px-4 py-3">
                           <Link
-                            href={`/manage/employees/${row.id}`}
+                            href={publicAdminHref(`/manage/employees/${row.id}`)}
                             className="font-medium hover:text-[#31CDFF]"
                           >
                             {row.name}

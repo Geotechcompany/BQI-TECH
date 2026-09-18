@@ -11,6 +11,7 @@ import {
   getArticlesForCollection,
   searchArticles,
 } from "@/lib/help";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function HelpPageClient() {
   const searchParams = useSearchParams();
@@ -51,8 +52,7 @@ export default function HelpPageClient() {
                 </p>
               </div>
               <Link
-                href="/manage/help"
-                className="text-sm font-medium text-[#2563eb] hover:underline"
+                href={publicAdminHref("/manage/help")}className="text-sm font-medium text-[#2563eb] hover:underline"
               >
                 Clear filters
               </Link>
@@ -107,7 +107,7 @@ export default function HelpPageClient() {
                       </span>
                       <div className="min-w-0">
                         <Link
-                          href={`/manage/help?collection=${collection.slug}`}
+                          href={publicAdminHref(`/manage/help?collection=${collection.slug}`)}
                           className="text-lg font-semibold text-[#272055] hover:text-[#2563eb]"
                         >
                           {collection.title}

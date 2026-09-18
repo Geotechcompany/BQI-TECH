@@ -33,6 +33,7 @@ import {
 } from "@/lib/job-activation";
 import { type JobPostingLifecycleStatus } from "@/lib/job-posting-status";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface JobPosting {
   id: string;
@@ -158,7 +159,7 @@ export default function JobPostingsPage() {
   }, [isAuthenticated, isAdmin, fetchJobPostings]);
 
   const handleEdit = (id: string) => {
-    router.push(`/manage/job-postings/${id}/wizard`);
+    router.push(publicAdminHref(`/manage/job-postings/${id}/wizard`));
   };
 
   const confirmDelete = async (id: string) => {
@@ -546,7 +547,7 @@ export default function JobPostingsPage() {
             )}
           </div>
           <Button
-            onClick={() => router.push("/manage/job-postings/wizard")}
+            onClick={() => router.push(publicAdminHref("/manage/job-postings/wizard"))}
             data-tour="job-postings-create"
           >
             Add New Position
@@ -574,7 +575,7 @@ export default function JobPostingsPage() {
               {!searchTerm && (
                 <Button
                   className="mt-5"
-                  onClick={() => router.push("/manage/job-postings/wizard")}
+                  onClick={() => router.push(publicAdminHref("/manage/job-postings/wizard"))}
                 >
                   Add New Position
                 </Button>
@@ -591,7 +592,7 @@ export default function JobPostingsPage() {
                     toggleSelectOne(job.id, selected)
                   }
                   onOpenPipeline={(id) =>
-                    router.push(`/manage/jobs/${id}/pipeline`)
+                    router.push(publicAdminHref(`/manage/jobs/${id}/pipeline`))
                   }
                   onEdit={handleEdit}
                   onToggleActive={handleToggleActive}

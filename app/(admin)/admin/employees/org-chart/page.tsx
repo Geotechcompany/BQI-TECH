@@ -11,6 +11,7 @@ import type { Employee } from "@/types/employee";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { OrgChartSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 type OrgNode = Employee & { reports: OrgNode[] };
 
@@ -32,7 +33,7 @@ function OrgCard({ node }: { node: OrgNode }) {
   return (
     <div className="flex flex-col items-center">
       <Link
-        href={`/manage/employees/${node.id}`}
+        href={publicAdminHref(`/manage/employees/${node.id}`)}
         className="w-52 rounded-xl border bg-card p-3 text-center shadow-sm transition hover:border-[#31CDFF]/50"
       >
         <Avatar className="mx-auto h-12 w-12">

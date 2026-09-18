@@ -1,4 +1,5 @@
 import type { Application } from "@/types/application";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export type SourceBreakdownItem = {
   name: string;
@@ -242,42 +243,42 @@ export function buildPipelineFunnel(stats: {
       label: "Applied",
       count: stats.new || 0,
       percentage: ((stats.new || 0) / total) * 100,
-      href: "/manage/candidates?status=new",
+      href: publicAdminHref("/manage/candidates?status=new"),
     },
     {
       key: "shortlisted",
       label: "Shortlisted",
       count: stats.shortlisted || 0,
       percentage: ((stats.shortlisted || 0) / total) * 100,
-      href: "/manage/shortlisted",
+      href: publicAdminHref("/manage/shortlisted"),
     },
     {
       key: "technical",
       label: "Technical",
       count: stats.technical_assessment || 0,
       percentage: ((stats.technical_assessment || 0) / total) * 100,
-      href: "/manage/technical-assessment",
+      href: publicAdminHref("/manage/technical-assessment"),
     },
     {
       key: "interviewing",
       label: "Interviewing",
       count: stats.interviewing || 0,
       percentage: ((stats.interviewing || 0) / total) * 100,
-      href: "/manage/interviewing",
+      href: publicAdminHref("/manage/interviewing"),
     },
     {
       key: "hired",
       label: "Hired",
       count: stats.hired || 0,
       percentage: ((stats.hired || 0) / total) * 100,
-      href: "/manage/hired",
+      href: publicAdminHref("/manage/hired"),
     },
     {
       key: "disqualified",
       label: "Disqualified",
       count: stats.disqualified || 0,
       percentage: ((stats.disqualified || 0) / total) * 100,
-      href: "/manage/disqualified",
+      href: publicAdminHref("/manage/disqualified"),
     },
   ];
 

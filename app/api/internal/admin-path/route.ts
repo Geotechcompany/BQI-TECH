@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { BACKEND_URL } from "@/lib/config";
+import {
+  DEFAULT_ADMIN_BASE,
+  getPublicAdminBasePath,
+  normalizeAdminPathSlug,
+} from "@/lib/admin-path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +20,12 @@ export async function GET() {
     process.env.NEXTAUTH_SECRET ||
     "";
 
+  const fallback = {
+    admin_path_hidden: false,
+    admin_path_slug: null as string | null,
+    public_base: DEFAULT_ADMIN_BASE,
+  };
+
   try {
     const response = await fetch(`${BACKEND_URL}/api/admin-path-config`, {
       method: "GET",
@@ -26,30 +37,26 @@ export async function GET() {
     });
 
     if (!response.ok) {
-      return NextResponse.json(
-        {
-          admin_path_hidden: false,
-          admin_path_slug: null,
-          public_base: "/manage",
-        },
-        { status: 200 }
-      );
+      return NextResponse.json(fallback, { status: 200 });
     }
 
     const data = await response.json();
+    const slug = normalizeAdminPathSlug(data?.admin_path_slug);
+    const hidden = Boolean(data?.admin_path_hidden);
+    const public_base =
+      typeof data?.public_base === "string" && data.public_base.startsWith("/")
+        ? data.public_base.replace(/\/+$/, "") || DEFAULT_ADMIN_BASE
+        : getPublicAdminBasePath({
+            admin_path_hidden: hidden,
+            admin_path_slug: slug,
+          });
+
     return NextResponse.json({
-      admin_path_hidden: Boolean(data?.admin_path_hidden),
-      admin_path_slug: data?.admin_path_slug ?? null,
-      public_base: data?.public_base || "/manage",
+      admin_path_hidden: hidden,
+      admin_path_slug: slug,
+      public_base,
     });
   } catch {
-    return NextResponse.json(
-      {
-        admin_path_hidden: false,
-        admin_path_slug: null,
-        public_base: "/manage",
-      },
-      { status: 200 }
-    );
+    return NextResponse.json(fallback, { status: 200 });
   }
 }

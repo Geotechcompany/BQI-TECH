@@ -63,6 +63,7 @@ import {
   formatUnreadBadgeCount,
 
 } from "@/lib/admin-notification-utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 
 
@@ -428,7 +429,7 @@ export function AdminNotificationDropdown() {
 
           >
 
-            <Link href="/manage/notifications">
+            <Link href={publicAdminHref("/manage/notifications")}>
 
               View all
 

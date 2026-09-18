@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Button } from "@/components/ui/button";
 import { IdCard, Users } from "lucide-react";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function EmployeeProfileEntryPage() {
   return (
@@ -24,13 +25,13 @@ export default function EmployeeProfileEntryPage() {
             asChild
             className="bg-[#272156] text-white hover:bg-[#272156]/90"
           >
-            <Link href="/manage/employees/directory">
+            <Link href={publicAdminHref("/manage/employees/directory")}>
               <Users className="mr-1.5 h-4 w-4" />
               Directory
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/manage/employees">All Employees</Link>
+            <Link href={publicAdminHref("/manage/employees")}>All Employees</Link>
           </Button>
         </div>
       </div>

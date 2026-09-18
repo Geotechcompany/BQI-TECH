@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAdminModule } from "@/lib/admin-permissions";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function LeaveLayout({
   children,
@@ -29,7 +30,7 @@ export default function LeaveLayout({
       return;
     }
     if (!canView) {
-      router.push("/manage/overview");
+      router.push(publicAdminHref("/manage/overview"));
     }
   }, [authLoading, canView, isAdmin, isAuthenticated, router]);
 

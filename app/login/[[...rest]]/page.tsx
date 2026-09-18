@@ -14,8 +14,10 @@ import {
 import { markPostLoginLoader } from "@/lib/post-login-loader";
 import {
   buildUser2faSetupUrl,
+  isAnyPublicAdminPath,
   needsUserTwoFactorSetup,
 } from "@/lib/user-2fa-gate";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function LoginPage() {
   const { isAuthenticated, authLoading, user, isAdmin } = useAuth();
@@ -51,9 +53,10 @@ export default function LoginPage() {
     redirectedRef.current = true;
     let destination = redirectTo || "/dashboard";
     if (isAdmin) {
-      destination = redirectTo?.startsWith("/manage")
-        ? redirectTo
-        : "/manage/overview";
+      destination =
+        redirectTo && isAnyPublicAdminPath(redirectTo.split("?")[0] || redirectTo)
+          ? redirectTo
+          : publicAdminHref("/overview");
     } else if (needsUserTwoFactorSetup(user)) {
       destination = buildUser2faSetupUrl(redirectTo || "/dashboard");
     }

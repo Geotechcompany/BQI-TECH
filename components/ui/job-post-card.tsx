@@ -27,6 +27,7 @@ import {
 import { AssignHiringTeamDialog } from "@/components/admin/candidate-profile/CandidateActionDialogs";
 import type { ApplicationAssignee } from "@/components/admin/utils/candidate-actions-api";
 import type { JobHiringTeamMember } from "@/lib/overview-positions";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface JobPostCardProps {
   title: string;
@@ -112,7 +113,9 @@ export const JobPostCard: React.FC<JobPostCardProps> = ({
   const [assignOpen, setAssignOpen] = useState(false);
   const [isSavingTeam, setIsSavingTeam] = useState(false);
   const hasJobId = Boolean(jobId);
-  const pipelineHref = hasJobId ? `/manage/jobs/${jobId}/pipeline` : null;
+  const pipelineHref = hasJobId
+    ? publicAdminHref(`/manage/jobs/${jobId}/pipeline`)
+    : null;
 
   const visibleMembers = hiringTeam.slice(0, MAX_VISIBLE_AVATARS);
   const overflowCount = Math.max(0, hiringTeam.length - MAX_VISIBLE_AVATARS);
@@ -284,19 +287,19 @@ export const JobPostCard: React.FC<JobPostCardProps> = ({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52">
                   <DropdownMenuItem asChild>
-                    <Link href={`/manage/job-postings/${jobId}/edit`}>
+                    <Link href={publicAdminHref(`/manage/job-postings/${jobId}/edit`)}>
                       <Pencil className="mr-2 h-4 w-4" />
                       Edit position
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href={`/manage/jobs/${jobId}/pipeline/settings`}>
+                    <Link href={publicAdminHref(`/manage/jobs/${jobId}/pipeline/settings`)}>
                       <Columns3 className="mr-2 h-4 w-4" />
                       Pipeline settings
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href={`/manage/job-postings/${jobId}/wizard`}>
+                    <Link href={publicAdminHref(`/manage/job-postings/${jobId}/wizard`)}>
                       <Wand2 className="mr-2 h-4 w-4" />
                       Open wizard
                     </Link>
@@ -372,7 +375,7 @@ export const JobPostCard: React.FC<JobPostCardProps> = ({
                 Pipeline
               </Link>
               <Link
-                href={`/manage/candidates?jobId=${jobId}`}
+                href={publicAdminHref(`/manage/candidates?jobId=${jobId}`)}
                 className="pointer-events-auto text-white underline-offset-2 hover:underline"
                 onClick={(event) => event.stopPropagation()}
               >

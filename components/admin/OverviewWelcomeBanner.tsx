@@ -17,6 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { TourHelpButton } from "@/components/admin/tour/TourHelpButton";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const BRAND_NAVY = "#272156";
 const BRAND_CYAN = "#31CDFF";
@@ -181,7 +182,7 @@ export function OverviewWelcomeBanner({
                   "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
                 )}
               >
-                <Link href="/manage/candidates">
+                <Link href={publicAdminHref("/manage/candidates")}>
                   <FileText className="h-3.5 w-3.5" aria-hidden />
                   Candidates
                 </Link>
@@ -200,7 +201,7 @@ export function OverviewWelcomeBanner({
                   "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
                 )}
               >
-                <Link href="/manage/job-postings/wizard">
+                <Link href={publicAdminHref("/manage/job-postings/wizard")}>
                   Post a position
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                 </Link>

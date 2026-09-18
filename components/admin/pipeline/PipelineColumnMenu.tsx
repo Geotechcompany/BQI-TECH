@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { ResolvedPipelineStage } from "./pipeline-settings-config";
 import { StageBroadcastEmailDialog } from "./StageBroadcastEmailDialog";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface PipelineColumnMenuProps {
   jobId: string;
@@ -54,7 +55,7 @@ export function PipelineColumnMenu({
   const [emailOpen, setEmailOpen] = useState(false);
   const hasCandidates = candidateCount > 0;
   const hasRecipients = recipientEmails.length > 0;
-  const settingsHref = `/manage/jobs/${jobId}/pipeline/settings?stage=${encodeURIComponent(stage.id)}`;
+  const settingsHref = publicAdminHref(`/manage/jobs/${jobId}/pipeline/settings?stage=${encodeURIComponent(stage.id)}`);
 
   return (
     <>

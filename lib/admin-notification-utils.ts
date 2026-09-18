@@ -1,3 +1,9 @@
+import {
+  DEFAULT_ADMIN_BASE,
+  INTERNAL_ADMIN_BASE,
+  adminHref,
+} from "@/lib/admin-path";
+
 export type AdminNotificationCategory =
   | "new_application"
   | "status_update"
@@ -16,18 +22,21 @@ export interface AdminNotification {
 }
 
 /**
- * Rewrite legacy public UI paths that used `/admin/...` to `/manage/...`.
- * Leaves `/api/admin/...` and unrelated URLs untouched. Prefer calling
- * `adminHref()` at click time when a custom public admin slug is active.
+ * Rewrite legacy `/admin/...` UI paths to the canonical default public form
+ * (`DEFAULT_ADMIN_BASE`, e.g. `/manage/...`). Leaves `/api/admin/...` untouched.
+ * Callers should pass the result through `adminHref` / `publicAdminHref` so a
+ * live custom slug is applied exactly once.
  */
 export function rewriteLegacyAdminUiLink(link: string): string {
   const raw = link.trim();
   if (!raw || raw.startsWith("/api/")) return raw;
 
   const rewritePath = (pathname: string): string => {
-    if (pathname === "/admin") return "/manage";
-    if (pathname.startsWith("/admin/")) {
-      return `/manage${pathname.slice("/admin".length)}`;
+    if (
+      pathname === INTERNAL_ADMIN_BASE ||
+      pathname.startsWith(`${INTERNAL_ADMIN_BASE}/`)
+    ) {
+      return adminHref(pathname, DEFAULT_ADMIN_BASE);
     }
     return pathname;
   };

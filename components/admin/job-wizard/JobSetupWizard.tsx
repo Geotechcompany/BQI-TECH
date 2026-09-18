@@ -25,6 +25,7 @@ import {
 import { PositionActivatedModal } from "./PositionActivatedModal";
 import { renderWizardStep } from "./wizard-steps";
 import { FinishWizardResult, useJobWizard } from "./useJobWizard";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface JobSetupWizardProps {
   jobId?: string;
@@ -90,7 +91,7 @@ export function JobSetupWizard({ jobId }: JobSetupWizardProps) {
   };
 
   const handleClose = () => {
-    router.push("/manage/job-postings");
+    router.push(publicAdminHref("/manage/job-postings"));
   };
 
   const openCareersPreview = async (): Promise<boolean> => {
@@ -161,7 +162,7 @@ export function JobSetupWizard({ jobId }: JobSetupWizardProps) {
   }
 
   const handleFinishModalClose = () => {
-    router.push("/manage/job-postings");
+    router.push(publicAdminHref("/manage/job-postings"));
   };
 
   return (

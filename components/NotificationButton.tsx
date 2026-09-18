@@ -138,7 +138,7 @@ export function NotificationButton({
         <Button 
           variant="outline" 
           className="w-full justify-center hover:bg-gray-50"
-          onClick={() => router.push('/manage/notifications')}
+          onClick={() => router.push(publicAdminHref('/manage/notifications'))}
         >
           View All Notifications
         </Button>
@@ -146,3 +146,4 @@ export function NotificationButton({
     </DropdownMenu>
   )
 } 
+import { publicAdminHref } from "@/lib/admin-path";

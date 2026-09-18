@@ -14,6 +14,7 @@ import type {
   InboxConversation,
 } from "@/types/application-email";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 function formatSentAt(value: string): string {
   try {
@@ -38,7 +39,7 @@ function formatListTime(value: string): string {
 
 function candidateProfileHref(conversation: InboxConversation): string | null {
   if (!conversation.jobId) return null;
-  return `/manage/jobs/${conversation.jobId}/candidates/${conversation.applicationId}?tab=email`;
+  return publicAdminHref(`/manage/jobs/${conversation.jobId}/candidates/${conversation.applicationId}?tab=email`);
 }
 
 function MessageCard({ message }: { message: ApplicationEmailMessage }) {

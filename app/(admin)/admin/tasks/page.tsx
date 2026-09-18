@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AdminTasksPage } from "@/components/admin/tasks/AdminTasksPage";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAdminModule } from "@/lib/admin-permissions";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function AdminTasksRoutePage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function AdminTasksRoutePage() {
       return;
     }
     if (!canViewTasks) {
-      router.push("/manage/overview");
+      router.push(publicAdminHref("/manage/overview"));
     }
   }, [authLoading, canViewTasks, isAdmin, isAuthenticated, router]);
 

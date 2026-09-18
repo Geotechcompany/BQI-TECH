@@ -10,6 +10,7 @@ import {
   WHATS_NEW_FLOAT_FEATURES,
   WHATS_NEW_STORAGE_KEY,
 } from "@/lib/admin-whats-new";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export function WhatsNewFloat() {
   const [open, setOpen] = useState(false);
@@ -147,13 +148,13 @@ export function WhatsNewFloat() {
 
               <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-800">
                 <Button size="sm" variant="ghost" asChild>
-                  <Link href="/manage/releases/ai-applicant-ranking" onClick={dismiss}>
+                  <Link href={publicAdminHref("/manage/releases/ai-applicant-ranking")}onClick={dismiss}>
                     Full release
                   </Link>
                 </Button>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" asChild>
-                    <Link href="/manage/candidates" onClick={dismiss}>
+                    <Link href={publicAdminHref("/manage/candidates")}onClick={dismiss}>
                       Try it
                       <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Link>

@@ -1,7 +1,14 @@
 /**
  * Post-signup 2FA gate for normal (non-admin) users.
- * Admins continue to use org policy via /manage (AdminTwoFactorSetup).
+ * Admins continue to use org policy via the public admin base (AdminTwoFactorSetup).
  */
+
+import {
+  DEFAULT_ADMIN_BASE,
+  INTERNAL_ADMIN_BASE,
+  isPublicAdminPath,
+  resolvePublicAdminBase,
+} from "@/lib/admin-path";
 
 export const USER_2FA_SETUP_PATH = "/auth/setup-2fa";
 
@@ -15,8 +22,8 @@ export const USER_2FA_SETUP_EXEMPT_PATHS = [
   "/reset-password",
   "/logout",
   "/employee/login",
-  "/manage/login",
-  "/admin/login",
+  `${DEFAULT_ADMIN_BASE}/login`,
+  `${INTERNAL_ADMIN_BASE}/login`,
 ] as const;
 
 export function isAdminRole(role?: string | null): boolean {
@@ -42,7 +49,7 @@ export function userHasEnrolledTwoFactor(user?: {
  * - Post-verify gate: email verified and no factor enrolled
  * - Admin force: `require2fa` set even for long-verified accounts
  *
- * Admins are excluded — they use admin 2FA policy on /manage.
+ * Admins are excluded — they use admin 2FA policy on the public admin base.
  */
 export function needsUserTwoFactorSetup(user?: {
   role?: string;
@@ -61,9 +68,16 @@ export function needsUserTwoFactorSetup(user?: {
 }
 
 export function isUser2faSetupExemptPath(pathname: string): boolean {
-  return USER_2FA_SETUP_EXEMPT_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
-  );
+  if (
+    USER_2FA_SETUP_EXEMPT_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    )
+  ) {
+    return true;
+  }
+  const adminBase = resolvePublicAdminBase();
+  const loginPath = `${adminBase}/login`;
+  return pathname === loginPath || pathname.startsWith(`${loginPath}/`);
 }
 
 export function buildUser2faSetupUrl(next?: string | null): string {
@@ -74,4 +88,13 @@ export function buildUser2faSetupUrl(next?: string | null): string {
     return USER_2FA_SETUP_PATH;
   }
   return `${USER_2FA_SETUP_PATH}?next=${encodeURIComponent(next)}`;
+}
+
+/** True when pathname is under the active (or default) public admin base. */
+export function isAnyPublicAdminPath(pathname: string): boolean {
+  const adminBase = resolvePublicAdminBase();
+  return (
+    isPublicAdminPath(pathname, adminBase) ||
+    isPublicAdminPath(pathname, DEFAULT_ADMIN_BASE)
+  );
 }

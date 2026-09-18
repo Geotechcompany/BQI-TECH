@@ -1,3 +1,7 @@
+import {
+  resolvePublicAdminBase,
+  toCanonicalAdminPath,
+} from "@/lib/admin-path";
 import { applicantsTour } from "./applicants-tour";
 import { archiveTour } from "./archive-tour";
 import { attendanceTour } from "./attendance-tour";
@@ -97,29 +101,33 @@ export function getAllTours(): TourDefinition[] {
 
 /** Map admin pathname to a tour id (HR + existing hiring pages). */
 export function getAdminTourIdForPath(pathname: string): string | undefined {
-  if (pathname.startsWith("/manage/employees/directory")) {
+  const path = toCanonicalAdminPath(pathname, resolvePublicAdminBase());
+
+  if (path.startsWith("/manage/employees/directory")) {
     return "employees-directory";
   }
-  if (pathname.startsWith("/manage/employees/org-chart")) {
+  if (path.startsWith("/manage/employees/org-chart")) {
     return "employees-org-chart";
   }
-  if (pathname.startsWith("/manage/employees/onboarding")) {
+  if (path.startsWith("/manage/employees/onboarding")) {
     return "employees-onboarding";
   }
-  if (pathname.startsWith("/manage/employees/offboarding")) {
+  if (path.startsWith("/manage/employees/offboarding")) {
     return "employees-offboarding";
   }
-  if (pathname.startsWith("/manage/employees/import")) {
+  if (path.startsWith("/manage/employees/import")) {
     return "employees-import";
   }
-  if (pathname.startsWith("/manage/employees/new")) {
+  if (path.startsWith("/manage/employees/new")) {
     return "employees-new";
   }
-  if (pathname === "/manage/employees" || pathname === "/manage/employees/") {
+  if (path === "/manage/employees" || path === "/manage/employees/") {
     return "employees";
   }
   {
-    const profileMatch = pathname.match(/^\/admin\/employees\/([^/]+)(?:\/edit)?$/);
+    const profileMatch = path.match(
+      /^\/manage\/employees\/([^/]+)(?:\/edit)?$/
+    );
     const segment = profileMatch?.[1];
     const reserved = new Set([
       "directory",
@@ -135,17 +143,17 @@ export function getAdminTourIdForPath(pathname: string): string | undefined {
       return "employees-profile";
     }
   }
-  if (pathname.startsWith("/manage/departments")) return "departments";
-  if (pathname.startsWith("/manage/attendance")) return "attendance";
-  if (pathname.startsWith("/manage/leave/requests")) return "leave-requests";
-  if (pathname.startsWith("/manage/leave/balances")) return "leave-balances";
-  if (pathname.startsWith("/manage/leave/calendar")) return "leave-calendar";
-  if (pathname.startsWith("/manage/leave/types")) return "leave-types";
-  if (pathname.startsWith("/manage/leave/policies")) return "leave-policies";
+  if (path.startsWith("/manage/departments")) return "departments";
+  if (path.startsWith("/manage/attendance")) return "attendance";
+  if (path.startsWith("/manage/leave/requests")) return "leave-requests";
+  if (path.startsWith("/manage/leave/balances")) return "leave-balances";
+  if (path.startsWith("/manage/leave/calendar")) return "leave-calendar";
+  if (path.startsWith("/manage/leave/types")) return "leave-types";
+  if (path.startsWith("/manage/leave/policies")) return "leave-policies";
   if (
-    pathname.startsWith("/manage/leave/overview") ||
-    pathname === "/manage/leave" ||
-    pathname === "/manage/leave/"
+    path.startsWith("/manage/leave/overview") ||
+    path === "/manage/leave" ||
+    path === "/manage/leave/"
   ) {
     return "leave-overview";
   }

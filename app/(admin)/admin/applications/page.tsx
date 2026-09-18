@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import { publicAdminHref } from "@/lib/admin-path";
 
 /** Legacy Applications route — redirects to Candidates, preserving query params. */
 export default function ApplicationsRedirectPage() {
@@ -11,7 +12,9 @@ export default function ApplicationsRedirectPage() {
 
   useEffect(() => {
     const qs = searchParams.toString();
-    router.replace(`/manage/candidates${qs ? `?${qs}` : ""}`);
+    router.replace(
+      publicAdminHref(`/manage/candidates${qs ? `?${qs}` : ""}`)
+    );
   }, [router, searchParams]);
 
   return (

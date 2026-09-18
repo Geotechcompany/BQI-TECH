@@ -48,6 +48,7 @@ import {
   resolveEmployeeAvatarSrc,
 } from "@/lib/employee-portal-avatar";
 import { cn } from "@/lib/utils";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface AdminPageHeaderProps {
   title: string;
@@ -213,7 +214,7 @@ export default function AdminPageHeader({
           <AdminNotificationDropdown />
 
           {/* Help */}
-          <Link href="/manage/help" aria-label="Help">
+          <Link href={publicAdminHref("/manage/help")} aria-label="Help">
             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
               <HelpCircle className="h-5 w-5" aria-hidden="true" />
             </Button>
@@ -305,7 +306,7 @@ export default function AdminPageHeader({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem>
-                  <Link href="/manage/settings" className="flex w-full items-center">
+                  <Link href={publicAdminHref("/manage/settings")} className="flex w-full items-center">
                     <Settings className="mr-2 h-4 w-4" aria-hidden="true" />
                     Settings
                   </Link>

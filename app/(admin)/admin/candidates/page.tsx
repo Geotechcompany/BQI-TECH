@@ -117,6 +117,7 @@ import { PIPELINE_STAGES } from "@/components/admin/pipeline/pipeline-utils";
 import type { Application } from "@/types/application";
 import { cn } from "@/lib/utils";
 import { matchesAiScoreFilter } from "@/lib/ai-score-filter";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const PAGE_SIZE = 25;
 
@@ -677,7 +678,7 @@ export default function CandidatesPage() {
       }
       const jobId = resolveJobId(app);
       if (jobId && id) {
-        router.push(`/manage/jobs/${jobId}/candidates/${id}`);
+        router.push(publicAdminHref(`/manage/jobs/${jobId}/candidates/${id}`));
         return;
       }
       toast.message("Open from pipeline after linking this candidate to a position.");
@@ -1030,11 +1031,11 @@ export default function CandidatesPage() {
       const id = resolveApplicationId(app);
       const jobId = resolveJobId(app);
       if (jobId && id) {
-        router.push(`/manage/jobs/${jobId}/candidates/${id}?tab=email`);
+        router.push(publicAdminHref(`/manage/jobs/${jobId}/candidates/${id}?tab=email`));
         return;
       }
     }
-    router.push("/manage/inbox");
+    router.push(publicAdminHref("/manage/inbox"));
   };
 
   const handleCandidateEmail = () => {
@@ -1335,7 +1336,7 @@ export default function CandidatesPage() {
               <button
                 type="button"
                 className="text-[#272055] underline-offset-2 hover:underline"
-                onClick={() => router.push("/manage/candidates")}
+                onClick={() => router.push(publicAdminHref("/manage/candidates"))}
               >
                 Clear job filter
               </button>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AdminDocumentsPage } from "@/components/admin/documents/AdminDocumentsPage";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAdminModule } from "@/lib/admin-permissions";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function AdminDocumentsRoutePage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function AdminDocumentsRoutePage() {
       return;
     }
     if (!canViewDocuments) {
-      router.push("/manage/overview");
+      router.push(publicAdminHref("/manage/overview"));
     }
   }, [authLoading, canViewDocuments, isAdmin, isAuthenticated, router]);
 

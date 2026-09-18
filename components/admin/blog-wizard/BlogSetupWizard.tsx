@@ -14,6 +14,7 @@ import {
 } from "./blog-wizard-config";
 import { FinishBlogWizardResult, useBlogWizard } from "./useBlogWizard";
 import { renderBlogWizardStep } from "./wizard-steps";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface BlogSetupWizardProps {
   postId?: string;
@@ -96,7 +97,7 @@ export function BlogSetupWizard({ postId }: BlogSetupWizardProps) {
   };
 
   const handleClose = () => {
-    router.push("/manage/blog-management");
+    router.push(publicAdminHref("/manage/blog-management"));
   };
 
   const handleContinue = async () => {

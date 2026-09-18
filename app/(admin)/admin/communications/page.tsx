@@ -8,6 +8,7 @@ import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { CommunicationManager } from "@/components/admin/communications/CommunicationManager";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAdminModule } from "@/lib/admin-permissions";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function AdminCommunicationsPage() {
   const router = useRouter();
@@ -29,7 +30,7 @@ export default function AdminCommunicationsPage() {
       return;
     }
     if (!canView) {
-      router.push("/manage/overview");
+      router.push(publicAdminHref("/manage/overview"));
     }
   }, [authLoading, canView, isAdmin, isAuthenticated, router]);
 

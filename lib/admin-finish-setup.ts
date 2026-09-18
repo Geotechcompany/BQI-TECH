@@ -1,3 +1,4 @@
+import { publicAdminHref } from "@/lib/admin-path";
 export const FINISH_SETUP_SKIPPED_KEY = "admin_finish_setup_skipped_v1";
 export const FINISH_SETUP_MINIMIZED_KEY = "admin_finish_setup_minimized_v1";
 
@@ -16,19 +17,19 @@ export const FINISH_SETUP_TASKS: FinishSetupTask[] = [
     id: "add-position",
     title: "Add a Position",
     description: "You're here to hire someone right?",
-    href: "/manage/job-postings/wizard",
+    href: publicAdminHref("/manage/job-postings/wizard"),
   },
   {
     id: "invite-team",
     title: "Invite your Team",
     description: "Hiring is a team sport.",
-    href: "/manage/user-management",
+    href: publicAdminHref("/manage/user-management"),
   },
   {
     id: "careers-site",
     title: "Setup your Careers Site",
     description: "Share your brand & culture.",
-    href: "/manage/job-postings",
+    href: publicAdminHref("/manage/job-postings"),
   },
 ];
 

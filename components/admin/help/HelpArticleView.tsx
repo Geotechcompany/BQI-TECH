@@ -8,6 +8,7 @@ import { HelpBlockRenderer } from "@/components/admin/help/HelpBlockRenderer";
 import { HelpBreadcrumbs } from "@/components/admin/help/HelpBreadcrumbs";
 import { HelpHashScroll } from "@/components/admin/help/HelpHashScroll";
 import { HelpToc } from "@/components/admin/help/HelpToc";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface HelpArticleViewProps {
   article: HelpArticle;
@@ -22,10 +23,10 @@ export function HelpArticleView({ article }: HelpArticleViewProps) {
       <HelpHashScroll />
       <HelpBreadcrumbs
         items={[
-          { label: "All Collections", href: "/manage/help" },
+          { label: "All Collections", href: publicAdminHref("/manage/help") },
           {
             label: collection?.title ?? article.collection,
-            href: `/manage/help?collection=${article.collection}`,
+            href: publicAdminHref(`/manage/help?collection=${article.collection}`),
           },
           { label: article.title },
         ]}

@@ -8,6 +8,7 @@ import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { AdminInbox } from "@/components/admin/inbox/AdminInbox";
 import { useAuth } from "@/contexts/AuthContext";
 import { hasAdminModule } from "@/lib/admin-permissions";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function AdminInboxPage() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export default function AdminInboxPage() {
       return;
     }
     if (!canViewInbox) {
-      router.push("/manage/overview");
+      router.push(publicAdminHref("/manage/overview"));
     }
   }, [authLoading, canViewInbox, isAdmin, isAuthenticated, router]);
 

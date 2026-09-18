@@ -41,6 +41,7 @@ import type {
 } from "@/types/communication-email";
 import type { InboxConversation } from "@/types/application-email";
 import { EmailHtmlPreview } from "@/components/admin/communications/EmailHtmlPreview";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const TYPE_LABELS: Record<string, string> = {
   candidate: "Candidate",
@@ -138,7 +139,7 @@ function candidateHref(email: CommunicationEmail) {
 function pipelineHref(email: CommunicationEmail): string | null {
   const jobId = resolveJobId(email);
   if (!jobId) return null;
-  return `/manage/jobs/${jobId}/pipeline`;
+  return publicAdminHref(`/manage/jobs/${jobId}/pipeline`);
 }
 
 function jobActionLabel(email: CommunicationEmail): string {
@@ -400,7 +401,7 @@ export function CommunicationManager({ searchQuery }: { searchQuery: string }) {
       })}
       <div className="mt-3 border-t px-3 pt-3">
         <Button asChild variant="ghost" size="sm" className="h-8 w-full justify-start px-0">
-          <Link href="/manage/inbox">
+          <Link href={publicAdminHref("/manage/inbox")}>
             <Inbox className="mr-2 h-4 w-4" />
             Open full Inbox
           </Link>

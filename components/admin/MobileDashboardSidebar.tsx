@@ -45,8 +45,8 @@ export default function MobileDashboardSidebar({
   onClose,
 }: MobileDashboardSidebarProps) {
   const pathname = usePathname();
-  const { toInternal, adminHref } = useAdminPath();
-  const internalPathname = toInternal(pathname || "");
+  const { toCanonical, adminHref } = useAdminPath();
+  const canonicalPathname = toCanonical(pathname || "");
   const { user } = useAuth();
   const { theme } = useAdminTheme();
   const skin = useMemo(() => getSidebarSkin(theme), [theme]);

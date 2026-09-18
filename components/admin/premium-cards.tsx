@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { ArrowDown, ArrowUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MomBadge } from "@/lib/mom-delta";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export type { MomBadge as MetricMomBadge };
 
@@ -151,7 +152,7 @@ export function PremiumMetricCard({
   const showBadge = badge && badge.kind !== "hidden";
 
   return (
-    <Link href={path} className={cn("block group h-full", className)}>
+    <Link href={publicAdminHref(path)} className={cn("block group h-full", className)}>
       <motion.div
         whileHover={{ y: -4 }}
         transition={{ type: "spring", stiffness: 400, damping: 28 }}
@@ -365,7 +366,7 @@ export function PremiumStatusCard({
   }
 
   return (
-    <Link href={path!} className={cn("block group", className)}>
+    <Link href={publicAdminHref(path!)} className={cn("block group", className)}>
       {card}
     </Link>
   );

@@ -91,8 +91,8 @@ export default function DashboardSidebar({
   className,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
-  const { basePath, toInternal, adminHref } = useAdminPath();
-  const internalPathname = toInternal(pathname || "");
+  const { basePath, toCanonical, adminHref } = useAdminPath();
+  const canonicalPathname = toCanonical(pathname || "");
   const reducedMotion = useReducedMotion();
   const { sidebarCollapsed, updateSettings } = useSettings();
   const { theme } = useAdminTheme();
@@ -143,16 +143,16 @@ export default function DashboardSidebar({
 
   useEffect(() => {
     setExpandedOverrides({});
-  }, [internalPathname]);
+  }, [canonicalPathname]);
 
   const isGroupExpanded = useCallback(
     (group: AdminNavGroup) => {
       if (expandedOverrides[group.id] !== undefined) {
         return expandedOverrides[group.id];
       }
-      return isNavGroupDefaultExpanded(group, internalPathname);
+      return isNavGroupDefaultExpanded(group, canonicalPathname);
     },
-    [expandedOverrides, internalPathname]
+    [expandedOverrides, canonicalPathname]
   );
 
   const toggleGroup = (group: AdminNavGroup) => {
@@ -170,7 +170,7 @@ export default function DashboardSidebar({
     void updateSettings({ sidebarCollapsed: !sidebarCollapsed });
   };
 
-  if (internalPathname === "/manage/login" || internalPathname.startsWith("/manage/login/")) {
+  if (canonicalPathname === "/manage/login" || canonicalPathname.startsWith("/manage/login/")) {
     return null;
   }
 
@@ -276,7 +276,7 @@ export default function DashboardSidebar({
                     <GroupRailIcon
                       key={item.id}
                       item={item}
-                      pathname={internalPathname}
+                      pathname={canonicalPathname}
                       panelOpen={panelOpen}
                       skin={skin}
                       reducedMotion={!!reducedMotion}
@@ -292,7 +292,7 @@ export default function DashboardSidebar({
                   );
                 }
 
-                const active = isNavLinkActive(item, internalPathname);
+                const active = isNavLinkActive(item, canonicalPathname);
                 return (
                   <UiTooltip key={item.id}>
                     <TooltipTrigger asChild>
@@ -346,7 +346,7 @@ export default function DashboardSidebar({
                     <GroupRailIcon
                       key={item.id}
                       item={item}
-                      pathname={internalPathname}
+                      pathname={canonicalPathname}
                       panelOpen={panelOpen}
                       skin={skin}
                       reducedMotion={!!reducedMotion}
@@ -362,7 +362,7 @@ export default function DashboardSidebar({
                   );
                 }
 
-                const active = isNavLinkActive(item, internalPathname);
+                const active = isNavLinkActive(item, canonicalPathname);
                 return (
                   <UiTooltip key={item.id}>
                     <TooltipTrigger asChild>
@@ -447,7 +447,7 @@ export default function DashboardSidebar({
                           <ExpandedNavGroup
                             key={item.id}
                             group={item}
-                            pathname={internalPathname}
+                            pathname={canonicalPathname}
                             skin={skin}
                             expanded={isGroupExpanded(item)}
                             onToggle={() => toggleGroup(item)}
@@ -462,7 +462,7 @@ export default function DashboardSidebar({
                         <FlatNavLink
                           key={item.id}
                           item={item}
-                          pathname={internalPathname}
+                          pathname={canonicalPathname}
                           skin={skin}
                           resolveHref={adminHref}
                         />

@@ -54,6 +54,7 @@ import {
   sumTrendCountsLast7VsPriorMonth,
   type TrendDay,
 } from "@/lib/mom-delta";
+import { publicAdminHref } from "@/lib/admin-path";
 
 interface OverviewData {
   applications: {
@@ -521,10 +522,10 @@ export default function OverviewPage() {
 
   const recentViewAllHref = useMemo(() => {
     if (visibleJobIds === null || visibleJobIds.size !== 1) {
-      return "/manage/applications";
+      return publicAdminHref("/manage/applications");
     }
     const [onlyJobId] = Array.from(visibleJobIds);
-    return `/manage/applications?jobId=${encodeURIComponent(onlyJobId)}`;
+    return publicAdminHref(`/manage/applications?jobId=${encodeURIComponent(onlyJobId)}`);
   }, [visibleJobIds]);
 
   const applicationEventDate = (application: Application): string | Date | null =>

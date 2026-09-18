@@ -531,7 +531,7 @@ export function pathMatchesPrefix(pathname: string, href: string): boolean {
 
 export function isEmployeesRootActive(pathname: string): boolean {
   if (pathname === "/manage/employees") return true;
-  const profileMatch = pathname.match(/^\/admin\/employees\/([^/]+)(\/edit)?$/);
+  const profileMatch = pathname.match(/^\/manage\/employees\/([^/]+)(\/edit)?$/);
   if (!profileMatch) return false;
   return !EMPLOYEE_RESERVED_SEGMENTS.has(profileMatch[1]);
 }

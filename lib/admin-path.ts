@@ -127,9 +127,21 @@ export function getPublicAdminBasePath(
   return DEFAULT_ADMIN_BASE;
 }
 
-function stripKnownAdminPrefix(path: string): string {
+function stripKnownAdminPrefix(path: string, publicBase?: string): string {
   let rest = path;
-  for (const prefix of [INTERNAL_ADMIN_BASE, DEFAULT_ADMIN_BASE]) {
+  const prefixes = [INTERNAL_ADMIN_BASE, DEFAULT_ADMIN_BASE];
+  if (publicBase) {
+    const base = publicBase.replace(/\/+$/, "") || "";
+    if (
+      base &&
+      base !== INTERNAL_ADMIN_BASE &&
+      base !== DEFAULT_ADMIN_BASE &&
+      !prefixes.includes(base)
+    ) {
+      prefixes.unshift(base);
+    }
+  }
+  for (const prefix of prefixes) {
     if (rest === prefix || rest.startsWith(`${prefix}/`)) {
       rest = rest.slice(prefix.length);
       break;
@@ -147,7 +159,7 @@ export function adminHref(
     (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
   let rest = (path || "").trim();
   if (!rest || rest === "/") return base;
-  rest = stripKnownAdminPrefix(rest);
+  rest = stripKnownAdminPrefix(rest, base);
   if (!rest.startsWith("/")) rest = `/${rest}`;
   return `${base}${rest === "/" ? "" : rest}`;
 }
@@ -192,23 +204,71 @@ export function isInternalAdminPath(pathname: string): boolean {
   );
 }
 
+/**
+ * Map a browser pathname (custom slug, `/manage`, or `/admin`) to the
+ * canonical `/manage/...` form used by nav, permissions, and tours.
+ */
+export function toCanonicalAdminPath(
+  pathname: string,
+  publicBase: string = DEFAULT_ADMIN_BASE
+): string {
+  if (!pathname) return pathname;
+  const internal = toInternalAdminPath(pathname, publicBase);
+  if (internal === INTERNAL_ADMIN_BASE) return DEFAULT_ADMIN_BASE;
+  if (internal.startsWith(`${INTERNAL_ADMIN_BASE}/`)) {
+    return `${DEFAULT_ADMIN_BASE}${internal.slice(INTERNAL_ADMIN_BASE.length)}`;
+  }
+  return pathname;
+}
+
+/** Validate a raw `bqi_admin_base` cookie value into a public base path. */
+export function parseAdminBaseCookieValue(
+  raw: string | null | undefined
+): string | null {
+  if (!raw) return null;
+  try {
+    const value = decodeURIComponent(raw).trim();
+    if (!value.startsWith("/")) return null;
+    const normalized = value.replace(/\/+$/, "") || "/";
+    if (normalized === DEFAULT_ADMIN_BASE) return DEFAULT_ADMIN_BASE;
+    if (normalized === INTERNAL_ADMIN_BASE) return DEFAULT_ADMIN_BASE;
+    const slug = normalized.slice(1);
+    if (!isValidAdminPathSlug(slug)) return null;
+    return `/${slug}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the active public admin base (cookie → optional override → default).
+ * Prefer `useAdminPath().basePath` in React trees; use this for imperative nav.
+ */
+export function resolvePublicAdminBase(
+  cookieValue?: string | null
+): string {
+  const fromArg = parseAdminBaseCookieValue(cookieValue);
+  if (fromArg) return fromArg;
+  const fromDoc = readAdminBasePathCookie();
+  if (fromDoc) return fromDoc;
+  return DEFAULT_ADMIN_BASE;
+}
+
+/**
+ * Build a public admin URL using the active cookie base (client) or default.
+ * Safe for `router.push` / `router.replace` outside React context wiring.
+ */
+export function publicAdminHref(path: string = ""): string {
+  return adminHref(path, resolvePublicAdminBase());
+}
+
 export function readAdminBasePathCookie(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie
     .split("; ")
     .find((row) => row.startsWith(`${ADMIN_PATH_COOKIE}=`));
   if (!match) return null;
-  try {
-    const value = decodeURIComponent(match.split("=").slice(1).join("="));
-    if (!value.startsWith("/")) return null;
-    if (value === DEFAULT_ADMIN_BASE) return DEFAULT_ADMIN_BASE;
-    if (value === INTERNAL_ADMIN_BASE) return DEFAULT_ADMIN_BASE;
-    const slug = value.slice(1);
-    if (!isValidAdminPathSlug(slug)) return null;
-    return `/${slug}`;
-  } catch {
-    return null;
-  }
+  return parseAdminBaseCookieValue(match.split("=").slice(1).join("="));
 }
 
 export function writeAdminBasePathCookie(publicBase: string) {

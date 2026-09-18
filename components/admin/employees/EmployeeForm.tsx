@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "react-hot-toast";
 import { Loader2 } from "lucide-react";
+import { publicAdminHref } from "@/lib/admin-path";
 
 type EmployeeFormProps = {
   mode: "create" | "edit";
@@ -348,7 +349,7 @@ export function EmployeeForm({ mode, initial }: EmployeeFormProps) {
       queryClient.invalidateQueries({ queryKey: ["admin-employee", employee.id] });
       queryClient.invalidateQueries({ queryKey: ["admin-departments"] });
       toast.success(mode === "create" ? "Employee added" : "Employee updated");
-      router.push(`/manage/employees/${employee.id}`);
+      router.push(publicAdminHref(`/manage/employees/${employee.id}`));
     },
     onError: (err: Error) => {
       toast.error(err.message || "Save failed");

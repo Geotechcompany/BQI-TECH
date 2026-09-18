@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Mail, MapPin, Phone } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { EmployeeDirectorySkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 export default function EmployeeDirectoryPage() {
   const [search, setSearch] = useState("");
@@ -75,7 +76,7 @@ export default function EmployeeDirectoryPage() {
             {people.map((e) => (
               <Link
                 key={e.id}
-                href={`/manage/employees/${e.id}`}
+                href={publicAdminHref(`/manage/employees/${e.id}`)}
                 className="group rounded-xl border bg-card p-5 transition hover:border-[#31CDFF]/50 hover:shadow-sm"
               >
                 <div className="flex items-start gap-3">

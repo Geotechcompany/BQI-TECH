@@ -51,6 +51,7 @@ import { Building2, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { fullName } from "@/lib/employees";
 import { DepartmentsSkeleton } from "@/components/admin/hr-skeletons";
+import { publicAdminHref } from "@/lib/admin-path";
 
 ChartJS.register(
   CategoryScale,
@@ -334,7 +335,7 @@ export default function DepartmentsPage() {
                             Head:{" "}
                             {d.headEmployeeId ? (
                               <Link
-                                href={`/manage/employees/${d.headEmployeeId}`}
+                                href={publicAdminHref(`/manage/employees/${d.headEmployeeId}`)}
                                 className="text-[#272156] hover:underline dark:text-[#31CDFF]"
                               >
                                 {d.headName}
@@ -354,7 +355,7 @@ export default function DepartmentsPage() {
                           size="sm"
                           className="mt-3"
                         >
-                          <Link href={`/manage/employees?department=${d.id}`}>
+                          <Link href={publicAdminHref(`/manage/employees?department=${d.id}`)}>
                             View employees
                           </Link>
                         </Button>
@@ -479,7 +480,7 @@ export default function DepartmentsPage() {
             {deleteBlockedByEmployees ? (
               <AlertDialogAction asChild>
                 <Link
-                  href={`/manage/employees?department=${deleteTarget?.id ?? ""}`}
+                  href={publicAdminHref(`/manage/employees?department=${deleteTarget?.id ?? ""}`)}
                 >
                   View employees
                 </Link>

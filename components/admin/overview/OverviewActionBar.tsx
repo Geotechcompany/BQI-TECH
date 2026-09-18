@@ -20,6 +20,7 @@ import {
 import DynamicActionBar, {
   type ActionItem,
 } from "@/components/ui/dynamic-action";
+import { publicAdminHref } from "@/lib/admin-path";
 
 type Shortcut = {
   href: string;
@@ -32,7 +33,7 @@ type Shortcut = {
 function ShortcutRow({ href, label, description, icon: Icon, tone }: Shortcut) {
   return (
     <Link
-      href={href}
+      href={publicAdminHref(href)}
       className="flex w-[95%] items-center gap-3 rounded-2xl py-2.5 duration-300 hover:bg-[#272156]/[0.06] hover:px-3 dark:hover:bg-[#31CDFF]/10"
     >
       <Icon className={`h-12 w-12 shrink-0 rounded-xl p-3 ${tone}`} />
@@ -59,49 +60,49 @@ function ShortcutList({ items }: { items: Shortcut[] }) {
 
 const appsShortcuts: Shortcut[] = [
   {
-    href: "/manage/candidates",
+    href: publicAdminHref("/manage/candidates"),
     label: "Candidates",
     description: "Browse candidate pool",
     icon: Users,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/manage/job-postings",
+    href: publicAdminHref("/manage/job-postings"),
     label: "Positions",
     description: "Open roles & postings",
     icon: Briefcase,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/manage/employees",
+    href: publicAdminHref("/manage/employees"),
     label: "Employees",
     description: "Workforce records",
     icon: Users,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/manage/leave",
+    href: publicAdminHref("/manage/leave"),
     label: "Leave",
     description: "Policies & requests",
     icon: CalendarDays,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/manage/documents",
+    href: publicAdminHref("/manage/documents"),
     label: "Documents",
     description: "Files & vault",
     icon: FolderOpen,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/manage/calendar",
+    href: publicAdminHref("/manage/calendar"),
     label: "Calendar",
     description: "Schedule & events",
     icon: Calendar,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/manage/reports",
+    href: publicAdminHref("/manage/reports"),
     label: "Reports",
     description: "Hiring analytics",
     icon: FileText,
@@ -111,28 +112,28 @@ const appsShortcuts: Shortcut[] = [
 
 const peopleShortcuts: Shortcut[] = [
   {
-    href: "/manage/employees/directory",
+    href: publicAdminHref("/manage/employees/directory"),
     label: "Directory",
     description: "Find people",
     icon: Users,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/manage/employees/new",
+    href: publicAdminHref("/manage/employees/new"),
     label: "Add Employee",
     description: "Create a record",
     icon: UserPlus,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/manage/departments",
+    href: publicAdminHref("/manage/departments"),
     label: "Departments",
     description: "Org structure",
     icon: Building2,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/manage/employees/org-chart",
+    href: publicAdminHref("/manage/employees/org-chart"),
     label: "Org Chart",
     description: "Reporting lines",
     icon: Network,
@@ -142,28 +143,28 @@ const peopleShortcuts: Shortcut[] = [
 
 const recruitShortcuts: Shortcut[] = [
   {
-    href: "/manage/applicants",
+    href: publicAdminHref("/manage/applicants"),
     label: "Applicants",
     description: "Incoming applications",
     icon: UserSearch,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/manage/job-postings",
+    href: publicAdminHref("/manage/job-postings"),
     label: "Pipeline",
     description: "Open a posting to board",
     icon: Briefcase,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/manage/inbox",
+    href: publicAdminHref("/manage/inbox"),
     label: "Inbox",
     description: "Messages & mail",
     icon: Inbox,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/manage/tasks",
+    href: publicAdminHref("/manage/tasks"),
     label: "Tasks",
     description: "Your follow-ups",
     icon: ListTodo,

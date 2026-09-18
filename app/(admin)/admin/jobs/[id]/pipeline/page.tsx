@@ -23,6 +23,7 @@ import { toast } from "react-hot-toast";
 import type { AppHotToastOptions } from "@/components/ui/app-toaster";
 import { LAST_PIPELINE_JOB_KEY } from "@/components/admin/pipeline/pipeline-utils";
 import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const PipelineBoard = dynamic(
   () =>
@@ -225,15 +226,14 @@ export default function JobPipelinePage() {
 
   const handleCardClick = useCallback(
     (application: Application) => {
-      router.push(`/manage/jobs/${id}/candidates/${application.id}`);
+      router.push(publicAdminHref(`/manage/jobs/${id}/candidates/${application.id}`));
     },
     [id, router]
   );
 
   const handleOpenDiscussion = useCallback(
     (application: Application) => {
-      router.push(
-        `/manage/jobs/${id}/candidates/${application.id}?tab=discussion`
+      router.push(publicAdminHref(`/manage/jobs/${id}/candidates/${application.id}?tab=discussion`)
       );
     },
     [id, router]
@@ -481,12 +481,12 @@ export default function JobPipelinePage() {
           <GenerateButton
             label="Source Candidates"
             isGenerating={false}
-            onClick={() => router.push("/manage/applicants")}
+            onClick={() => router.push(publicAdminHref("/manage/applicants"))}
             className="text-sm"
           />
           <Button variant="outline" size="sm" asChild>
             <Link
-              href={`/manage/jobs/${id}/pipeline/settings`}
+              href={publicAdminHref(`/manage/jobs/${id}/pipeline/settings`)}
               data-tour="pipeline-settings"
             >
               <Settings2 className="mr-2 h-4 w-4" />
@@ -495,7 +495,7 @@ export default function JobPipelinePage() {
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link
-              href={`/manage/candidates?jobId=${id}`}
+              href={publicAdminHref(`/manage/candidates?jobId=${id}`)}
               data-tour="pipeline-list-view"
             >
               <LayoutList className="mr-2 h-4 w-4" />
@@ -503,7 +503,7 @@ export default function JobPipelinePage() {
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/manage/job-postings">
+            <Link href={publicAdminHref("/manage/job-postings")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               Positions
             </Link>

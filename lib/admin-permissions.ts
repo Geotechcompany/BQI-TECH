@@ -1,7 +1,7 @@
 import {
   DEFAULT_ADMIN_BASE,
-  readAdminBasePathCookie,
-  toInternalAdminPath,
+  resolvePublicAdminBase,
+  toCanonicalAdminPath,
 } from "@/lib/admin-path";
 
 export type AdminModuleKey =
@@ -145,17 +145,22 @@ const ROUTE_MODULE_MAP: Record<string, AdminModuleKey> = {
 };
 
 export function resolveModuleForPath(pathname: string): AdminModuleKey | null {
-  const internal = toInternalAdminPath(
+  const canonical = toCanonicalAdminPath(
     pathname,
-    readAdminBasePathCookie() || DEFAULT_ADMIN_BASE
+    resolvePublicAdminBase()
   );
-  if (!internal.startsWith("/manage")) return null;
+  if (
+    canonical !== DEFAULT_ADMIN_BASE &&
+    !canonical.startsWith(`${DEFAULT_ADMIN_BASE}/`)
+  ) {
+    return null;
+  }
 
   const sortedRoutes = Object.keys(ROUTE_MODULE_MAP).sort(
     (a, b) => b.length - a.length
   );
   for (const route of sortedRoutes) {
-    if (internal === route || internal.startsWith(`${route}/`)) {
+    if (canonical === route || canonical.startsWith(`${route}/`)) {
       return ROUTE_MODULE_MAP[route];
     }
   }

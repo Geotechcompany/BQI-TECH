@@ -14,6 +14,7 @@ import { adminApi } from "@/lib/api-backend";
 import { Download, ExternalLink, FileText, Loader2, Upload } from "lucide-react";
 import Link from "next/link";
 import { toast } from "react-hot-toast";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const CATEGORY_ORDER: EmployeeDocumentCategory[] = [
   "contract",
@@ -135,7 +136,7 @@ export function DocumentsTab({ employee }: { employee: Employee }) {
             </Button>
           ) : (
             <Button size="sm" variant="outline" asChild>
-              <Link href="/manage/settings?section=integrations">
+              <Link href={publicAdminHref("/manage/settings?section=integrations")}>
                 Connect DocuSign
               </Link>
             </Button>

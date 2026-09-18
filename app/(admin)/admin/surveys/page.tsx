@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api-backend";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { publicAdminHref } from "@/lib/admin-path";
 
 type SurveyQuestion = {
   id: string;
@@ -600,7 +601,7 @@ export default function SurveysPage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => router.push(`/manage/surveys/${s.id}`)}
+                onClick={() => router.push(publicAdminHref(`/manage/surveys/${s.id}`))}
                 className="border-[#31CDFF] text-[#31CDFF] hover:bg-[#31CDFF]/5"
               >
                 Analytics
