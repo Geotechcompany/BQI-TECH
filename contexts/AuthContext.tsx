@@ -12,6 +12,7 @@ import { authService } from "@/lib/auth-backend";
 import { resolveEmailVerified } from "@/lib/resolve-email-verified";
 import { User } from "@/types/user";
 import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
+import { isAdmin2faChallenge } from "@/lib/auth-backend";
 import {
   DEFAULT_ADMIN_BASE,
   adminHref,
@@ -313,7 +314,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const { isAdmin2faChallenge } = await import("@/lib/auth-backend");
       const response = await authService.login(email, password);
 
       if (isAdmin2faChallenge(response)) {
