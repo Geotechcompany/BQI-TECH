@@ -253,6 +253,7 @@ export default function AdminLoginPage() {
     authLoading,
     user,
     refreshUserProfile,
+    applyAdmin2faStatus,
   } = useAuth();
   const {
     register,
@@ -455,9 +456,23 @@ export default function AdminLoginPage() {
     goToDashboardWithLoader();
   };
 
-  const handleSetupComplete = async () => {
-    await refreshUserProfile();
+  const handleSetupComplete = async (result?: {
+    recoveryCodes?: string[];
+  }) => {
+    const codes = (result?.recoveryCodes || []).filter(Boolean);
+    if (codes.length > 0 && typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem(
+          "admin_2fa_recovery_codes",
+          JSON.stringify(codes)
+        );
+      } catch {
+        // Non-fatal — user can re-enroll recovery codes from settings later
+      }
+    }
+
     try {
+      await refreshUserProfile();
       const status = await fetchAdmin2faStatus();
       if (!status.satisfied) {
         toast.error("Additional security factors are still required");
@@ -465,8 +480,17 @@ export default function AdminLoginPage() {
         setSetupRequired(true);
         return;
       }
+      applyAdmin2faStatus({
+        satisfied: true,
+        policy: status.policy,
+        factors: status.factors,
+        totpEnabled: status.totpEnabled,
+        email2faEnabled: status.email2faEnabled,
+        prompt: status.prompt,
+      });
     } catch {
-      // Backend admin gate still enforces policy.
+      // Enroll succeeded — unlock and proceed; backend still enforces policy.
+      applyAdmin2faStatus({ satisfied: true, prompt: false });
     }
     toast.success("Security setup complete");
     goToDashboardWithLoader();
@@ -564,7 +588,7 @@ export default function AdminLoginPage() {
                 policy={user?.admin2faPolicy || "require_one"}
                 emailHint={user?.email}
                 required={setupRequired}
-                onComplete={() => void handleSetupComplete()}
+                onComplete={(result) => void handleSetupComplete(result)}
                 onSkip={
                   setupRequired
                     ? undefined

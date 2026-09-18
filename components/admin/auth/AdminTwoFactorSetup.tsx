@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  CheckCircle2,
   Copy,
   KeyRound,
   Loader2,
@@ -22,20 +21,19 @@ import {
 } from "@/lib/admin-2fa";
 import { cn } from "@/lib/utils";
 
+export type AdminTwoFactorSetupCompleteResult = {
+  recoveryCodes?: string[];
+};
+
 interface AdminTwoFactorSetupProps {
   policy?: Admin2faPolicy;
   emailHint?: string;
   required?: boolean;
-  onComplete: () => void;
+  onComplete: (result?: AdminTwoFactorSetupCompleteResult) => void;
   onSkip?: () => void;
 }
 
-type SetupStep =
-  | "choose"
-  | "totp_scan"
-  | "totp_confirm"
-  | "recovery"
-  | "email_confirm";
+type SetupStep = "choose" | "totp_scan" | "totp_confirm" | "email_confirm";
 
 export function AdminTwoFactorSetup({
   policy = "require_one",
@@ -49,7 +47,6 @@ export function AdminTwoFactorSetup({
   const [secret, setSecret] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   const startTotp = async () => {
@@ -73,9 +70,9 @@ export function AdminTwoFactorSetup({
     setBusy(true);
     try {
       const result = await confirmAdminTotpSetup(code.trim());
-      setRecoveryCodes(result.recoveryCodes || []);
-      setStep("recovery");
       toast.success("Authenticator enabled");
+      // Auto-exit immediately; recovery codes surface on the dashboard.
+      onComplete({ recoveryCodes: result.recoveryCodes || [] });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Incorrect authenticator code"
@@ -115,7 +112,7 @@ export function AdminTwoFactorSetup({
         code: code.trim(),
       });
       toast.success("Email 2FA enabled");
-      onComplete();
+      onComplete({});
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not enable email 2FA"
@@ -131,15 +128,6 @@ export function AdminTwoFactorSetup({
       toast.success("Secret copied");
     } catch {
       toast.error("Could not copy secret");
-    }
-  };
-
-  const copyRecovery = async () => {
-    try {
-      await navigator.clipboard.writeText(recoveryCodes.join("\n"));
-      toast.success("Recovery codes copied");
-    } catch {
-      toast.error("Could not copy codes");
     }
   };
 
@@ -276,43 +264,6 @@ export function AdminTwoFactorSetup({
               Back
             </Button>
           </form>
-        </div>
-      ) : null}
-
-      {step === "recovery" ? (
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
-            <div>
-              <p className="text-sm font-semibold">Authenticator is on</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Save these recovery codes now — they won&apos;t be shown again.
-              </p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 font-mono text-sm">
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {recoveryCodes.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={() => void copyRecovery()}
-          >
-            <Copy className="mr-2 h-4 w-4" />
-            Copy recovery codes
-          </Button>
-          <Button
-            type="button"
-            className="h-12 w-full rounded-xl font-semibold"
-            onClick={onComplete}
-          >
-            Continue to admin
-          </Button>
         </div>
       ) : null}
 

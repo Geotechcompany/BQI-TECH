@@ -43,6 +43,7 @@ import { AdminLockScreenProvider } from "@/contexts/AdminLockScreenContext";
 import { AdminLockScreen } from "@/components/admin/AdminLockScreen";
 import { useAdminPath } from "@/contexts/AdminPathContext";
 import { AdminTwoFactorSetup } from "@/components/admin/auth/AdminTwoFactorSetup";
+import { AdminRecoveryCodesDialog } from "@/components/admin/auth/AdminRecoveryCodesDialog";
 import { fetchAdmin2faStatus } from "@/lib/admin-2fa";
 
 function AdminFullscreenProviders({ children }: { children: ReactNode }) {
@@ -92,6 +93,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [force2faSetup, setForce2faSetup] = useState(false);
   const [checking2fa, setChecking2fa] = useState(false);
+  const [pendingRecoveryCodes, setPendingRecoveryCodes] = useState<string[]>([]);
+  const [showRecoveryCodes, setShowRecoveryCodes] = useState(false);
   const { sidebarCollapsed } = useSettings();
   const reducedMotion = useReducedMotion();
   const {
@@ -105,6 +108,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     logout,
     isExtendingSession,
     refreshUserProfile,
+    applyAdmin2faStatus,
   } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -119,6 +123,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const needs2faSetup =
     Boolean(isAuthenticated && isAdmin) &&
     (user?.admin2faSatisfied === false || force2faSetup);
+
+  // Pickup recovery codes stashed during login-page enroll (auto-redirect).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem("admin_2fa_recovery_codes");
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setPendingRecoveryCodes(parsed.map(String));
+        setShowRecoveryCodes(true);
+      }
+      sessionStorage.removeItem("admin_2fa_recovery_codes");
+    } catch {
+      sessionStorage.removeItem("admin_2fa_recovery_codes");
+    }
+  }, []);
 
   // Soft client navigation only — never window.location (that nukes the SPA
   // mid Stay Logged In / token refresh). Skip while session is being extended.
@@ -171,7 +192,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       try {
         const status = await fetchAdmin2faStatus();
         if (cancelled) return;
-        setForce2faSetup(!status.satisfied);
+        if (status.satisfied) {
+          applyAdmin2faStatus({
+            satisfied: true,
+            policy: status.policy,
+            factors: status.factors,
+            totpEnabled: status.totpEnabled,
+            email2faEnabled: status.email2faEnabled,
+            prompt: status.prompt,
+          });
+          setForce2faSetup(false);
+        } else {
+          setForce2faSetup(true);
+        }
       } catch {
         // Keep existing gate; admin APIs will still 403 until enrolled
       } finally {
@@ -188,21 +221,53 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     isAdmin,
     pathname,
     user?.admin2faSatisfied,
+    applyAdmin2faStatus,
   ]);
 
-  const handle2faSetupComplete = async () => {
-    await refreshUserProfile();
+  const handle2faSetupComplete = async (result?: {
+    recoveryCodes?: string[];
+  }) => {
+    const codes = (result?.recoveryCodes || []).filter(Boolean);
+    if (codes.length > 0) {
+      setPendingRecoveryCodes(codes);
+      setShowRecoveryCodes(true);
+      try {
+        sessionStorage.setItem(
+          "admin_2fa_recovery_codes",
+          JSON.stringify(codes)
+        );
+      } catch {
+        // Non-fatal
+      }
+    }
+
     try {
+      // Status is authoritative right after enroll; profile refresh can lag or
+      // lose fields under obfuscation — patch AuthContext from status first.
+      await refreshUserProfile();
       const status = await fetchAdmin2faStatus();
       if (!status.satisfied) {
         setForce2faSetup(true);
         toast.error("Additional security factors are still required");
         return;
       }
+      applyAdmin2faStatus({
+        satisfied: true,
+        policy: status.policy,
+        factors: status.factors,
+        totpEnabled: status.totpEnabled,
+        email2faEnabled: status.email2faEnabled,
+        prompt: status.prompt,
+      });
       setForce2faSetup(false);
       toast.success("Security setup complete");
+      router.replace(adminHref("/admin/overview"));
     } catch {
+      // Enroll already succeeded — unlock optimistically so the user is not stuck.
+      applyAdmin2faStatus({ satisfied: true, prompt: false });
       setForce2faSetup(false);
+      toast.success("Security setup complete");
+      router.replace(adminHref("/admin/overview"));
     }
   };
 
@@ -235,7 +300,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               policy={user?.admin2faPolicy || "require_one"}
               emailHint={user?.email}
               required
-              onComplete={() => void handle2faSetupComplete()}
+              onComplete={(result) => void handle2faSetupComplete(result)}
             />
           </div>
         </div>
@@ -336,6 +401,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             totalTime={5 * 60}
           />
           <AiRankProgressHost />
+          <AdminRecoveryCodesDialog
+            codes={pendingRecoveryCodes}
+            open={showRecoveryCodes && pendingRecoveryCodes.length > 0}
+            onOpenChange={(open) => {
+              setShowRecoveryCodes(open);
+              if (!open) setPendingRecoveryCodes([]);
+            }}
+          />
           </AiRankProvider>
           </BqiIntelligenceProvider>
           </AiStatusProvider>

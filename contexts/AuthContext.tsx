@@ -2,6 +2,7 @@
 
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -48,6 +49,15 @@ interface AuthContextType {
   refreshToken: () => Promise<void>;
   register: (email: string, password: string, name: string) => Promise<void>;
   updateUserAvatar: (avatarUrl: string) => void;
+  /** Patch session + React state after 2FA enroll so the admin gate unlocks immediately. */
+  applyAdmin2faStatus: (status: {
+    satisfied: boolean;
+    policy?: User["admin2faPolicy"];
+    factors?: User["admin2faFactors"];
+    totpEnabled?: boolean;
+    email2faEnabled?: boolean;
+    prompt?: boolean;
+  }) => void;
   refreshUserProfile: () => Promise<void>;
   handleAuthError: (error: any) => void;
   isEmailVerified: () => boolean;
@@ -503,6 +513,87 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const applyAdmin2faStatus = useCallback(
+    (status: {
+      satisfied: boolean;
+      policy?: User["admin2faPolicy"];
+      factors?: User["admin2faFactors"];
+      totpEnabled?: boolean;
+      email2faEnabled?: boolean;
+      prompt?: boolean;
+    }) => {
+      const currentSession = authService.getSession();
+      const baseUser =
+        (authService.getSession()?.user as User | undefined) || null;
+      // Prefer live React user via functional update; session is the fallback.
+      setAuthState((prev) => {
+        const fromPrev = prev.user || baseUser;
+        if (!fromPrev) return prev;
+
+        const updatedUser: User = {
+          ...fromPrev,
+          admin2faSatisfied: status.satisfied,
+          admin2faPrompt:
+            typeof status.prompt === "boolean"
+              ? status.prompt
+              : status.satisfied
+                ? false
+                : fromPrev.admin2faPrompt,
+          admin2faPolicy: status.policy ?? fromPrev.admin2faPolicy,
+          admin2faFactors: status.factors ?? fromPrev.admin2faFactors,
+          totpEnabled:
+            typeof status.totpEnabled === "boolean"
+              ? status.totpEnabled
+              : fromPrev.totpEnabled,
+          email2faEnabled:
+            typeof status.email2faEnabled === "boolean"
+              ? status.email2faEnabled
+              : fromPrev.email2faEnabled,
+        };
+
+        return {
+          ...prev,
+          user: updatedUser,
+          userRole: updatedUser.role,
+          isAdmin: roleIsAdmin(updatedUser.role),
+          isAuthenticated: true,
+          authLoading: false,
+        };
+      });
+
+      if (currentSession?.user) {
+        const mergedUser = {
+          ...currentSession.user,
+          admin2faSatisfied: status.satisfied,
+          admin2faPrompt:
+            typeof status.prompt === "boolean"
+              ? status.prompt
+              : status.satisfied
+                ? false
+                : currentSession.user.admin2faPrompt,
+          admin2faPolicy: status.policy ?? currentSession.user.admin2faPolicy,
+          admin2faFactors:
+            status.factors ?? currentSession.user.admin2faFactors,
+          totpEnabled:
+            typeof status.totpEnabled === "boolean"
+              ? status.totpEnabled
+              : currentSession.user.totpEnabled,
+          email2faEnabled:
+            typeof status.email2faEnabled === "boolean"
+              ? status.email2faEnabled
+              : currentSession.user.email2faEnabled,
+        };
+        authService.setSession({
+          ...currentSession,
+          user: mergedUser,
+        });
+      }
+    },
+    // roleIsAdmin is a stable pure helper defined in this component
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   const updateUserAvatar = (avatarUrl: string) => {
     if (!authState.user) return;
 
@@ -730,6 +821,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshToken,
         register,
         updateUserAvatar,
+        applyAdmin2faStatus,
         refreshUserProfile,
         handleAuthError,
         isEmailVerified,
