@@ -8,6 +8,7 @@ from app.lib.roles import normalize_role
 from app.lib.admin_permissions import get_effective_admin_modules
 from app.lib.user_verification import resolve_email_verified
 from app.lib.encryption import encrypt_user_response, should_encrypt_response
+from app.lib.user_avatar import resolve_user_avatar_url
 from typing import Dict, Any, Optional
 from bson import ObjectId
 from datetime import datetime
@@ -51,6 +52,8 @@ async def get_user_profile(
             if len(name_parts) >= 2:
                 lastName = " ".join(name_parts[1:])
 
+        avatar = await resolve_user_avatar_url(db, user)
+
         profile = {
             "id": str(user["_id"]),
             "email": user.get("email", ""),
@@ -58,7 +61,8 @@ async def get_user_profile(
             "firstName": firstName,
             "lastName": lastName,
             "role": normalize_role(user.get("role", "USER")),
-            "avatar": user.get("avatar", ""),
+            "avatar": avatar,
+            "avatarUrl": avatar,
             "phone": user.get("phone", ""),
             "location": user.get("location", ""),
             "bio": user.get("bio", ""),
@@ -102,12 +106,22 @@ async def update_user_profile(
     try:
         db = get_database()
         
-        # Remove fields that shouldn't be updated
+        # Remove fields that shouldn't be updated by the client
         profile_data.pop("_id", None)
         profile_data.pop("id", None)
         profile_data.pop("email", None)  # Email updates should be handled separately
         profile_data.pop("password", None)  # Password updates should be handled separately
         profile_data.pop("role", None)  # Role updates should be handled by admin
+        # Never allow profile PATCH to clear or forge verification / admin flags
+        for protected in (
+            "isEmailVerified",
+            "is_verified",
+            "email_verified",
+            "emailVerified",
+            "verifiedAt",
+            "adminModules",
+        ):
+            profile_data.pop(protected, None)
         
         # Handle firstName and lastName updates
         firstName = profile_data.get("firstName", "")
@@ -231,8 +245,8 @@ async def resend_verification_email(
         pending_registration = await db.pending_registrations.find_one({"email": email})
         
         if user:
-            # User exists in main collection
-            if user.get("isEmailVerified", False):
+            # User exists in main collection — use same resolution as login/profile
+            if await resolve_email_verified(db, user):
                 raise HTTPException(
                     status_code=400,
                     detail="Email is already verified"

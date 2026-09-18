@@ -24,6 +24,7 @@ import {
   type FeatureReleaseItem,
 } from "@/lib/feature-releases";
 import {
+  FEATURE_PREVIEW_DIALOG_ENABLED,
   getSeenFeatureRelease,
   markFeatureReleaseSeen,
 } from "@/lib/admin-whats-new";
@@ -49,7 +50,10 @@ const slideVariants = {
 };
 
 export function FeaturePreviewDialog() {
-  const release = useMemo(() => getLatestFeatureRelease(), []);
+  const release = useMemo(
+    () => (FEATURE_PREVIEW_DIALOG_ENABLED ? getLatestFeatureRelease() : undefined),
+    [],
+  );
   const features = useMemo(
     () => (release ? buildFeatureList({ release }) : []),
     [release],
@@ -61,7 +65,7 @@ export function FeaturePreviewDialog() {
   const [direction, setDirection] = useState(0);
 
   useEffect(() => {
-    if (!release) return;
+    if (!FEATURE_PREVIEW_DIALOG_ENABLED || !release) return;
     if (getSeenFeatureRelease() === release.slug) return;
     const timer = window.setTimeout(() => setOpen(true), 700);
     return () => window.clearTimeout(timer);

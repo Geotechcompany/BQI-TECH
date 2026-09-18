@@ -29,12 +29,13 @@ export function CVCell({ cvUrl, candidateName }: CVCellProps) {
     <>
       <Button
         variant="ghost"
-        size="sm"
-        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+        size="icon"
+        className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
         onClick={handleOpenModal}
+        aria-label="View CV"
+        title="View CV"
       >
-        <Eye className="h-4 w-4 mr-1" />
-        View CV
+        <Eye className="h-4 w-4" />
       </Button>
       
       <SimpleCVModal

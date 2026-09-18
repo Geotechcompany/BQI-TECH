@@ -56,7 +56,7 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
   {
     slug: "hiring-workflow-refinements",
     title: "Hiring Workflow Refinements",
-    tagline: "Smarter AI setup, sharper applicant filtering, and a steadier archive",
+    tagline: "Smarter provider setup, sharper applicant filtering, and a steadier archive",
     version: "2026.07",
     date: "June 30, 2026",
     category: "Improvements",
@@ -82,7 +82,7 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
           "Open Admin then Settings and select the AI providers tab",
           "Pick a provider preset and paste its API key",
           "Choose a model, then use Test to confirm the connection",
-          "Save, then run AI Rank on Applications to see it in action",
+          "Save, then run Score with BQI Intelligence on Applications to see it in action",
         ],
       },
       {
@@ -90,17 +90,17 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
         description:
           "Narrow the applications list by status, job, and score, then reorder results and flip the sort direction with a single click.",
         icon: SlidersHorizontal,
-        href: "/admin/applications",
+        href: "/admin/candidates",
         ctaLabel: "Open Applications",
         imageUrl:
           "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80&auto=format&fit=crop",
         imageAlt:
           "Laptop screen showing analytics charts and data, representing advanced filtering and sorting",
-        highlights: ["Combine multiple filters", "Sort by AI score, date, or status"],
+        highlights: ["Combine multiple filters", "Sort by BQI Intelligence score, date, or status"],
         howToTest: [
-          "Go to Admin then Candidates then Applications",
+          "Go to Admin then Recruitment then Applications",
           "Open Advanced filters above the table",
-          "Filter by status, job posting, or AI score",
+          "Filter by status, position, or BQI Intelligence score",
           "Toggle the sort direction to flip the order",
         ],
       },
@@ -198,25 +198,25 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
   },
   {
     slug: "ai-applicant-ranking",
-    title: "AI Applicant Ranking",
-    tagline: "Score and compare candidates against the role they applied for",
+    title: "BQI Intelligence Applicant Ranking",
+    tagline: "Score and compare candidates against the position they applied for",
     version: "2026.06",
     date: "June 22, 2026",
     category: "Hiring Intelligence",
     summary:
-      "BQI admin can now rank applicants with AI using CV content and application answers. Each candidate receives a fit score, recommendation, and role-specific assessment that persists across Applications and every pipeline view.",
+      "BQI admin can now rank applicants with BQI Intelligence using CV content and application answers. Each candidate receives a fit score, recommendation, and position-specific assessment that persists across Applications and every pipeline view.",
     heroAccent: "from-primary via-primary/95 to-primary/70",
     highlights: [
       {
-        title: "AI Score column",
+        title: "BQI Intelligence score column",
         description:
           "Color-coded 0–100 scores with fit labels like Strong Fit, Good Fit, or Not a Fit — visible at a glance in the applications table.",
         icon: Sparkles,
       },
       {
-        title: "AI Assessment summaries",
+        title: "BQI Intelligence assessment summaries",
         description:
-          "Read why each candidate matches the applied role. Hover for strengths, gaps, and the full evaluation narrative.",
+          "Read why each candidate matches the applied position. Hover for strengths, gaps, and the full evaluation narrative.",
         icon: Brain,
       },
       {
@@ -236,22 +236,22 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
       {
         title: "Open Applications",
         description:
-          "Go to Admin → Candidates → Applications to see the new AI Score and AI Assessment columns.",
+          "Go to Admin → Recruitment → Applications to see the new BQI Intelligence score and assessment columns.",
       },
       {
-        title: "Run AI Rank",
+        title: "Run BQI Intelligence ranking",
         description:
-          "Use AI Rank Page for the current list, AI Rank Selected for checked rows, the sparkle icon per row, or AI Rank inside a candidate popup.",
+          "Use Score with BQI Intelligence for the current list, Score selected with BQI Intelligence for checked rows, the sparkle icon per row, or BQI Intelligence inside a candidate popup.",
       },
       {
         title: "Review results",
         description:
-          "Scores and assessments are saved on each application. Hover assessments to see strengths and gaps for the specific role.",
+          "Scores and assessments are saved on each application. Hover assessments to see strengths and gaps for the specific position.",
       },
       {
         title: "Move candidates forward",
         description:
-          "Update status inline from the view popup while reviewing AI feedback — shortlist strong fits faster.",
+          "Update status inline from the view popup while reviewing BQI Intelligence feedback — shortlist strong fits faster.",
       },
     ],
     capabilities: [

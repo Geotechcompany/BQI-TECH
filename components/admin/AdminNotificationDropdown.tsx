@@ -32,6 +32,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { ListSkeleton } from "@/components/ui/skeleton";
 
 import {
 
@@ -357,11 +358,9 @@ export function AdminNotificationDropdown() {
 
           {isLoading ? (
 
-            <div className="flex flex-col items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
+            <div className="px-3 py-3">
 
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-
-              Loading…
+              <ListSkeleton items={5} />
 
             </div>
 

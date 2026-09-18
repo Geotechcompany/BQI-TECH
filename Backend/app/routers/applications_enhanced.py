@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from app.auth import get_current_user
 from app.models.application import Application, ApplicationCreate, ApplicationUpdate, ApplicationStatusChange
-from app.utils.status_history import StatusHistoryManager
+from app.utils.status_history import StatusHistoryManager, admin_actor_label
 import logging
 from fastapi.responses import Response
 import json
@@ -94,11 +94,11 @@ async def submit_application(
         application_data["updatedAt"] = now
         application_data["userId"] = user_id
         
-        # Initialize status history
+        # Initialize status history (store email/name, not raw user ObjectId)
         application_data["statusHistory"] = StatusHistoryManager.initialize_status_history(
             initial_status="New",
             applied_date=now,
-            user_id=user_id
+            user_id=admin_actor_label(current_user) if isinstance(current_user, dict) else user_id,
         )
         
         # Initialize legacy date fields for backward compatibility

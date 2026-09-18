@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import {
   getEffectiveAdminModules,
   getModuleLabel,
@@ -93,11 +94,7 @@ export function UserManagementTable({
   onDelete,
 }: UserManagementTableProps) {
   if (isLoading) {
-    return (
-      <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <TableSkeleton rows={6} columns={5} />;
   }
 
   if (!users?.length) {

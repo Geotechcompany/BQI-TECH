@@ -8,7 +8,7 @@ interface User {
 export interface StatusHistoryEntry {
   status: string
   date: Date | string
-  changedBy?: string  // User ID who made the change
+  changedBy?: string  // Actor email/name (legacy records may store user ObjectId)
   reason?: string     // Reason for the status change
   metadata?: {        // Additional context
     [key: string]: any
@@ -38,6 +38,15 @@ export interface Application {
     hearAbout: string
     otherSource?: string
     experience: string
+    /** CV-parsed professional summary (fill-if-empty from resume text) */
+    cvProfessionalSummary?: string
+    /** CV-parsed work history entries (fill-if-empty from resume text) */
+    cvWorkExperience?: Array<{
+        title: string
+        company?: string
+        dates?: string
+        bullets?: string[]
+    }>
     salary: string
     status: string
     appliedDate: Date
@@ -81,6 +90,20 @@ export interface Application {
     isArchived?: boolean;
     archivedAt?: Date | string;
     archivedBy?: string;
+    isPrivate?: boolean;
+    privateOwnerId?: string | null;
+    reminderAt?: Date | string | null;
+    reminderNote?: string | null;
+    assignedHiringTeam?: Array<{
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+    }>;
+    /** Admin user IDs following this candidate */
+    followedBy?: string[];
+    /** Whether the current admin is following this candidate */
+    isFollowed?: boolean;
 
     // AI ranking (admin)
     aiRankScore?: number;
@@ -91,6 +114,16 @@ export interface Application {
     aiRankScoreReason?: string;
     aiRankRecommendation?: string;
     aiRankedAt?: Date | string;
+
+    /** Admin-managed labels on the candidate application */
+    tags?: string[];
+
+    /** Last CV URL that contact extraction was run against */
+    contactSyncedCvUrl?: string;
+    contactSyncedFromCvAt?: Date | string;
+    /** Last CV URL that experience extraction was run against */
+    experienceSyncedCvUrl?: string;
+    experienceSyncedFromCvAt?: Date | string;
 }
 
 export interface AiRankRequirement {

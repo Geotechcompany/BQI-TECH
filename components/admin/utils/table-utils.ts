@@ -187,11 +187,14 @@ export const getPositionDisplay = (row: Application, jobTitles: Record<string, s
 
 // Enhanced CV URL extraction
 export const getCvUrl = (row: Application): string => {
-  // First check if cvUrl field exists (older applications)
   if (row.cvUrl && row.cvUrl.trim()) {
     return row.cvUrl.trim();
   }
-  
+
+  if (row.resumeUrl && row.resumeUrl.trim()) {
+    return row.resumeUrl.trim();
+  }
+
   // Fall back to extracting CV from answers array (newer applications)
   if (Array.isArray(row.answers)) {
     for (const answer of row.answers) {
@@ -200,7 +203,7 @@ export const getCvUrl = (row: Application): string => {
           questionText.includes('resume') || 
           questionText.includes('upload')) {
         const cvUrl = answer.answer?.toString().trim();
-        if (cvUrl && cvUrl.length > 10) { // Basic validation for URL
+        if (cvUrl && cvUrl.length > 10) {
           return cvUrl;
         }
       }
@@ -236,8 +239,8 @@ export const getStatusDateValue = (
   application: Application,
   dateField: string
 ): string | Date | null | undefined => {
-  const direct = application[dateField as keyof Application];
-  if (typeof direct === "string" || direct instanceof Date) return direct;
+  const direct = (application as unknown as Record<string, unknown>)[dateField];
+  if (direct) return direct as string | Date;
 
   const status = DATE_FIELD_STATUS_MAP[dateField];
   if (!status || !application.statusHistory?.length) return undefined;

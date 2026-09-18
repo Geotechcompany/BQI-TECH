@@ -11,7 +11,7 @@ const recruitmentSteps = [
   {
     title: "HR Screening",
     description:
-      "Initial 15-30 minute phone interview to discuss your background, aspirations, and answer your questions about the role.",
+      "Initial 15-30 minute phone interview to discuss your background, aspirations, and answer your questions about the position.",
     icon: "👋",
     color: "from-blue-400 to-blue-600",
     duration: "15-30 mins",

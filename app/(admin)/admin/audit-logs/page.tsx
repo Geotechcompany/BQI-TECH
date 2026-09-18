@@ -7,6 +7,8 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { format, parseISO } from "date-fns"
 import { adminApi } from "@/lib/api-backend"
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout"
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner"
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -17,7 +19,8 @@ import {
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, RefreshCw, ExternalLink } from "lucide-react"
+import { RefreshCw, ExternalLink } from "lucide-react"
+import { Skeleton, TableSkeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/contexts/AuthContext"
 
 type ActivityAction =
@@ -129,9 +132,7 @@ export default function AuditLogsPage() {
   if (authLoading) {
     return (
       <AdminPageLayout title="Admin Activity">
-        <div className="flex items-center justify-center py-10 text-muted-foreground">
-          <Loader2 className="h-6 w-6 animate-spin" />
-        </div>
+        <TableSkeleton rows={8} columns={5} />
       </AdminPageLayout>
     )
   }
@@ -143,15 +144,12 @@ export default function AuditLogsPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <AdminPageLayout title="Admin Activity">
+    <AdminPageLayout title="Admin Activity" tourId="audit-logs" guideInBanner>
+      <TourPageHelper tourId="audit-logs" />
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Track every change admins make — blog posts, job postings, candidates,
-          users, settings, backups, emails, and more. New actions are recorded
-          from now on.
-        </p>
+        <AdminPageWelcomeBanner bannerKey="audit-logs" tourId="audit-logs" />
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-tour="audit-filters">
           <Input
             placeholder="Search by admin, email, or activity..."
             value={search}
@@ -203,7 +201,7 @@ export default function AuditLogsPage() {
           </Button>
         </div>
 
-        <div className="border rounded-md overflow-hidden">
+        <div className="border rounded-md overflow-hidden" data-tour="audit-table">
           <div className="grid grid-cols-[160px_200px_100px_1fr_100px] gap-2 px-3 py-2 bg-muted text-xs font-medium">
             <div>When</div>
             <div>Admin</div>
@@ -212,8 +210,22 @@ export default function AuditLogsPage() {
             <div>Link</div>
           </div>
           {isLoading ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
+            <div className="space-y-0 divide-y divide-border/50 px-3 py-1">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-[160px_200px_100px_1fr_100px] gap-2 py-3"
+                >
+                  <Skeleton className="h-3.5 w-24" />
+                  <Skeleton className="h-3.5 w-32" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-3.5 w-[80%]" />
+                    <Skeleton className="h-3 w-[50%]" />
+                  </div>
+                  <Skeleton className="h-3.5 w-12" />
+                </div>
+              ))}
             </div>
           ) : activities.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">

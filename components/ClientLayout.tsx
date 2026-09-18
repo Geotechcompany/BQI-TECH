@@ -13,13 +13,14 @@ export default function ClientLayout({
 }) {
   const pathname = usePathname();
 
-  // Exclude header/footer from auth pages, admin pages, and dashboard pages
+  // Exclude header/footer from auth / portal shells (match user login full-bleed look)
   const isAuthPage = [
     "/login",
     "/sign-up",
     "/forgot-password",
     "/reset-password",
     "/auth/verify-email",
+    "/employee",
   ].some((path) => pathname?.startsWith(path));
   const isAdminPage = pathname?.startsWith("/admin");
   const isDashboardPage = pathname?.startsWith("/dashboard");

@@ -4,6 +4,9 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowDown, ArrowUp, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { MomBadge } from "@/lib/mom-delta";
+
+export type { MomBadge as MetricMomBadge };
 
 export type PremiumCardVariant =
   | "blue"
@@ -116,8 +119,20 @@ export interface PremiumMetricCardProps {
   variant?: PremiumCardVariant;
   path: string;
   subtitle?: string;
+  /** @deprecated Prefer `mom` for real MoM badges with edge-case handling. */
   trend?: number;
+  /** Real month-over-month badge. Takes precedence over `trend`. */
+  mom?: MomBadge;
   className?: string;
+}
+
+function resolveMomBadge(
+  mom: MomBadge | undefined,
+  trend: number | undefined
+): MomBadge | undefined {
+  if (mom) return mom;
+  if (trend === undefined) return undefined;
+  return { kind: "percent", value: trend };
 }
 
 export function PremiumMetricCard({
@@ -128,21 +143,24 @@ export function PremiumMetricCard({
   path,
   subtitle,
   trend,
+  mom,
   className,
 }: PremiumMetricCardProps) {
   const styles = variantStyles[variant];
+  const badge = resolveMomBadge(mom, trend);
+  const showBadge = badge && badge.kind !== "hidden";
 
   return (
-    <Link href={path} className={cn("block group", className)}>
+    <Link href={path} className={cn("block group h-full", className)}>
       <motion.div
         whileHover={{ y: -4 }}
         transition={{ type: "spring", stiffness: 400, damping: 28 }}
         className={cn(
-          "relative overflow-hidden rounded-2xl border border-border/60",
+          "relative h-full overflow-hidden rounded-xl border border-border/60",
           "bg-gradient-to-br shadow-sm",
           "backdrop-blur-xl",
           "transition-shadow duration-500",
-          "group-hover:shadow-xl",
+          "group-hover:shadow-lg",
           styles.surface,
           styles.borderGlow
         )}
@@ -157,43 +175,46 @@ export function PremiumMetricCard({
         {/* Ambient orb */}
         <div
           className={cn(
-            "pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full blur-3xl",
+            "pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full blur-3xl",
             styles.orb
           )}
         />
         <div
           className={cn(
-            "pointer-events-none absolute -bottom-12 -left-8 h-24 w-24 rounded-full blur-2xl opacity-60",
+            "pointer-events-none absolute -bottom-10 -left-6 h-20 w-20 rounded-full blur-2xl opacity-60",
             styles.orb
           )}
         />
 
-        <div className="relative p-4">
-          <div className="flex items-start justify-between gap-3">
+        <div className="relative flex h-full flex-col p-3">
+          <div className="flex items-start justify-between gap-2.5">
             <div
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-md",
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br shadow-md",
                 styles.iconGradient
               )}
             >
-              <Icon className="h-5 w-5 text-white" strokeWidth={2} />
+              <Icon className="h-4 w-4 text-white" strokeWidth={2} />
             </div>
             <div className="min-w-0 flex-1 text-right sm:text-left">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
                 {title}
               </p>
-              {subtitle && (
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                  {subtitle}
-                </p>
-              )}
+              <p
+                className={cn(
+                  "mt-0.5 truncate text-[10px] text-muted-foreground",
+                  !subtitle && "invisible"
+                )}
+              >
+                {subtitle || "\u00A0"}
+              </p>
             </div>
           </div>
 
-          <div className="mt-3">
+          <div className="mt-2 flex flex-1 flex-col">
             <p
               className={cn(
-                "text-2xl font-bold tracking-tight tabular-nums",
+                "text-xl font-bold tracking-tight tabular-nums",
                 "bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text text-transparent",
                 "dark:from-white dark:to-white/80"
               )}
@@ -201,25 +222,53 @@ export function PremiumMetricCard({
               {value.toLocaleString()}
             </p>
 
-            {trend !== undefined && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset",
-                    trend > 0 &&
-                      "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
-                    trend < 0 &&
-                      "bg-rose-500/10 text-rose-600 ring-rose-500/20 dark:text-rose-400",
-                    trend === 0 && "bg-muted text-muted-foreground ring-border"
-                  )}
-                >
-                  {trend > 0 && <ArrowUp className="mr-1 h-3 w-3" />}
-                  {trend < 0 && <ArrowDown className="mr-1 h-3 w-3" />}
-                  {trend === 0 ? "No change" : `${Math.abs(trend)}%`}
+            {/* Always reserve badge-row height so grid cards stay equal. */}
+            <div className="mt-1.5 flex min-h-[22px] flex-wrap items-center gap-1.5">
+              {showBadge && badge.kind === "new" && (
+                <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-500/20 dark:text-emerald-400">
+                  <ArrowUp className="mr-0.5 h-2.5 w-2.5" />
+                  New
                 </span>
-                <span className="text-[11px] text-muted-foreground">vs last month</span>
-              </div>
-            )}
+              )}
+
+              {showBadge && badge.kind === "percent" && (
+                <>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset",
+                      badge.value > 0 &&
+                        "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20 dark:text-emerald-400",
+                      badge.value < 0 &&
+                        "bg-rose-500/10 text-rose-600 ring-rose-500/20 dark:text-rose-400",
+                      badge.value === 0 &&
+                        "bg-muted text-muted-foreground ring-border"
+                    )}
+                  >
+                    {badge.value > 0 && (
+                      <ArrowUp className="mr-0.5 h-2.5 w-2.5" />
+                    )}
+                    {badge.value < 0 && (
+                      <ArrowDown className="mr-0.5 h-2.5 w-2.5" />
+                    )}
+                    {badge.value === 0
+                      ? "No change"
+                      : `${Math.abs(badge.value)}%`}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    vs last month
+                  </span>
+                </>
+              )}
+
+              {!showBadge && (
+                <span
+                  className="invisible inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold"
+                  aria-hidden
+                >
+                  No change
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
@@ -233,7 +282,10 @@ export interface PremiumStatusCardProps {
   percentage: number;
   icon: LucideIcon;
   variant?: PremiumCardVariant;
-  path: string;
+  /** When clickable, navigates to this path. Ignored when clickable={false}. */
+  path?: string;
+  /** Display-only when false (no link, no pointer cursor, no hover navigate). Default true. */
+  clickable?: boolean;
   className?: string;
 }
 
@@ -244,63 +296,77 @@ export function PremiumStatusCard({
   icon: Icon,
   variant = "blue",
   path,
+  clickable = true,
   className,
 }: PremiumStatusCardProps) {
   const styles = variantStyles[variant];
   const safePercent = Math.min(100, Math.max(0, percentage));
+  const isInteractive = clickable && Boolean(path);
+
+  const card = (
+    <motion.div
+      whileHover={isInteractive ? { y: -3, scale: 1.01 } : undefined}
+      transition={
+        isInteractive
+          ? { type: "spring", stiffness: 400, damping: 30 }
+          : undefined
+      }
+      className={cn(
+        "relative overflow-hidden rounded-xl border border-border/50",
+        "bg-gradient-to-br shadow-sm backdrop-blur-md",
+        styles.surface,
+        isInteractive && "transition-all duration-300 group-hover:shadow-lg",
+        isInteractive && styles.borderGlow
+      )}
+    >
+      <div
+        className={cn(
+          "pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl",
+          styles.orb
+        )}
+      />
+
+      <div className="relative p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br shadow-sm",
+              styles.iconGradient
+            )}
+          >
+            <Icon className="h-4 w-4 text-white" strokeWidth={2} />
+          </div>
+          <span className="text-xl font-bold tabular-nums tracking-tight">
+            {count.toLocaleString()}
+          </span>
+        </div>
+
+        <h4 className="mt-2 text-xs font-semibold text-foreground">{title}</h4>
+
+        <div className="mt-2 space-y-1">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/80">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${safePercent}%` }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className={cn("h-full rounded-full bg-gradient-to-r", styles.progress)}
+            />
+          </div>
+          <p className="text-[10px] font-medium text-muted-foreground">
+            {safePercent.toFixed(1)}% of total
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  if (!isInteractive) {
+    return <div className={cn(className)}>{card}</div>;
+  }
 
   return (
-    <Link href={path} className={cn("block group", className)}>
-      <motion.div
-        whileHover={{ y: -3, scale: 1.01 }}
-        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-        className={cn(
-          "relative overflow-hidden rounded-xl border border-border/50",
-          "bg-gradient-to-br shadow-sm backdrop-blur-md",
-          "transition-all duration-300 group-hover:shadow-lg",
-          styles.surface,
-          styles.borderGlow
-        )}
-      >
-        <div
-          className={cn(
-            "pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full blur-2xl",
-            styles.orb
-          )}
-        />
-
-        <div className="relative p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div
-              className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br shadow-sm",
-                styles.iconGradient
-              )}
-            >
-              <Icon className="h-4 w-4 text-white" strokeWidth={2} />
-            </div>
-            <span className="text-xl font-bold tabular-nums tracking-tight">
-              {count.toLocaleString()}
-            </span>
-          </div>
-
-          <h4 className="mt-2 text-xs font-semibold text-foreground">{title}</h4>
-
-          <div className="mt-2 space-y-1">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/80">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${safePercent}%` }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                className={cn("h-full rounded-full bg-gradient-to-r", styles.progress)}
-              />
-            </div>
-            <p className="text-[10px] font-medium text-muted-foreground">
-              {safePercent.toFixed(1)}% of total
-            </p>
-          </div>
-        </div>
-      </motion.div>
+    <Link href={path!} className={cn("block group", className)}>
+      {card}
     </Link>
   );
 }

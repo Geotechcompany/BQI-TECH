@@ -1,17 +1,8 @@
 "use client";
 
-import { Users, FileText, CheckCircle, XCircle, UserCheck, Code, MessageSquare, ArrowRight, BarChart, TrendingUp, Briefcase, Target, Activity } from 'lucide-react';
+import { Users, FileText, XCircle, ArrowRight, Briefcase, Activity, ChevronDown, Check } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { Doughnut } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-} from 'chart.js';
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { adminApi } from '@/lib/api-backend';
@@ -20,20 +11,49 @@ import { toast } from 'react-hot-toast';
 import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
 import { Application } from "@/types/application";
 import { getPositionDisplay } from "@/components/admin/utils/table-utils";
-import {
-  PremiumMetricCard,
-  PremiumStatusCard,
-} from "@/components/admin/premium-cards";
+import { PremiumMetricCard } from "@/components/admin/premium-cards";
 import { RecentApplicationsPanel } from "@/components/admin/RecentApplicationsPanel";
 import { OverviewWelcomeBanner } from "@/components/admin/OverviewWelcomeBanner";
+import { Version4WelcomeModal } from "@/components/admin/Version4WelcomeModal";
+import { MyAgendaWidget } from "@/components/admin/overview/MyAgendaWidget";
+import { MyTasksWidget } from "@/components/admin/overview/MyTasksWidget";
+import { OverviewActionBar } from "@/components/admin/overview/OverviewActionBar";
 import { JobPostCard } from "@/components/ui/job-post-card";
-import { AdminTrendChart } from "@/components/admin/AdminTrendChart";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
+import { useAuth } from "@/contexts/AuthContext";
 import {
-  normalizeTrendSeries,
-  trendSeriesHasActivity,
-} from "@/lib/normalize-trend-data";
-
-ChartJS.register(ArcElement, Tooltip, Legend);
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  type PositionsFilter,
+  type JobOwnershipMeta,
+  type JobHiringTeamMember,
+  POSITIONS_FILTER_OPTIONS,
+  positionsFilterLabel,
+  readPositionsFilter,
+  writePositionsFilter,
+  readStarredJobIds,
+  writeStarredJobIds,
+  isMyPosition,
+  extractHiringTeamIds,
+  extractHiringTeamMembers,
+  filteredJobIdSet,
+  recentApplicationsSubtitle,
+  extractApplicationJobId,
+} from "@/lib/overview-positions";
+import {
+  computeMomBadge,
+  countInCalendarMonths,
+  countDatesInLast7VsPriorMonth,
+  daysNeededForMom,
+  getCalendarMonthBounds,
+  sumTrendCountsByCalendarMonth,
+  sumTrendCountsLast7VsPriorMonth,
+  type TrendDay,
+} from "@/lib/mom-delta";
 
 interface OverviewData {
   applications: {
@@ -58,6 +78,7 @@ interface OverviewData {
 }
 
 interface JobApplicationSummary {
+  jobId?: string | null;
   position: string;
   totalApplications: number;
   isActive?: boolean | null;
@@ -70,75 +91,200 @@ interface ApplicationsByJob {
 }
 
 export default function OverviewPage() {
+  const { user } = useAuth();
+  const userId = user?.id || "";
   const [overviewData, setOverviewData] = useState<OverviewData | null>(null);
   const [allApplications, setAllApplications] = useState<Application[]>([]);
   const [applicationsByJob, setApplicationsByJob] = useState<ApplicationsByJob | null>(null);
   const [recentApplications, setRecentApplications] = useState<Application[]>([]);
-  const [trendData, setTrendData] = useState<any>(null);
   const [jobTitles, setJobTitles] = useState<Record<string, string>>({});
+  const [jobMetaById, setJobMetaById] = useState<Record<string, JobOwnershipMeta>>({});
+  const [jobCreatedDates, setJobCreatedDates] = useState<string[]>([]);
+  const [userCreatedDates, setUserCreatedDates] = useState<string[]>([]);
+  const [trendDays, setTrendDays] = useState<TrendDay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewApplication, setViewApplication] = useState<Application | null>(null);
+  const [positionsFilter, setPositionsFilter] = useState<PositionsFilter>("mine");
+  const [starredJobIds, setStarredJobIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setPositionsFilter(readPositionsFilter());
+  }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      setStarredJobIds(new Set());
+      return;
+    }
+    setStarredJobIds(readStarredJobIds(userId));
+  }, [userId]);
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  const handlePositionsFilterChange = (filter: PositionsFilter) => {
+    setPositionsFilter(filter);
+    writePositionsFilter(filter);
+  };
+
+  const handleStarToggle = (jobId: string, starred: boolean) => {
+    if (!userId) {
+      toast.error("Sign in to star positions");
+      return;
+    }
+    setStarredJobIds((previous) => {
+      const next = new Set(previous);
+      if (starred) next.add(jobId);
+      else next.delete(jobId);
+      writeStarredJobIds(userId, next);
+      return next;
+    });
+  };
+
+  const handleJobStatusChange = (jobId: string, isActive: boolean) => {
+    setJobMetaById((previous) => {
+      const existing = previous[jobId];
+      if (!existing) return previous;
+      return { ...previous, [jobId]: { ...existing, isActive } };
+    });
+    setApplicationsByJob((previous) => {
+      if (!previous) return previous;
+      return {
+        applicationsByJob: previous.applicationsByJob.map((entry) =>
+          entry.jobId === jobId ? { ...entry, isActive } : entry
+        ),
+      };
+    });
+  };
+
+  const handleHiringTeamChange = (jobId: string, hiringTeam: JobHiringTeamMember[]) => {
+    setJobMetaById((previous) => {
+      const existing = previous[jobId];
+      if (!existing) return previous;
+      return {
+        ...previous,
+        [jobId]: {
+          ...existing,
+          hiringTeam,
+          hiringTeamIds: hiringTeam.map((member) => member.id),
+        },
+      };
+    });
+  };
+
+  const fetchUserCreatedDatesForMom = async (): Promise<string[]> => {
+    const { lastMonthStart } = getCalendarMonthBounds();
+    const dates: string[] = [];
+    let skip = 0;
+    const pageSize = 100;
+
+    while (true) {
+      const response = await adminApi.getUsers({ skip, limit: pageSize });
+      const users = response?.users || [];
+      if (users.length === 0) break;
+
+      let reachedOlderThanWindow = false;
+      for (const user of users) {
+        const createdAt = user?.createdAt;
+        if (!createdAt) continue;
+        const created = new Date(createdAt);
+        if (Number.isNaN(created.getTime())) continue;
+        if (created >= lastMonthStart) {
+          dates.push(String(createdAt));
+        } else {
+          reachedOlderThanWindow = true;
+          break;
+        }
+      }
+
+      if (users.length < pageSize || reachedOlderThanWindow) break;
+      skip += pageSize;
+    }
+
+    return dates;
+  };
 
   const loadDashboardData = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Load all data in parallel
-      const [overviewResponse, appsResponse, recentAppsResponse, trendsResponse, jobApplicationsResponse, jobsResponse] = await Promise.allSettled([
+      const trendDaysNeeded = daysNeededForMom();
+
+      const [
+        overviewResponse,
+        appsResponse,
+        recentAppsResponse,
+        jobApplicationsResponse,
+        jobsResponse,
+        trendsResponse,
+        usersMomResponse,
+      ] = await Promise.allSettled([
         adminApi.getOverview(),
         adminApplicationsApi.getAllApplications({ limit: 100 }),
         adminApi.getApplications({ limit: 10 }),
-        adminApi.getTrends(30),
         adminApi.getApplicationsByJob(),
         adminApi.getJobPostings({ limit: 100 }),
+        adminApi.getTrends(trendDaysNeeded),
+        fetchUserCreatedDatesForMom(),
       ]);
 
-      // Handle overview data
       if (overviewResponse.status === 'fulfilled') {
         setOverviewData(overviewResponse.value);
       }
 
-      // Handle applications data
       if (appsResponse.status === 'fulfilled') {
         const apps = appsResponse.value?.applications || [];
         setAllApplications(apps);
       }
 
-      // Handle recent applications
       if (recentAppsResponse.status === 'fulfilled') {
         const apps = recentAppsResponse.value?.applications || [];
-        setRecentApplications(apps.slice(0, 8));
+        setRecentApplications(apps.slice(0, 4));
       }
 
-      // Handle trends data
-      if (trendsResponse.status === 'fulfilled') {
-        setTrendData(trendsResponse.value);
-      }
-
-      // Handle applications by job data
       if (jobApplicationsResponse.status === 'fulfilled') {
         setApplicationsByJob(jobApplicationsResponse.value);
       }
 
-      // Build a job title lookup for robust position rendering
       if (jobsResponse.status === 'fulfilled') {
         const jobs = Array.isArray(jobsResponse.value)
           ? jobsResponse.value
           : jobsResponse.value?.jobPostings || [];
         const jobTitlesMap: Record<string, string> = {};
+        const jobMetaMap: Record<string, JobOwnershipMeta> = {};
+        const createdDates: string[] = [];
         jobs.forEach((job: any) => {
           const jobId = job?.id || (job?._id ? String(job._id) : null);
-          if (jobId && job?.title) {
-            jobTitlesMap[String(jobId)] = String(job.title);
+          if (!jobId) return;
+          const id = String(jobId);
+          if (job?.title) {
+            jobTitlesMap[id] = String(job.title);
           }
+          jobMetaMap[id] = {
+            id,
+            title: String(job?.title || ""),
+            createdBy: job?.createdBy ? String(job.createdBy) : null,
+            hiringTeam: extractHiringTeamMembers(job?.hiringTeam),
+            hiringTeamIds: extractHiringTeamIds(job?.hiringTeam),
+            isActive: Boolean(job?.isActive),
+          };
+          const createdAt = job?.createdAt || job?.postedDate;
+          if (createdAt) createdDates.push(String(createdAt));
         });
         setJobTitles(jobTitlesMap);
+        setJobMetaById(jobMetaMap);
+        setJobCreatedDates(createdDates);
+      }
+
+      if (trendsResponse.status === 'fulfilled') {
+        setTrendDays(trendsResponse.value?.trends || []);
+      }
+
+      if (usersMomResponse.status === 'fulfilled') {
+        setUserCreatedDates(usersMomResponse.value);
       }
 
     } catch (err) {
@@ -153,7 +299,6 @@ export default function OverviewPage() {
   const computedStats = useMemo(() => {
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
     const stats = {
       total: allApplications.length,
@@ -167,8 +312,7 @@ export default function OverviewPage() {
       recent: 0,
     };
 
-    const trendMap = new Map<string, number>();
-    const byJobMap = new Map<string, number>();
+    const byJobMap = new Map<string, { position: string; totalApplications: number; jobId: string | null }>();
 
     allApplications.forEach((application) => {
       const status = String(application.status || "").toLowerCase();
@@ -185,56 +329,48 @@ export default function OverviewPage() {
         stats.recent += 1;
       }
 
-      if (!Number.isNaN(appliedDate) && appliedDate >= thirtyDaysAgo) {
-        const dayKey = new Date(appliedDate).toISOString().split("T")[0];
-        trendMap.set(dayKey, (trendMap.get(dayKey) || 0) + 1);
-      }
-
       const position = getPositionDisplay(application, jobTitles) || "Unknown Position";
-      byJobMap.set(position, (byJobMap.get(position) || 0) + 1);
+      const rawJobId = application.jobId;
+      const appJobId =
+        typeof rawJobId === "string"
+          ? rawJobId
+          : rawJobId && typeof rawJobId === "object" && "_id" in rawJobId
+            ? String((rawJobId as { _id: string })._id)
+            : null;
+      const groupKey = appJobId || position;
+      const existing = byJobMap.get(groupKey);
+      if (existing) {
+        existing.totalApplications += 1;
+        if (!existing.jobId && appJobId) existing.jobId = appJobId;
+      } else {
+        byJobMap.set(groupKey, {
+          position,
+          totalApplications: 1,
+          jobId: appJobId,
+        });
+      }
     });
 
-    const trendLabels: string[] = [];
-    const trendCounts: number[] = [];
-    for (let i = 29; i >= 0; i -= 1) {
-      const date = new Date(now - i * 24 * 60 * 60 * 1000);
-      const dayKey = date.toISOString().split("T")[0];
-      trendLabels.push(
-        date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-      );
-      trendCounts.push(trendMap.get(dayKey) || 0);
-    }
-
-    const applicationsByJobData: JobApplicationSummary[] = Array.from(byJobMap.entries()).map(
-      ([position, totalApplications]) => ({
-        position,
-        totalApplications,
+    const applicationsByJobData: JobApplicationSummary[] = Array.from(byJobMap.values()).map(
+      (entry) => ({
+        jobId: entry.jobId,
+        position: entry.position,
+        totalApplications: entry.totalApplications,
         isActive: null,
       })
     );
 
     return {
       stats,
-      trendLabels,
-      trendCounts,
       applicationsByJobData,
       recentApplications: [...allApplications]
         .sort(
           (a, b) =>
             new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
         )
-        .slice(0, 8),
+        .slice(0, 4),
     };
   }, [allApplications, jobTitles]);
-
-  const trendSeries = useMemo(
-    () =>
-      normalizeTrendSeries(trendData?.trends, {
-        labels: computedStats.trendLabels,
-        counts: computedStats.trendCounts,
-      }),
-    [trendData?.trends, computedStats.trendLabels, computedStats.trendCounts]
-  );
 
   const pieByJobData: JobApplicationSummary[] =
     applicationsByJob?.applicationsByJob && applicationsByJob.applicationsByJob.length > 0
@@ -250,102 +386,183 @@ export default function OverviewPage() {
     );
   };
 
-  const jobPostBreakdown = [...pieByJobData]
-    .filter((item) => isResolvableJobPosition(item.position))
-    .map((item) => ({
-      position: item.position || "Unknown Position",
-      totalApplications: item.totalApplications || 0,
-      isActive: item.isActive ?? null,
-    }))
-    .sort((a, b) => b.totalApplications - a.totalApplications);
+  const titleToJobId = useMemo(() => {
+    const map = new Map<string, string>();
+    Object.values(jobMetaById).forEach((job) => {
+      const key = job.title.trim().toLowerCase();
+      if (key && !map.has(key)) {
+        map.set(key, job.id);
+      }
+    });
+    return map;
+  }, [jobMetaById]);
 
-  const pieChartJobData = pieByJobData.filter((item) =>
-    isResolvableJobPosition(item.position)
+  const resolveJobId = (item: JobApplicationSummary): string | null => {
+    if (item.jobId) return String(item.jobId);
+    const fromTitle = titleToJobId.get((item.position || "").trim().toLowerCase());
+    return fromTitle || null;
+  };
+
+  const visibleJobIds = useMemo(
+    () =>
+      filteredJobIdSet(
+        Object.values(jobMetaById),
+        positionsFilter,
+        userId,
+        starredJobIds
+      ),
+    [jobMetaById, positionsFilter, userId, starredJobIds]
   );
 
-  const pieChartData = {
-    labels: pieChartJobData.map(item => {
-      const position = item.position || 'Unknown Position';
-      return position.length > 20 ? `${position.substring(0, 20)}...` : position;
-    }) || [],
-    datasets: [
-      {
-        data: pieChartJobData.map(item => item.totalApplications || 0) || [],
-        backgroundColor: [
-          'rgba(59, 130, 246, 0.8)',
-          'rgba(16, 185, 129, 0.8)',
-          'rgba(139, 92, 246, 0.8)',
-          'rgba(245, 158, 11, 0.8)',
-          'rgba(239, 68, 68, 0.8)',
-          'rgba(236, 72, 153, 0.8)',
-          'rgba(14, 165, 233, 0.8)',
-          'rgba(34, 197, 94, 0.8)',
-          'rgba(168, 85, 247, 0.8)',
-          'rgba(251, 146, 60, 0.8)',
-        ],
-        borderColor: [
-          'rgba(59, 130, 246, 1)',
-          'rgba(16, 185, 129, 1)',
-          'rgba(139, 92, 246, 1)',
-          'rgba(245, 158, 11, 1)',
-          'rgba(239, 68, 68, 1)',
-          'rgba(236, 72, 153, 1)',
-          'rgba(14, 165, 233, 1)',
-          'rgba(34, 197, 94, 1)',
-          'rgba(168, 85, 247, 1)',
-          'rgba(251, 146, 60, 1)',
-        ],
-        borderWidth: 2,
-      },
-    ],
+  const applicationBelongsToVisibleJobs = (application: Application): boolean => {
+    if (visibleJobIds === null) return true;
+    const jobId = extractApplicationJobId(application);
+    if (jobId && visibleJobIds.has(jobId)) return true;
+    const titleKey = (application.position || "").trim().toLowerCase();
+    if (!titleKey) return false;
+    const fromTitle = titleToJobId.get(titleKey);
+    return Boolean(fromTitle && visibleJobIds.has(fromTitle));
   };
 
-  const pieChartOptions = {
-    cutout: "68%",
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'right' as const,
-        labels: {
-          padding: 14,
-          usePointStyle: true,
-          pointStyle: 'circle',
-          font: { size: 11 },
-          color: 'hsl(var(--muted-foreground))',
-          generateLabels: (chart: any) => {
-            const data = chart.data;
-            if (data.labels.length && data.datasets.length) {
-              return data.labels.map((label: string, i: number) => {
-                const value = data.datasets[0].data[i];
-                return {
-                  text: `${label} (${value})`,
-                  fillStyle: data.datasets[0].backgroundColor[i],
-                  strokeStyle: data.datasets[0].borderColor[i],
-                  lineWidth: 0,
-                  pointStyle: 'circle',
-                };
-              });
-            }
-            return [];
-          },
-        },
-      },
-      tooltip: {
-        backgroundColor: 'hsl(var(--popover))',
-        titleColor: 'hsl(var(--popover-foreground))',
-        bodyColor: 'hsl(var(--popover-foreground))',
-        borderColor: 'hsl(var(--border))',
-        borderWidth: 1,
-        callbacks: {
-          label: function(context: any) {
-            const count = context.parsed;
-            return `${count} application${count === 1 ? "" : "s"}`;
-          }
-        }
-      },
-    },
-  };
+  const jobPostBreakdown = useMemo(() => {
+    const rows = [...pieByJobData]
+      .filter((item) => isResolvableJobPosition(item.position))
+      .map((item) => {
+        const jobId = resolveJobId(item);
+        const meta = jobId ? jobMetaById[jobId] : undefined;
+        const isActive =
+          meta?.isActive ??
+          item.isActive ??
+          null;
+        return {
+          jobId,
+          position: item.position || "Unknown Position",
+          totalApplications: item.totalApplications || 0,
+          isActive,
+          createdBy: meta?.createdBy ?? null,
+          hiringTeam: meta?.hiringTeam ?? [],
+          hiringTeamIds: meta?.hiringTeamIds ?? [],
+        };
+      })
+      .sort((a, b) => b.totalApplications - a.totalApplications);
+
+    return rows.filter((row) => {
+      if (positionsFilter === "all") return true;
+      if (!row.jobId) return false;
+      if (positionsFilter === "starred") {
+        return starredJobIds.has(row.jobId);
+      }
+      return isMyPosition(
+        { createdBy: row.createdBy, hiringTeamIds: row.hiringTeamIds },
+        userId
+      );
+    });
+  }, [
+    pieByJobData,
+    jobMetaById,
+    titleToJobId,
+    positionsFilter,
+    starredJobIds,
+    userId,
+  ]);
+
+  const scopedApplications = useMemo(() => {
+    if (visibleJobIds === null) return allApplications;
+    return allApplications.filter(applicationBelongsToVisibleJobs);
+  }, [allApplications, visibleJobIds, titleToJobId]);
+
+  const scopedStats = useMemo(() => {
+    if (visibleJobIds === null) return null;
+
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const stats = {
+      total: scopedApplications.length,
+      new: 0,
+      shortlisted: 0,
+      interviewing: 0,
+      hired: 0,
+      rejected: 0,
+      technical_assessment: 0,
+      disqualified: 0,
+      recent: 0,
+    };
+
+    scopedApplications.forEach((application) => {
+      const status = String(application.status || "").toLowerCase();
+      if (status === "new") stats.new += 1;
+      else if (status === "shortlisted") stats.shortlisted += 1;
+      else if (status === "interviewing") stats.interviewing += 1;
+      else if (status === "hired") stats.hired += 1;
+      else if (status === "rejected") stats.rejected += 1;
+      else if (status === "technical_assessment" || status === "technical-assessment") {
+        stats.technical_assessment += 1;
+      } else if (status === "disqualified") stats.disqualified += 1;
+
+      const appliedDate = new Date(application.appliedDate).getTime();
+      if (!Number.isNaN(appliedDate) && appliedDate >= sevenDaysAgo) {
+        stats.recent += 1;
+      }
+    });
+
+    return stats;
+  }, [visibleJobIds, scopedApplications]);
+
+  const filteredRecentApplications = useMemo(() => {
+    const fromAll = [...scopedApplications].sort(
+      (a, b) =>
+        new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime()
+    );
+    if (fromAll.length > 0) return fromAll.slice(0, 4);
+
+    const fallback = recentApplications.filter(applicationBelongsToVisibleJobs);
+    return fallback.slice(0, 4);
+  }, [scopedApplications, recentApplications, visibleJobIds, titleToJobId]);
+
+  const recentViewAllHref = useMemo(() => {
+    if (visibleJobIds === null || visibleJobIds.size !== 1) {
+      return "/admin/applications";
+    }
+    const [onlyJobId] = Array.from(visibleJobIds);
+    return `/admin/applications?jobId=${encodeURIComponent(onlyJobId)}`;
+  }, [visibleJobIds]);
+
+  const applicationEventDate = (application: Application): string | Date | null =>
+    application.appliedDate || application.createdAt || null;
+
+  const metricMomBadges = useMemo(() => {
+    const useTrendsForApps = visibleJobIds === null && trendDays.length > 0;
+
+    const totalAppsPeriod = useTrendsForApps
+      ? sumTrendCountsByCalendarMonth(trendDays)
+      : countInCalendarMonths(scopedApplications.map(applicationEventDate));
+
+    const recentAppsPeriod = useTrendsForApps
+      ? sumTrendCountsLast7VsPriorMonth(trendDays)
+      : countDatesInLast7VsPriorMonth(scopedApplications.map(applicationEventDate));
+
+    const jobsPeriod = countInCalendarMonths(jobCreatedDates);
+    const usersPeriod = countInCalendarMonths(userCreatedDates);
+
+    return {
+      totalApplications: computeMomBadge(
+        totalAppsPeriod.thisMonth,
+        totalAppsPeriod.lastMonth
+      ),
+      activeJobs: computeMomBadge(jobsPeriod.thisMonth, jobsPeriod.lastMonth),
+      recentApplications: computeMomBadge(
+        recentAppsPeriod.thisMonth,
+        recentAppsPeriod.lastMonth
+      ),
+      totalUsers: computeMomBadge(usersPeriod.thisMonth, usersPeriod.lastMonth),
+    };
+  }, [
+    visibleJobIds,
+    trendDays,
+    scopedApplications,
+    jobCreatedDates,
+    userCreatedDates,
+  ]);
 
   const handleViewApplication = (app: Application) => {
     setViewApplication(app);
@@ -354,17 +571,21 @@ export default function OverviewPage() {
   if (isLoading) return (
     <AdminPageLayout title="Dashboard Overview" showSearch={false}>
       <div className="min-h-screen">
-        <div className="space-y-5 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
-          <Skeleton className="h-40 sm:h-44 rounded-2xl" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        <div className="space-y-3 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
+          <Skeleton className="h-36 sm:h-40 rounded-xl" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <Skeleton className="h-80 lg:col-span-2 rounded-2xl" />
-            <Skeleton className="h-80 rounded-2xl" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <Skeleton className="h-72 lg:col-span-2 rounded-xl" />
+            <div className="space-y-3">
+              <Skeleton className="h-36 rounded-xl" />
+              <Skeleton className="h-36 rounded-xl" />
+            </div>
           </div>
         </div>
       </div>
+      <OverviewActionBar />
     </AdminPageLayout>
   );
 
@@ -377,45 +598,59 @@ export default function OverviewPage() {
           </div>
           <h2 className="text-2xl font-bold mb-4 text-foreground">Something went wrong</h2>
           <p className="text-muted-foreground mb-6">{error}</p>
-          <Button onClick={loadDashboardData} className="bg-blue-600 hover:bg-blue-700">
+          <Button onClick={loadDashboardData}>
             <ArrowRight className="mr-2 h-4 w-4" />
             Try Again
           </Button>
         </div>
       </div>
+      <OverviewActionBar />
     </AdminPageLayout>
   );
 
   if (!overviewData) return null;
 
-  // Use backend overview counts (all non-archived applications), not the paginated list fetch.
-  const effectiveStats = overviewData.applications;
-
-  const totalApplications = effectiveStats.total || 1;
+  // All Positions: backend overview counts. Mine/Starred: client counts for visible jobs.
+  const effectiveStats = scopedStats ?? overviewData.applications;
 
   return (
     <AdminPageLayout
       title="Dashboard Overview"
       showSearch={false}
+      tourId="overview"
+      guideInBanner
     >
+      <TourPageHelper tourId="overview" />
       <div className="min-h-screen bg-background">
-        <div className="space-y-5 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
+        <div className="space-y-3 px-4 md:px-6 pb-6 pt-2 w-full max-w-none">
+          <Version4WelcomeModal tourId="overview" />
+
           <OverviewWelcomeBanner
-            recentApplications={effectiveStats.recent}
+            tourId="overview"
+            recentApplications={overviewData.applications.recent}
             activeJobs={overviewData.jobs.active}
-            newApplications={effectiveStats.new}
+            newApplications={overviewData.applications.new}
           />
 
           {/* Key Metrics Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3"
+            data-tour="overview-metrics"
+          >
             <PremiumMetricCard
               title="Total Applications"
               value={effectiveStats.total}
               icon={FileText}
               variant="blue"
               path="/admin/applications"
-              subtitle="All time applications"
-              trend={12}
+              subtitle={
+                positionsFilter === "all"
+                  ? "All time applications"
+                  : positionsFilter === "mine"
+                    ? "For your positions"
+                    : "For starred positions"
+              }
+              mom={metricMomBadges.totalApplications}
             />
             <PremiumMetricCard
               title="Active Jobs"
@@ -424,16 +659,22 @@ export default function OverviewPage() {
               variant="green"
               path="/admin/job-postings"
               subtitle="Currently hiring"
-              trend={8}
+              mom={metricMomBadges.activeJobs}
             />
             <PremiumMetricCard
               title="Recent Applications"
               value={effectiveStats.recent}
               icon={Activity}
-              variant="purple"
+              variant="brand"
               path="/admin/applications"
-              subtitle="Last 7 days"
-              trend={25}
+              subtitle={
+                positionsFilter === "all"
+                  ? "Last 7 days"
+                  : positionsFilter === "mine"
+                    ? "Last 7 days · your positions"
+                    : "Last 7 days · starred"
+              }
+              mom={metricMomBadges.recentApplications}
             />
             <PremiumMetricCard
               title="Total Users"
@@ -442,166 +683,102 @@ export default function OverviewPage() {
               variant="orange"
               path="/admin/user-management"
               subtitle="Registered users"
-              trend={5}
+              mom={metricMomBadges.totalUsers}
             />
           </div>
 
           {/* Applications per Job Post Breakdown */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-blue-500/10 rounded-lg ring-1 ring-blue-500/20">
-                <Briefcase className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <div className="space-y-2.5" data-tour="overview-jobs-breakdown">
+            <div
+              className="flex items-center gap-2"
+              data-tour="overview-positions-filter"
+            >
+              <div className="rounded-md bg-[#272156]/[0.08] p-1.5 ring-1 ring-[#272156]/15">
+                <Briefcase className="h-3.5 w-3.5 text-[#272156]" />
               </div>
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Applications by Job Post</h2>
-                <p className="text-xs text-muted-foreground">
-                  Active applications per job position, including inactive postings
-                </p>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="group inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Filter positions"
+                  >
+                    <span className="text-sm font-semibold text-foreground">
+                      {positionsFilterLabel(positionsFilter)}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition group-data-[state=open]:rotate-180" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56 bg-white shadow-md">
+                  {POSITIONS_FILTER_OPTIONS.map((option) => (
+                    <DropdownMenuItem
+                      key={option.value}
+                      onSelect={() => handlePositionsFilterChange(option.value)}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span>{option.label}</span>
+                      {positionsFilter === option.value && (
+                        <Check className="h-4 w-4 text-[#272156]" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             {jobPostBreakdown.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {jobPostBreakdown.map((item, index) => (
                   <JobPostCard
-                    key={item.position}
+                    key={item.jobId || item.position}
                     title={item.position}
                     count={item.totalApplications}
                     subtitle={item.totalApplications === 1 ? "application" : "applications"}
                     index={index}
                     isActive={item.isActive}
+                    jobId={item.jobId}
+                    isStarred={item.jobId ? starredJobIds.has(item.jobId) : false}
+                    hiringTeam={item.hiringTeam}
+                    onStatusChange={handleJobStatusChange}
+                    onStarToggle={handleStarToggle}
+                    onHiringTeamChange={handleHiringTeamChange}
                   />
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-border/60 bg-card py-6 flex items-center justify-center text-muted-foreground">
+              <div className="rounded-xl border border-border/60 bg-card py-5 flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
-                  <Briefcase className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
-                  <p className="text-sm">No job application data</p>
+                  <Briefcase className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
+                  <p className="text-sm">
+                    {positionsFilter === "starred"
+                      ? "No starred positions yet"
+                      : positionsFilter === "mine"
+                        ? "No positions assigned to you"
+                        : "No job application data"}
+                  </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Application Status Overview */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <PremiumStatusCard
-              title="New"
-              count={effectiveStats.new}
-              percentage={(effectiveStats.new / totalApplications) * 100}
-              icon={FileText}
-              variant="blue"
-              path="/admin/applications?status=new"
-            />
-            <PremiumStatusCard
-              title="Shortlisted"
-              count={effectiveStats.shortlisted}
-              percentage={(effectiveStats.shortlisted / totalApplications) * 100}
-              icon={UserCheck}
-              variant="green"
-              path="/admin/shortlisted"
-            />
-            <PremiumStatusCard
-              title="Interviewing"
-              count={effectiveStats.interviewing}
-              percentage={(effectiveStats.interviewing / totalApplications) * 100}
-              icon={MessageSquare}
-              variant="purple"
-              path="/admin/interviewing"
-            />
-            <PremiumStatusCard
-              title="Technical"
-              count={effectiveStats.technical_assessment}
-              percentage={(effectiveStats.technical_assessment / totalApplications) * 100}
-              icon={Code}
-              variant="yellow"
-              path="/admin/technical-assessment"
-            />
-            <PremiumStatusCard
-              title="Hired"
-              count={effectiveStats.hired}
-              percentage={(effectiveStats.hired / totalApplications) * 100}
-              icon={CheckCircle}
-              variant="emerald"
-              path="/admin/hired"
-            />
-            <PremiumStatusCard
-              title="Disqualified"
-              count={effectiveStats.disqualified}
-              percentage={(effectiveStats.disqualified / totalApplications) * 100}
-              icon={XCircle}
-              variant="red"
-              path="/admin/disqualified"
-            />
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
+            <div className="xl:col-span-3">
+              <RecentApplicationsPanel
+                applications={filteredRecentApplications}
+                jobTitles={jobTitles}
+                onView={handleViewApplication}
+                maxItems={4}
+                subtitle={recentApplicationsSubtitle(positionsFilter)}
+                viewAllHref={recentViewAllHref}
+              />
+            </div>
+            <div
+              className="flex flex-col gap-3 xl:col-span-2"
+              data-tour="overview-personal-widgets"
+            >
+              <MyAgendaWidget />
+              <MyTasksWidget />
+            </div>
           </div>
-
-          {/* Charts Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-            {/* Application Trends Chart */}
-            <Card className="lg:col-span-3 shadow-sm border-border/70 overflow-hidden">
-              <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
-                <CardTitle className="flex items-center gap-3 text-lg">
-                  <div className="p-2.5 bg-blue-500/10 rounded-xl ring-1 ring-blue-500/20">
-                    <TrendingUp className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <div>Application Trends</div>
-                    <p className="text-sm font-normal text-muted-foreground mt-0.5">
-                      Daily submissions over the last 30 days
-                    </p>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                {trendSeriesHasActivity(trendSeries) ? (
-                  <AdminTrendChart series={trendSeries} />
-                ) : (
-                  <div className="h-80 flex items-center justify-center text-muted-foreground">
-                    <div className="text-center">
-                      <BarChart className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                      <p className="font-medium">No applications in the last 30 days</p>
-                      <p className="text-sm mt-1">Trends will appear once applications start coming in.</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Applications by Job Pie Chart */}
-            <Card className="lg:col-span-2 shadow-sm border-border/70 overflow-hidden">
-              <CardHeader className="pb-4 border-b border-border/50 bg-muted/20">
-                <CardTitle className="flex items-center gap-3 text-lg">
-                  <div className="p-2.5 bg-emerald-500/10 rounded-xl ring-1 ring-emerald-500/20">
-                    <Target className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  Applications by Job
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                {pieChartJobData.length > 0 ? (
-                  <div className="h-80">
-                    <Doughnut data={pieChartData} options={pieChartOptions} />
-                  </div>
-                ) : (
-                  <div className="h-80 flex items-center justify-center text-muted-foreground">
-                    <div className="text-center">
-                      <Target className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                      <p>No job application data</p>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <RecentApplicationsPanel
-            applications={
-              recentApplications.length > 0
-                ? recentApplications
-                : computedStats.recentApplications
-            }
-            jobTitles={jobTitles}
-            onView={handleViewApplication}
-          />
         </div>
       </div>
 
@@ -612,6 +789,7 @@ export default function OverviewPage() {
         onClose={() => setViewApplication(null)}
         jobTitles={jobTitles}
       />
+      <OverviewActionBar />
     </AdminPageLayout>
   );
 }

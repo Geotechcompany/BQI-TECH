@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
-import { Sparkles, Rocket, ArrowRight } from "lucide-react";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { ArrowRight, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WHATS_NEW_PAGE_RELEASES, type WhatsNewRelease } from "@/lib/admin-whats-new";
 
@@ -37,36 +38,32 @@ export default function WhatsNewPage() {
   return (
     <AdminPageLayout title="What's New" showSearch={false}>
       <div className="mx-auto max-w-4xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-8 text-center dark:border-violet-900 dark:from-violet-950/40 dark:via-slate-950 dark:to-blue-950/30"
-        >
-          <div className="mb-4 inline-flex items-center justify-center rounded-full bg-violet-100 p-3 dark:bg-violet-900/40">
-            <Sparkles className="h-6 w-6 text-violet-600 dark:text-violet-300" />
-          </div>
-          <h1 className="mb-2 text-3xl font-bold text-gray-900 dark:text-white">
-            Latest Updates & Improvements
-          </h1>
-          <p className="mx-auto mb-6 max-w-2xl text-gray-600 dark:text-slate-300">
-            AI applicant ranking helps you prioritize candidates faster with scores,
-            role-specific assessments, and inline status updates.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <Button asChild className="bg-violet-600 hover:bg-violet-700">
-              <Link href="/admin/releases/ai-applicant-ranking">
-                Read feature release
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/admin/releases">All releases</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/admin/applications">Open Applications</Link>
-            </Button>
-          </div>
-        </motion.div>
+        <div className="mb-8">
+          <AdminPageWelcomeBanner
+            bannerKey="whats-new"
+            actions={
+              <>
+                <Button
+                  asChild
+                  variant="secondary"
+                  className="bg-white text-[#272055] hover:bg-white/90"
+                >
+                  <Link href="/admin/releases/ai-applicant-ranking">
+                    Read feature release
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                >
+                  <Link href="/admin/releases">All releases</Link>
+                </Button>
+              </>
+            }
+          />
+        </div>
 
         <div className="space-y-6">
           {WHATS_NEW_PAGE_RELEASES.map((update, index) => {
@@ -115,14 +112,14 @@ export default function WhatsNewPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="mt-12 rounded-xl bg-gradient-to-r from-purple-50 to-blue-50 p-6 text-center dark:from-purple-950/30 dark:to-blue-950/30"
+          className="mt-12 rounded-xl border border-border bg-card p-6 text-center"
         >
-          <Rocket className="mx-auto mb-4 h-8 w-8 text-purple-500" />
-          <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white">
-            More Updates Coming Soon
+          <Rocket className="mx-auto mb-4 h-8 w-8 text-[#272055]" />
+          <h2 className="mb-2 text-xl font-semibold text-foreground">
+            More updates ship here
           </h2>
-          <p className="text-gray-600 dark:text-slate-300">
-            We&apos;re continuously improving your hiring workflow.
+          <p className="text-muted-foreground">
+            Smaller fixes and feature notes land on this changelog as they go live.
           </p>
         </motion.div>
       </div>

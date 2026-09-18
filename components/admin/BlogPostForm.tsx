@@ -675,7 +675,7 @@ export function BlogPostForm({ initialData, onSubmit }: BlogPostFormProps) {
                   <FormLabel>Author Title</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="Job title or role"
+                      placeholder="Job title or position"
                       {...field}
                       maxLength={100}
                     />

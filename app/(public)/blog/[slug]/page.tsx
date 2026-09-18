@@ -4,8 +4,9 @@ import { useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useSWR from 'swr'
-import { Loader2, ArrowLeft, Twitter, Linkedin, Facebook, Share2, Mail, MessageSquare } from 'lucide-react'
+import { ArrowLeft, Twitter, Linkedin, Facebook, Share2, Mail, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface BlogPost {
   id: string;
@@ -336,9 +337,16 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
   if (isLoading) {
     return (
       <div className="container mx-auto py-12 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <div className="mx-auto max-w-4xl space-y-6">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-72 w-full rounded-xl" />
+          <Skeleton className="h-10 w-3/4" />
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-[90%]" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-[70%]" />
           </div>
         </div>
       </div>

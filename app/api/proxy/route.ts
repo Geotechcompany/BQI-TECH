@@ -4,6 +4,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_BYTES = 20 * 1024 * 1024;
+const FETCH_TIMEOUT_MS = 30_000;
+const MAX_ATTEMPTS = 3;
 
 const ALLOWED_HOSTNAMES = new Set([
   "dl.dropboxusercontent.com",
@@ -24,34 +26,52 @@ function isHostAllowed(hostname: string): boolean {
   return false;
 }
 
+/** Convert Dropbox share links into direct file download URLs. */
 function normalizeTargetUrl(parsed: URL): URL {
   const next = new URL(parsed.toString());
+  const host = next.hostname.toLowerCase();
 
-  if (next.hostname === "dl.dropboxusercontent.com") {
-    return next;
-  }
-
-  if (next.hostname.includes("dropbox.com")) {
-    if (next.pathname.includes("/scl/fi/")) {
-      next.searchParams.set("raw", "1");
-      next.searchParams.delete("dl");
+  if (host.includes("dropbox.com") || host.endsWith(".dropboxusercontent.com")) {
+    // Shared file links: prefer content CDN + dl=1 for reliable binary fetch.
+    if (next.pathname.includes("/scl/fi/") || next.pathname.includes("/s/")) {
+      if (host === "www.dropbox.com" || host === "dropbox.com") {
+        next.hostname = "dl.dropboxusercontent.com";
+      }
+      next.searchParams.delete("raw");
+      next.searchParams.set("dl", "1");
       return next;
     }
 
-    next.hostname = "dl.dropboxusercontent.com";
+    if (host === "www.dropbox.com" || host === "dropbox.com") {
+      next.hostname = "dl.dropboxusercontent.com";
+    }
+    next.searchParams.delete("raw");
     next.searchParams.set("dl", "1");
   }
 
   return next;
 }
 
+function looksLikePdf(bytes: Uint8Array, pathname: string, search: string, contentType: string): boolean {
+  if (bytes.length >= 4) {
+    const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+    if (magic === "%PDF") return true;
+  }
+  if (contentType.toLowerCase().includes("pdf")) return true;
+  return /\.pdf($|\?)/i.test(pathname + search);
+}
+
 function extractFilename(parsed: URL, contentType: string, contentDisposition: string | null): string {
   if (contentDisposition) {
     const filenameMatch = contentDisposition.match(
-      /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+      /filename\*?[^;=\n]*=(?:UTF-8''|(['"]))?([^;\n]*)/i
     );
-    if (filenameMatch) {
-      return filenameMatch[1].replace(/['"]/g, "");
+    if (filenameMatch?.[2]) {
+      try {
+        return decodeURIComponent(filenameMatch[2].replace(/['"]/g, "").trim());
+      } catch {
+        return filenameMatch[2].replace(/['"]/g, "").trim();
+      }
     }
   }
 
@@ -71,6 +91,33 @@ function extractFilename(parsed: URL, contentType: string, contentDisposition: s
       ? ".txt"
       : "";
   return `document${extension}`;
+}
+
+async function fetchUpstream(fetchUrl: string): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const upstreamResponse = await fetch(fetchUrl, {
+        cache: "no-store",
+        redirect: "follow",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "application/pdf,application/octet-stream,*/*",
+        },
+      });
+      return upstreamResponse;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Upstream fetch failed");
 }
 
 export async function GET(request: Request) {
@@ -97,14 +144,7 @@ export async function GET(request: Request) {
     }
 
     const fetchUrl = normalizeTargetUrl(parsed).toString();
-    const upstreamResponse = await fetch(fetchUrl, {
-      cache: "no-store",
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; BQI-Proxy/1.0)",
-        Accept: "application/pdf,application/octet-stream,*/*",
-      },
-    });
+    const upstreamResponse = await fetchUpstream(fetchUrl);
 
     if (!upstreamResponse.ok) {
       return NextResponse.json(
@@ -118,11 +158,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "File too large to preview" }, { status: 413 });
     }
 
-    const contentType =
+    const bytes = new Uint8Array(buffer);
+    const upstreamType =
       upstreamResponse.headers.get("content-type") || "application/octet-stream";
-    const isPdf =
-      contentType.includes("pdf") ||
-      /\.pdf($|\?)/i.test(parsed.pathname + parsed.search);
+
+    // Dropbox sometimes returns an HTML interstitial with 200; reject those.
+    const head = String.fromCharCode(...bytes.slice(0, Math.min(64, bytes.length))).toLowerCase();
+    if (head.includes("<!doctype html") || head.includes("<html")) {
+      return NextResponse.json({ error: "Upstream returned HTML instead of a file" }, { status: 502 });
+    }
+
+    const isPdf = looksLikePdf(bytes, parsed.pathname, parsed.search, upstreamType);
+    const contentType = isPdf ? "application/pdf" : upstreamType;
     const filename = extractFilename(
       parsed,
       contentType,
@@ -130,7 +177,7 @@ export async function GET(request: Request) {
     );
 
     const headers = new Headers();
-    headers.set("Content-Type", isPdf ? "application/pdf" : contentType);
+    headers.set("Content-Type", contentType);
     headers.set("Content-Disposition", `inline; filename="${filename}"`);
     headers.set("X-Content-Type-Options", "nosniff");
     headers.set("Cache-Control", "private, no-store");

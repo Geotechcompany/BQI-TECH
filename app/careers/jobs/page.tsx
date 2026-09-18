@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Search,
   MapPin,
-  Clock,
   ChevronDown,
   X,
   Briefcase,
@@ -21,16 +20,26 @@ import { FailedStatusState } from "@/components/ui/failed-status-state";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "react-hot-toast";
 import { BACKEND_URL } from "@/lib/config";
+import { authService } from "@/lib/auth-backend";
+import {
+  getCareersDeepLinkJobId,
+  isCareersIsolatedPreview,
+  normalizeCareersJobPosting,
+} from "@/lib/careers-job-preview";
 
 export default function JobsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedJob, setSelectedJob] = useState<JobPosting | null>(null);
+  const [previewJob, setPreviewJob] = useState<JobPosting | null>(null);
+  const [isPreviewBanner, setIsPreviewBanner] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("");
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [isDepartmentOpen, setIsDepartmentOpen] = useState(false);
   const router = useRouter();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated, isAdmin, authLoading } = useAuth();
   const isSignedIn = isAuthenticated;
 
   // Refs for dropdown containers
@@ -78,6 +87,7 @@ export default function JobsPage() {
   const {
     data: jobs,
     isLoading,
+    isFetched,
     error,
   } = useQuery<JobPosting[]>({
     queryKey: ["jobs"],
@@ -105,6 +115,112 @@ export default function JobsPage() {
     staleTime: 1000 * 60 * 5, // Consider data fresh for 5 minutes
     retry: 2, // Retry failed requests up to 2 times
   });
+
+  // Deep-link: /careers/jobs?job=<id> selects that listing when present.
+  // Preview: ?preview=1 keeps the normal careers UI but lists only that job
+  // (admins can load unpublished roles via the admin API).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const search = window.location.search;
+    const jobId = getCareersDeepLinkJobId(search);
+    if (!jobId) {
+      setIsPreviewMode(false);
+      return;
+    }
+
+    const wantsPreview = isCareersIsolatedPreview(search);
+    const publishedMatch = jobs?.find(
+      (job) => job.id === jobId || job._id === jobId
+    );
+
+    if (!wantsPreview) {
+      if (!isFetched) return;
+      setIsPreviewMode(false);
+      if (publishedMatch) {
+        setSelectedJob(publishedMatch);
+        setPreviewJob(null);
+        setIsPreviewBanner(false);
+      }
+      return;
+    }
+
+    if (authLoading || !isFetched) {
+      setIsPreviewLoading(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPreviewJob() {
+      if (publishedMatch && publishedMatch.isActive !== false) {
+        if (!cancelled) {
+          setSelectedJob(publishedMatch);
+          setPreviewJob(null);
+          setIsPreviewBanner(false);
+          setIsPreviewMode(true);
+          setIsPreviewLoading(false);
+        }
+        return;
+      }
+
+      if (!isAdmin || !isAuthenticated) {
+        if (publishedMatch) {
+          if (!cancelled) {
+            setSelectedJob(publishedMatch);
+            setPreviewJob(null);
+            setIsPreviewBanner(false);
+            setIsPreviewMode(true);
+            setIsPreviewLoading(false);
+          }
+          return;
+        }
+        if (!cancelled) {
+          setIsPreviewMode(false);
+          setIsPreviewLoading(false);
+          toast.error("Sign in as an admin to preview unpublished positions.");
+        }
+        return;
+      }
+
+      setIsPreviewLoading(true);
+      try {
+        const response = await authService.authenticatedFetch(
+          `${BACKEND_URL}/api/admin/job-postings/${jobId}`
+        );
+        if (!response.ok) {
+          throw new Error("Failed to load preview job");
+        }
+        const raw = (await response.json()) as Record<string, unknown>;
+        const normalized = normalizeCareersJobPosting(raw);
+        if (cancelled) return;
+        setPreviewJob(normalized);
+        setSelectedJob(normalized);
+        setIsPreviewBanner(normalized.isActive === false);
+        setIsPreviewMode(true);
+      } catch (error) {
+        console.error("Careers preview load failed:", error);
+        if (publishedMatch && !cancelled) {
+          setSelectedJob(publishedMatch);
+          setPreviewJob(null);
+          setIsPreviewBanner(false);
+          setIsPreviewMode(true);
+          return;
+        }
+        if (!cancelled) {
+          setIsPreviewMode(false);
+          toast.error("Could not load this position preview.");
+        }
+      } finally {
+        if (!cancelled) setIsPreviewLoading(false);
+      }
+    }
+
+    void loadPreviewJob();
+    return () => {
+      cancelled = true;
+    };
+  }, [jobs, isFetched, authLoading, isAdmin, isAuthenticated]);
 
   const uniqueLocations = (() => {
     if (!jobs?.length) return [];
@@ -205,6 +321,11 @@ export default function JobsPage() {
   });
 
   const handleApply = (_id: string) => {
+    if (isPreviewBanner || (selectedJob && selectedJob.isActive === false)) {
+      toast.error("This position is not published. Applications are closed in preview.");
+      return;
+    }
+
     if (!isSignedIn) {
       sessionStorage.setItem("pendingJobApplication", _id);
       router.push("/login?redirect=/dashboard/apply");
@@ -214,11 +335,29 @@ export default function JobsPage() {
     router.push(`/dashboard/apply/${_id}`);
   };
 
-  if (isLoading) return <Loader />;
-  if (error) return <FailedStatusState message="Failed to load jobs" />;
+  // Preview (?preview=1&job=<id>): same master-detail UI, list filtered to one job.
+  const displayJobs = (() => {
+    if (isPreviewMode) {
+      const onlyJob = previewJob ?? selectedJob;
+      return onlyJob ? [onlyJob] : [];
+    }
+    return filteredJobs || [];
+  })();
+
+  if (isLoading || isPreviewLoading) return <Loader />;
+  if (error && !previewJob) return <FailedStatusState message="Failed to load jobs" />;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white -mt-[80px]">
+      {isPreviewBanner ? (
+        <div className="relative z-20 border-b border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-950">
+          <span className="font-semibold">Preview</span>
+          {" — "}
+          This position is not published. It will not appear in the public
+          listing, and candidates cannot apply.
+        </div>
+      ) : null}
+
       {/* Enhanced Hero Section */}
       <div className="bg-gradient-to-r from-[#0A2540] via-[#1E4D8A] to-[#0066CC] text-white pb-4 py-32 mb-12 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-20"></div>
@@ -255,7 +394,7 @@ export default function JobsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* Enhanced Search Section */}
         <motion.div
-          className="mb-8 sm:mb-12 bg-white rounded-2xl shadow-xl p-6 border border-gray-100"
+          className="mb-8 sm:mb-12 bg-white rounded-2xl shadow-xl p-6 border border-gray-100 [color-scheme:light]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
@@ -266,7 +405,7 @@ export default function JobsPage() {
               <input
                 type="text"
                 placeholder="Search for jobs or keywords"
-                className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#33CCFF] focus:border-transparent transition-all duration-200"
+                className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#33CCFF] focus:border-transparent transition-all duration-200"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -284,7 +423,7 @@ export default function JobsPage() {
             >
               <button
                 onClick={() => setIsLocationOpen(!isLocationOpen)}
-                className="w-full px-6 py-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
+                className="w-full px-6 py-3 bg-gray-50 text-gray-900 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
               >
                 <MapPin className="w-4 h-4 text-gray-500" />
                 {selectedLocation || "Location"}
@@ -299,7 +438,7 @@ export default function JobsPage() {
                         setSelectedLocation(location);
                         setIsLocationOpen(false);
                       }}
-                      className="w-full px-6 py-3 text-left hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl transition-colors duration-200"
+                      className="w-full px-6 py-3 text-left text-gray-900 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl transition-colors duration-200"
                     >
                       {location}
                     </button>
@@ -314,7 +453,7 @@ export default function JobsPage() {
             >
               <button
                 onClick={() => setIsDepartmentOpen(!isDepartmentOpen)}
-                className="w-full px-6 py-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
+                className="w-full px-6 py-3 bg-gray-50 text-gray-900 border border-gray-200 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-100 transition-all duration-200"
               >
                 {selectedDepartment || "Department"}
                 <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -328,7 +467,7 @@ export default function JobsPage() {
                         setSelectedDepartment(department || "");
                         setIsDepartmentOpen(false);
                       }}
-                      className="w-full px-6 py-3 text-left hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl transition-colors duration-200"
+                      className="w-full px-6 py-3 text-left text-gray-900 hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl transition-colors duration-200"
                     >
                       {department}
                     </button>
@@ -362,12 +501,13 @@ export default function JobsPage() {
           >
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-gray-800">
-                {filteredJobs?.length || 0} Jobs Found
+                {displayJobs.length}{" "}
+                {displayJobs.length === 1 ? "Job Found" : "Jobs Found"}
               </h2>
             </div>
 
             <div className="space-y-4">
-              {filteredJobs?.map((job) => (
+              {displayJobs.map((job) => (
                 <motion.div
                   key={job.id}
                   className={`p-6 rounded-2xl cursor-pointer transition-all duration-300 hover:transform hover:scale-[1.02] group
@@ -383,12 +523,19 @@ export default function JobsPage() {
                       <h3 className="text-lg sm:text-xl font-bold leading-snug mb-1 text-gray-900 group-hover:text-blue-600 transition-colors break-words">
                         {job.title}
                       </h3>
-                      {new Date(job.postedDate) >
-                        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                          New
-                        </span>
-                      )}
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                        {isPreviewMode && job.isActive === false ? (
+                          <span className="px-2 py-1 bg-amber-100 text-amber-900 text-xs font-medium rounded-full">
+                            Preview
+                          </span>
+                        ) : null}
+                        {new Date(job.postedDate) >
+                          new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) && (
+                          <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                            New
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="mt-1 text-gray-600 text-sm leading-relaxed mb-3 line-clamp-2">
@@ -430,6 +577,7 @@ export default function JobsPage() {
                         size="sm"
                         variant="ghost"
                         className="text-blue-600 hover:bg-blue-50 group-hover:underline"
+                        disabled={job.isActive === false}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleApply(job.id);
@@ -516,9 +664,12 @@ export default function JobsPage() {
                     <div className="p-6 sm:p-8 bg-gradient-to-t from-white/90 to-white/50 backdrop-blur-sm">
                       <Button
                         onClick={() => handleApply(selectedJob.id)}
-                        className="w-full py-6 bg-gradient-to-r from-[#33CCFF] to-[#272055] hover:from-[#272055] hover:to-[#33CCFF] text-white rounded-xl font-medium text-lg transition-all duration-300 transform hover:scale-[1.02] shadow-lg"
+                        disabled={selectedJob.isActive === false}
+                        className="w-full py-6 bg-gradient-to-r from-[#33CCFF] to-[#272055] hover:from-[#272055] hover:to-[#33CCFF] text-white rounded-xl font-medium text-lg transition-all duration-300 transform hover:scale-[1.02] shadow-lg disabled:transform-none disabled:opacity-60"
                       >
-                        Apply Now
+                        {selectedJob.isActive === false
+                          ? "Not published — apply disabled"
+                          : "Apply Now"}
                       </Button>
                     </div>
                   </div>

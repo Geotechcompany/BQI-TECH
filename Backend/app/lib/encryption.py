@@ -33,8 +33,16 @@ class ResponseEncryption:
         return kdf.derive(password)
     
     def generate_session_key(self, user_id: str, timestamp: str) -> bytes:
-        """Generate a session-specific encryption key"""
-        session_data = f"{user_id}:{timestamp}:{settings.SECRET_KEY}"
+        """Generate a session-specific encryption key.
+
+        Must match the frontend derivation in lib/encryption-decoder.ts, which
+        uses NEXT_PUBLIC_ENCRYPTION_SECRET (falling back to SECRET_KEY).
+        """
+        secret = (
+            os.getenv("NEXT_PUBLIC_ENCRYPTION_SECRET")
+            or settings.SECRET_KEY
+        )
+        session_data = f"{user_id}:{timestamp}:{secret}"
         session_hash = hashlib.sha256(session_data.encode()).digest()
         return session_hash[:32]
     

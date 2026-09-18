@@ -6,6 +6,7 @@ import io
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -54,45 +55,191 @@ def _normalize_dropbox_url(url: str) -> str:
     if not url:
         return ""
     normalized = url.strip()
-    if "dropbox.com" in normalized and "dl=1" not in normalized:
-        separator = "&" if "?" in normalized else "?"
-        normalized = f"{normalized}{separator}dl=1"
+    host_is_dropbox = (
+        "dropbox.com" in normalized
+        or "dropboxusercontent.com" in normalized
+    )
+    if host_is_dropbox:
+        # Prefer direct download; replace dl=0 rather than appending a second dl.
+        if "dl=0" in normalized:
+            normalized = normalized.replace("dl=0", "dl=1")
+        elif "dl=1" not in normalized:
+            separator = "&" if "?" in normalized else "?"
+            normalized = f"{normalized}{separator}dl=1"
     normalized = normalized.replace("www.dropbox.com", "dl.dropboxusercontent.com")
     return normalized
 
 
-async def extract_text_from_cv_url(url: str) -> str:
-    """Best-effort PDF text extraction from a public CV URL."""
+def _dropbox_path_hint_from_url(url: str) -> str:
+    """Best-effort Dropbox API path from a shared / content URL filename."""
+    if not url:
+        return ""
+    path_part = url.split("?", 1)[0].rstrip("/")
+    filename = path_part.rsplit("/", 1)[-1]
+    if not filename or "." not in filename:
+        return ""
+    if not filename.lower().endswith((".pdf", ".docx", ".doc")):
+        return ""
+    # Prefer explicit /uploads/... segment when present in the URL path.
+    lower = path_part.lower()
+    marker = "/uploads/"
+    idx = lower.find(marker)
+    if idx >= 0:
+        return path_part[idx:]
+    if "seed" in url.lower() or filename.endswith("_Resume.pdf"):
+        return f"/uploads/seed/{filename}"
+    return f"/uploads/{filename}"
+
+
+def _local_seed_cv_path(filename: str) -> Optional[str]:
+    if not filename:
+        return None
+    base = Path(__file__).resolve().parents[2] / "scripts" / "seed_assets" / "cvs"
+    candidate = base / filename
+    return str(candidate) if candidate.is_file() else None
+
+
+def extract_text_from_cv_bytes(data: bytes, filename: str = "") -> str:
+    """Best-effort text extraction from PDF or DOCX bytes. Legacy .doc returns empty."""
+    if not data:
+        return ""
+
+    name = (filename or "").lower()
+    is_pdf = name.endswith(".pdf") or data[:4] == b"%PDF"
+    is_legacy_doc = name.endswith(".doc") and not name.endswith(".docx")
+
+    try:
+        if is_pdf:
+            try:
+                from pypdf import PdfReader
+            except ImportError as missing:
+                logger.error(
+                    "CV PDF extraction unavailable: install pypdf in the backend venv (%s)",
+                    missing,
+                )
+                return ""
+
+            reader = PdfReader(io.BytesIO(data))
+            chunks: List[str] = []
+            for page in reader.pages[:6]:
+                chunks.append(page.extract_text() or "")
+            text = "\n".join(chunks).strip()[:MAX_CV_CHARS]
+            if not text:
+                logger.warning(
+                    "CV PDF produced no extractable text (%s bytes, file=%s)",
+                    len(data),
+                    filename or "unknown",
+                )
+            return text
+
+        if is_legacy_doc:
+            logger.debug("Legacy .doc text extraction is not supported")
+            return ""
+
+        # DOCX is a zip; try when extension says so, or when bytes look like a zip.
+        should_try_docx = name.endswith(".docx") or data[:2] == b"PK"
+        if should_try_docx:
+            import zipfile
+            import xml.etree.ElementTree as ET
+
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                if "word/document.xml" not in archive.namelist():
+                    return ""
+                xml_bytes = archive.read("word/document.xml")
+            root = ET.fromstring(xml_bytes)
+            texts = [
+                node.text
+                for node in root.iter()
+                if node.tag.endswith("}t") and node.text
+            ]
+            return "\n".join(texts).strip()[:MAX_CV_CHARS]
+    except Exception as error:
+        logger.warning("CV bytes text extraction failed (%s): %s", filename or "bytes", error)
+        return ""
+
+    return ""
+
+
+async def _fetch_cv_bytes_via_dropbox_api(dropbox_path: str) -> bytes:
+    if not dropbox_path:
+        return b""
+    try:
+        import dropbox
+
+        from app.lib.dropbox import get_dropbox_access_token
+
+        token = await get_dropbox_access_token()
+        dbx = dropbox.Dropbox(token)
+        _meta, response = dbx.files_download(dropbox_path)
+        return response.content or b""
+    except Exception as error:
+        logger.warning("Dropbox API CV download failed for %s: %s", dropbox_path, error)
+        return b""
+
+
+async def extract_text_from_cv_url(
+    url: str,
+    *,
+    dropbox_path: Optional[str] = None,
+) -> str:
+    """Best-effort PDF/DOCX text extraction from a public CV URL.
+
+    Falls back to Dropbox API download and local seed PDFs when HTTP yields no text.
+    """
     if not url:
         return ""
 
     fetch_url = _normalize_dropbox_url(url)
+    filename = fetch_url.split("?")[0].rsplit("/", 1)[-1]
+    http_error: Optional[str] = None
+    data = b""
+
     try:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             response = await client.get(fetch_url)
         if response.status_code != 200:
-            return ""
-
-        content_type = (response.headers.get("content-type") or "").lower()
-        data = response.content
-        if not data:
-            return ""
-
-        is_pdf = "pdf" in content_type or fetch_url.lower().endswith(".pdf")
-        if not is_pdf and data[:4] != b"%PDF":
-            return ""
-
-        from pypdf import PdfReader
-
-        reader = PdfReader(io.BytesIO(data))
-        chunks: List[str] = []
-        for page in reader.pages[:6]:
-            chunks.append(page.extract_text() or "")
-        text = "\n".join(chunks).strip()
-        return text[:MAX_CV_CHARS]
+            http_error = f"HTTP {response.status_code}"
+        else:
+            data = response.content or b""
+            if not data:
+                http_error = "empty body"
     except Exception as error:
-        logger.debug("CV text extraction failed for %s: %s", url, error)
-        return ""
+        http_error = f"{type(error).__name__}: {error}"
+        logger.warning("CV HTTP fetch failed for %s: %s", url, http_error)
+
+    text = extract_text_from_cv_bytes(data, filename=filename) if data else ""
+    if text.strip():
+        return text
+
+    # Dropbox content CDN is flaky from some networks; API download is reliable.
+    path = (dropbox_path or "").strip() or _dropbox_path_hint_from_url(url)
+    if path:
+        api_bytes = await _fetch_cv_bytes_via_dropbox_api(path)
+        if api_bytes:
+            text = extract_text_from_cv_bytes(api_bytes, filename=path)
+            if text.strip():
+                logger.info("CV text recovered via Dropbox API path %s", path)
+                return text
+
+    local_path = _local_seed_cv_path(filename)
+    if local_path:
+        try:
+            local_bytes = Path(local_path).read_bytes()
+            text = extract_text_from_cv_bytes(local_bytes, filename=filename)
+            if text.strip():
+                logger.info("CV text recovered from local seed file %s", local_path)
+                return text
+        except OSError as error:
+            logger.warning("Local seed CV read failed for %s: %s", local_path, error)
+
+    logger.warning(
+        "CV text extraction returned empty (url=%s http=%s bytes=%s file=%s)",
+        url[:160],
+        http_error or "ok",
+        len(data),
+        filename or "unknown",
+    )
+    return ""
 
 
 def _get_cv_url(application: Dict[str, Any]) -> str:
@@ -551,6 +698,20 @@ async def rank_application_by_id(db, application_id: str) -> Dict[str, Any]:
         {"_id": obj_id},
         {"$set": {**ranking, "updatedAt": datetime.utcnow()}},
     )
+
+    if cv_text:
+        try:
+            from app.lib.cv_contact_extract import sync_application_contact_from_cv
+
+            await sync_application_contact_from_cv(
+                db, application, force=False, cv_text=cv_text
+            )
+        except Exception as contact_err:
+            logger.debug(
+                "Contact sync after rank skipped for %s: %s",
+                application_id,
+                contact_err,
+            )
 
     return {
         "id": str(obj_id),

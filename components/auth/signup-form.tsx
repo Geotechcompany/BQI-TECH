@@ -7,8 +7,18 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { motion, useReducedMotion } from "framer-motion";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import {
+  criticallyDampedSpring,
+  portalAuthAutofillCss,
+  portalAuthButtonClass,
+  portalAuthInputClass,
+  portalAuthLabelClass,
+  portalAuthLinkClass,
+} from "@/components/auth/portal-auth-styles";
+import { cn } from "@/lib/utils";
 
 const signupSchema = z
   .object({
@@ -33,6 +43,7 @@ interface SignupFormProps {
 export function SignupForm({ onSignup }: SignupFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const reduceMotion = useReducedMotion();
   const {
     register,
     handleSubmit,
@@ -45,62 +56,91 @@ export function SignupForm({ onSignup }: SignupFormProps) {
     await onSignup(data.email, data.password, data.name);
   };
 
+  const fadeUp = (delay: number) =>
+    reduceMotion
+      ? {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          transition: { duration: 0.28, delay },
+        }
+      : {
+          initial: { opacity: 0, y: 14 },
+          animate: { opacity: 1, y: 0 },
+          transition: { ...criticallyDampedSpring, delay },
+        };
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-2 text-center">
-        <h1 className="text-3xl font-bold">Create an Account</h1>
-        <p className="text-gray-500 dark:text-gray-400">
+    <div className="space-y-7">
+      <motion.div {...fadeUp(0.05)} className="space-y-2 text-center">
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.025em] text-[#1d1d1f] sm:text-[2rem]">
+          Create an Account
+        </h1>
+        <p className="text-[15px] leading-relaxed text-[#6e6e73]">
           Enter your information to create your account
         </p>
-      </div>
+      </motion.div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
+      <style>{portalAuthAutofillCss}</style>
+
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className="portal-auth-form space-y-4"
+      >
+        <motion.div {...fadeUp(0.08)} className="space-y-2">
+          <Label htmlFor="name" className={portalAuthLabelClass}>
+            Full Name
+          </Label>
           <Input
             id="name"
             placeholder="Enter your full name"
             type="text"
+            autoComplete="name"
             disabled={isSubmitting}
             {...register("name")}
-            className="h-12"
+            className={portalAuthInputClass}
           />
           {errors.name?.message && (
             <p className="text-sm text-red-500">{errors.name.message}</p>
           )}
-        </div>
+        </motion.div>
 
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+        <motion.div {...fadeUp(0.12)} className="space-y-2">
+          <Label htmlFor="email" className={portalAuthLabelClass}>
+            Email
+          </Label>
           <Input
             id="email"
-            placeholder="Enter your email"
+            placeholder="you@example.com"
             type="email"
+            autoComplete="email"
             disabled={isSubmitting}
             {...register("email")}
-            className="h-12"
+            className={portalAuthInputClass}
           />
           {errors.email?.message && (
             <p className="text-sm text-red-500">{errors.email.message}</p>
           )}
-        </div>
+        </motion.div>
 
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+        <motion.div {...fadeUp(0.16)} className="space-y-2">
+          <Label htmlFor="password" className={portalAuthLabelClass}>
+            Password
+          </Label>
           <div className="relative">
             <Input
               id="password"
               placeholder="Create a password"
               type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
               disabled={isSubmitting}
               {...register("password")}
-              className="h-12 pr-10"
+              className={cn(portalAuthInputClass, "pr-11")}
             />
             <button
               type="button"
               aria-label={showPassword ? "Hide password" : "Show password"}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+              className="absolute inset-y-0 right-3 flex items-center text-[#86868b] transition-colors hover:text-[#1d1d1f]"
               tabIndex={-1}
             >
               {showPassword ? (
@@ -113,18 +153,21 @@ export function SignupForm({ onSignup }: SignupFormProps) {
           {errors.password?.message && (
             <p className="text-sm text-red-500">{errors.password.message}</p>
           )}
-        </div>
+        </motion.div>
 
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+        <motion.div {...fadeUp(0.2)} className="space-y-2">
+          <Label htmlFor="confirmPassword" className={portalAuthLabelClass}>
+            Confirm Password
+          </Label>
           <div className="relative">
             <Input
               id="confirmPassword"
               placeholder="Re-enter your password"
               type={showConfirmPassword ? "text" : "password"}
+              autoComplete="new-password"
               disabled={isSubmitting}
               {...register("confirmPassword")}
-              className="h-12 pr-10"
+              className={cn(portalAuthInputClass, "pr-11")}
             />
             <button
               type="button"
@@ -134,7 +177,7 @@ export function SignupForm({ onSignup }: SignupFormProps) {
                   : "Show confirm password"
               }
               onClick={() => setShowConfirmPassword((v) => !v)}
-              className="absolute inset-y-0 right-3 flex items-center text-gray-500 hover:text-gray-700"
+              className="absolute inset-y-0 right-3 flex items-center text-[#86868b] transition-colors hover:text-[#1d1d1f]"
               tabIndex={-1}
             >
               {showConfirmPassword ? (
@@ -149,26 +192,35 @@ export function SignupForm({ onSignup }: SignupFormProps) {
               {errors.confirmPassword.message}
             </p>
           )}
-        </div>
+        </motion.div>
 
-        <Button type="submit" className="w-full h-12" disabled={isSubmitting}>
-          {isSubmitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Creating Account...
-            </>
-          ) : (
-            "Create Account"
-          )}
-        </Button>
+        <motion.div {...fadeUp(0.24)}>
+          <Button
+            type="submit"
+            className={portalAuthButtonClass}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating Account...
+              </>
+            ) : (
+              "Create Account"
+            )}
+          </Button>
+        </motion.div>
       </form>
 
-      <div className="text-center text-sm">
+      <motion.div
+        {...fadeUp(0.3)}
+        className="text-center text-sm text-[#6e6e73]"
+      >
         Already have an account?{" "}
-        <Link href="/login" className="text-blue-600 hover:underline">
+        <Link href="/login" className={portalAuthLinkClass}>
           Sign in
         </Link>
-      </div>
+      </motion.div>
     </div>
   );
 }

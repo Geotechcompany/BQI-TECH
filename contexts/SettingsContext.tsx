@@ -6,6 +6,29 @@ import { useAuth } from './AuthContext';
 import { adminApi, userApi } from '@/lib/api-backend';
 import { useTheme } from 'next-themes';
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'sidebarCollapsed';
+
+function readSidebarCollapsedFromStorage(): boolean | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+  } catch {
+    // localStorage may be unavailable
+  }
+  return null;
+}
+
+function writeSidebarCollapsedToStorage(collapsed: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
 interface SettingsContextType {
   emailNotifications: boolean;
   pushNotifications: boolean;
@@ -75,23 +98,48 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const loadSettings = async () => {
     try {
       setIsLoading(true);
+      const storedCollapsed = readSidebarCollapsedFromStorage();
       const api = isAdmin ? adminApi : userApi;
       const response = await api.getSettings();
       const payload: any = isAdmin ? (response?.settings ?? response) : response?.settings;
       
       if (payload) {
+        const nextCollapsed =
+          typeof payload.sidebarCollapsed === 'boolean'
+            ? payload.sidebarCollapsed
+            : storedCollapsed;
+        if (typeof nextCollapsed === 'boolean') {
+          writeSidebarCollapsedToStorage(nextCollapsed);
+        }
         setSettings(prev => ({
           ...prev,
           ...payload,
+          // Prefer API when present; else localStorage (user API omits this field)
+          sidebarCollapsed:
+            typeof nextCollapsed === 'boolean'
+              ? nextCollapsed
+              : prev.sidebarCollapsed,
           profile: {
             name: user?.name || '',
             email: user?.email || '',
             avatarUrl: (payload.profile?.avatarUrl) || prev.profile.avatarUrl
           }
         }));
+      } else if (storedCollapsed !== null) {
+        setSettings(prev => ({
+          ...prev,
+          sidebarCollapsed: storedCollapsed,
+        }));
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
+      const storedCollapsed = readSidebarCollapsedFromStorage();
+      if (storedCollapsed !== null) {
+        setSettings(prev => ({
+          ...prev,
+          sidebarCollapsed: storedCollapsed,
+        }));
+      }
       // Don't show error toast on load failure, just use defaults
     } finally {
       setIsLoading(false);
@@ -99,18 +147,37 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateSettings = async (newSettings: Partial<SettingsContextType>) => {
+    const previous = settings;
+    const sidebarOnly =
+      Object.keys(newSettings).length === 1 &&
+      Object.prototype.hasOwnProperty.call(newSettings, 'sidebarCollapsed');
+
     try {
       // Optimistic update
-      const oldSettings = settings;
       setSettings(prev => ({ ...prev, ...newSettings }));
+
+      if (typeof newSettings.sidebarCollapsed === 'boolean') {
+        writeSidebarCollapsedToStorage(newSettings.sidebarCollapsed);
+      }
+
+      // Employee/user settings API does not accept sidebarCollapsed — keep it local only.
+      if (sidebarOnly && !isAdmin) {
+        return;
+      }
       
       const api = isAdmin ? adminApi : userApi;
       await api.updateSettings(newSettings);
-      toast.success('Settings updated successfully');
+      // Sidebar collapse is a chrome toggle — skip toast noise
+      if (!sidebarOnly) {
+        toast.success("Settings updated successfully");
+      }
     } catch (error) {
-      // Revert on error
-      setSettings(settings);
       console.error('Failed to update settings:', error);
+      // Sidebar chrome toggle already persisted to localStorage — keep UI state.
+      if (sidebarOnly && typeof newSettings.sidebarCollapsed === 'boolean') {
+        return;
+      }
+      setSettings(previous);
       toast.error('Failed to update settings');
       throw error;
     }
@@ -134,9 +201,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Load theme from localStorage on mount
+  // Load theme + sidebar chrome preference from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const storedCollapsed = readSidebarCollapsedFromStorage();
+      if (storedCollapsed !== null) {
+        setSettings(prev => ({ ...prev, sidebarCollapsed: storedCollapsed }));
+      }
+
       const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | 'system' | 'studio' | null;
       if (savedTheme) {
         setSettings(prev => ({ ...prev, theme: savedTheme }));

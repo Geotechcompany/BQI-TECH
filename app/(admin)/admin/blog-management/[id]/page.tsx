@@ -5,8 +5,9 @@ import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { BlogPostForm } from "@/components/admin/BlogPostForm"
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout"
-import { ArrowLeft, Loader } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FormSkeleton } from "@/components/ui/skeleton"
 import type { BlogPost } from "@/types/blog"
 import { useEffect } from "react"
 
@@ -64,7 +65,7 @@ export default function BlogPostEditor() {
 
   useEffect(() => {
     if (id === "new") {
-      router.replace("/admin/blog-management/new")
+      router.replace("/admin/blog-management/wizard")
     } else {
       router.replace(`/admin/blog-management/${id}/view`)
     }
@@ -102,9 +103,9 @@ export default function BlogPostEditor() {
 
   if (!isNew && isLoading) {
     return (
-      <AdminPageLayout title="Loading...">
-        <div className="flex justify-center items-center py-8">
-          <Loader className="h-8 w-8 animate-spin" />
+      <AdminPageLayout title="Edit Blog Post">
+        <div className="max-w-4xl p-6">
+          <FormSkeleton />
         </div>
       </AdminPageLayout>
     )

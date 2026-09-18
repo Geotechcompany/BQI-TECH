@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -200,7 +202,10 @@ export default function SurveysPage() {
   };
 
   const builder = (
-    <Card className="p-6 space-y-6 bg-gradient-to-br from-white to-gray-50 border border-gray-200 shadow-lg">
+    <Card
+      className="p-6 space-y-6 bg-gradient-to-br from-white to-gray-50 border border-gray-200 shadow-lg"
+      data-tour="surveys-builder"
+    >
       {/* Header */}
       <div className="space-y-4">
         <div className="flex items-center gap-3">
@@ -563,7 +568,10 @@ export default function SurveysPage() {
   );
 
   const list = (
-    <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border border-gray-200 shadow-lg">
+    <Card
+      className="p-6 bg-gradient-to-br from-white to-gray-50 border border-gray-200 shadow-lg"
+      data-tour="surveys-list"
+    >
       <div className="flex items-center gap-3 mb-4">
         <div className="w-2 h-6 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full"></div>
         <h3 className="text-lg font-bold text-gray-800">Existing Surveys</h3>
@@ -633,7 +641,11 @@ export default function SurveysPage() {
 
   return (
     <ProtectedRoute requireAdmin>
-      <AdminPageLayout title="Surveys" showSearch={false}>
+      <AdminPageLayout title="Surveys" showSearch={false} tourId="surveys" guideInBanner>
+        <TourPageHelper tourId="surveys" />
+        <div className="mb-6">
+          <AdminPageWelcomeBanner bannerKey="surveys" tourId="surveys" />
+        </div>
         <div className="grid gap-6 lg:grid-cols-2">
           {builder}
           {list}

@@ -3,12 +3,16 @@
 import React, { useState } from 'react';
 import { Application } from "@/types/application";
 import { Button } from "@/components/ui/button";
+import { GenerateButton } from "@/components/ui/generate-button";
 import { Eye, Pencil, Trash2, ClipboardList, Settings, Archive, ArchiveRestore, Sparkles, Loader2 } from "lucide-react";
 import { getNameDisplay, getEmailDisplay, getPositionDisplay, extractDataFromAnswers, getCvUrl, getStatusDateValue } from "./utils/table-utils";
+import { getStatusColor } from "./application-status";
+import { ApplicantsEmptyState } from "@/components/admin/applicants/ApplicantsEmptyState";
 import { CVCell } from "@/components/admin/CVCell";
 import { AiRankScoreCell } from "@/components/admin/AiRankCell";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
+import { useBqiIntelligence } from "@/contexts/BqiIntelligenceContext";
 import { useAiRank } from "@/contexts/AiRankContext";
 import {
   DropdownMenu,
@@ -56,7 +60,9 @@ export function UnifiedApplicationTable({
   const showBulkActions = Boolean(onBulkStatusUpdate || onBulkArchive || onBulkUnarchive || onBulkRank);
   const [selectedApplications, setSelectedApplications] = useState<Set<string>>(new Set());
   const { isUnconfigured: aiUnconfigured } = useAiStatus();
+  const { applicantInsights } = useBqiIntelligence();
   const { inFlightApplicationIds, isRanking: isAnyRanking } = useAiRank();
+  const rankingEnabled = showAiScore && applicantInsights;
 
   const isApplicationRanking = (applicationId: string) =>
     inFlightApplicationIds.includes(applicationId) ||
@@ -152,6 +158,15 @@ export function UnifiedApplicationTable({
 
   if (applications.length === 0) {
     const emptyState = getEmptyStateConfig();
+    if (statusType === "archived") {
+      return (
+        <ApplicantsEmptyState
+          title={emptyState.title}
+          description={emptyState.description}
+          showAnimation
+        />
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center">
         <div className="mb-4 rounded-full bg-primary/10 p-4">
@@ -187,24 +202,22 @@ export function UnifiedApplicationTable({
             </Button>
           ) : (
             <>
-              {onBulkRank && (
+              {onBulkRank && rankingEnabled && (
                 <span
                   title={aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined}
                   className="inline-flex"
                 >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-violet-200 text-violet-700 hover:bg-violet-50"
-                    disabled={aiUnconfigured}
+                  <GenerateButton
+                    label="Score selected with BQI Intelligence"
+                    generatingLabel="Ranking…"
+                    isGenerating={isAnyRanking}
+                    disabled={aiUnconfigured || isAnyRanking}
                     onClick={() => {
                       onBulkRank(Array.from(selectedApplications));
                       setSelectedApplications(new Set());
                     }}
-                  >
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    AI Rank Selected
-                  </Button>
+                    className="text-sm"
+                  />
                 </span>
               )}
               {onBulkArchive && statusType !== "archived" && (
@@ -286,7 +299,7 @@ export function UnifiedApplicationTable({
               </th>
               {showAiScore && (
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider min-w-[100px]">
-                  AI Score
+                  BQI Intelligence
                 </th>
               )}
               {dateField && (
@@ -328,16 +341,9 @@ export function UnifiedApplicationTable({
                   {getPositionDisplay(application, jobTitles)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    application.status === 'New' ? 'bg-blue-100 text-blue-800' :
-                    application.status === 'Shortlisted' ? 'bg-orange-100 text-orange-800' :
-                    application.status === 'Technical Assessment' ? 'bg-indigo-100 text-indigo-800' :
-                    application.status === 'Interviewing' ? 'bg-purple-100 text-purple-800' :
-                    application.status === 'Hired' ? 'bg-green-100 text-green-800' :
-                    application.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                    application.status === 'Disqualified' ? 'bg-gray-100 text-gray-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
+                  <span
+                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(application.status || "New")}`}
+                  >
                     {application.status || 'New'}
                   </span>
                 </td>
@@ -349,7 +355,11 @@ export function UnifiedApplicationTable({
                       summary={application.aiRankSummary}
                       scoreReason={application.aiRankScoreReason}
                       requirements={application.aiRankRequirements}
-                      onRank={onRank ? () => onRank(application.id) : undefined}
+                      onRank={
+                        rankingEnabled && onRank
+                          ? () => onRank(application.id)
+                          : undefined
+                      }
                       isRanking={isApplicationRanking(application.id)}
                       disabledReason={
                         aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined
@@ -379,7 +389,7 @@ export function UnifiedApplicationTable({
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    {onRank && (
+                    {rankingEnabled && onRank && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -392,10 +402,10 @@ export function UnifiedApplicationTable({
                           aiUnconfigured
                             ? AI_UNCONFIGURED_MESSAGE
                             : isAnyRanking
-                              ? "AI ranking in progress"
+                              ? "BQI Intelligence ranking in progress"
                               : application.aiRankScore != null
-                                ? "Re-rank with AI"
-                                : "AI Rank"
+                                ? "Re-score with BQI Intelligence"
+                                : "Score with BQI Intelligence"
                         }
                       >
                         {isApplicationRanking(application.id) ? (

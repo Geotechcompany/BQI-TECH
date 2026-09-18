@@ -1,23 +1,22 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Clock, RefreshCw, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { userApi } from "@/lib/api-backend";
-import { toast } from "sonner";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+const BRAND_NAVY = "#272156";
+const BRAND_CYAN = "#31CDFF";
 
 interface SessionTimeoutModalProps {
   isOpen: boolean;
-  onStayLoggedIn: () => void;
+  onStayLoggedIn: () => void | Promise<void>;
   onLogout: () => void;
   timeRemaining: number;
   totalTime: number;
@@ -31,27 +30,36 @@ export function SessionTimeoutModal({
   totalTime,
 }: SessionTimeoutModalProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [minutes, setMinutes] = useState(0);
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
-    const mins = Math.floor(timeRemaining / 60);
-    const secs = timeRemaining % 60;
-    setMinutes(mins);
-    setSeconds(secs);
+    setMinutes(Math.floor(timeRemaining / 60));
+    setSeconds(timeRemaining % 60);
   }, [timeRemaining]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setRefreshError(null);
+      setIsRefreshing(false);
+    }
+  }, [isOpen]);
+
   const handleStayLoggedIn = async () => {
+    if (isRefreshing) return;
     setIsRefreshing(true);
+    setRefreshError(null);
     try {
-      // Refresh the session by making an authenticated request
-      await userApi.getProfile();
-      toast.success("Session refreshed successfully!");
-      onStayLoggedIn();
+      await onStayLoggedIn();
     } catch (error) {
       console.error("Failed to refresh session:", error);
-      toast.error("Failed to refresh session. Please log in again.");
-      onLogout();
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to refresh session. Please try again.";
+      setRefreshError(message);
+      // Do not logout on failure — allow retry
     } finally {
       setIsRefreshing(false);
     }
@@ -61,95 +69,101 @@ export function SessionTimeoutModal({
     totalTime > 0 ? ((totalTime - timeRemaining) / totalTime) * 100 : 0;
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-        >
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.8, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="w-full max-w-md mx-4"
-          >
-            <Card className="border-2 border-orange-200 shadow-2xl">
-              <CardHeader className="text-center pb-4">
-                <div className="mx-auto mb-4 p-3 bg-orange-100 rounded-full w-fit">
-                  <Clock className="h-8 w-8 text-orange-600" />
-                </div>
-                <CardTitle className="text-2xl font-bold text-gray-900">
-                  Session Timeout Warning
-                </CardTitle>
-                <CardDescription className="text-gray-600">
-                  Your session will expire soon. Click "Stay Logged In" to
-                  continue.
-                </CardDescription>
-              </CardHeader>
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      <DialogContent className="w-[95vw] max-w-md gap-0 overflow-hidden rounded-xl border border-[#272156]/10 bg-white p-0 shadow-xl sm:rounded-xl [&>button]:hidden">
+        <div className="space-y-5 p-6">
+          <DialogHeader className="space-y-3 text-center sm:text-center">
+            <div
+              className="mx-auto flex h-12 w-12 items-center justify-center rounded-full"
+              style={{ backgroundColor: "rgba(49, 205, 255, 0.15)" }}
+            >
+              <Clock className="h-6 w-6" style={{ color: BRAND_NAVY }} aria-hidden />
+            </div>
+            <div className="space-y-1.5">
+              <DialogTitle
+                className="text-lg font-semibold"
+                style={{ color: BRAND_NAVY }}
+              >
+                Session Timeout Warning
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Your session will expire soon. Click Stay Logged In to continue.
+              </DialogDescription>
+            </div>
+          </DialogHeader>
 
-              <CardContent className="space-y-6">
-                {/* Timer Display */}
-                <div className="text-center">
-                  <div className="text-4xl font-mono font-bold text-orange-600 mb-2">
-                    {minutes.toString().padStart(2, "0")}:
-                    {seconds.toString().padStart(2, "0")}
-                  </div>
-                  <p className="text-sm text-gray-500">Time remaining</p>
-                </div>
+          <div className="space-y-3 text-center">
+            <div
+              className="font-mono text-3xl font-semibold"
+              style={{ color: BRAND_NAVY }}
+            >
+              {minutes.toString().padStart(2, "0")}:
+              {seconds.toString().padStart(2, "0")}
+            </div>
+            <p className="text-sm text-muted-foreground">Time remaining</p>
 
-                {/* Progress Bar */}
-                <div className="space-y-2">
-                  <Progress
-                    value={progressPercentage}
-                    className="h-2 bg-gray-200"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Session started</span>
-                    <span>Expires soon</span>
-                  </div>
-                </div>
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-[#272156]/10"
+              role="progressbar"
+              aria-valuenow={Math.round(progressPercentage)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-1000 ease-linear"
+                style={{
+                  width: `${progressPercentage}%`,
+                  backgroundColor: BRAND_CYAN,
+                }}
+              />
+            </div>
+          </div>
 
-                {/* Action Buttons */}
-                <div className="flex gap-3">
-                  <Button
-                    onClick={handleStayLoggedIn}
-                    disabled={isRefreshing}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    {isRefreshing ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                        Refreshing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Stay Logged In
-                      </>
-                    )}
-                  </Button>
+          {refreshError ? (
+            <p
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-center text-sm text-red-700"
+              role="alert"
+            >
+              {refreshError}
+            </p>
+          ) : null}
 
-                  <Button
-                    onClick={onLogout}
-                    variant="outline"
-                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
-                  >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Logout
-                  </Button>
-                </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              onClick={handleStayLoggedIn}
+              disabled={isRefreshing}
+              className="min-h-[44px] flex-1 text-white hover:opacity-90"
+              style={{ backgroundColor: BRAND_NAVY }}
+            >
+              {isRefreshing ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Refreshing…
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Stay Logged In
+                </>
+              )}
+            </Button>
 
-                <p className="text-xs text-center text-gray-500">
-                  Your session will automatically expire if no action is taken.
-                </p>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            <Button
+              onClick={onLogout}
+              variant="outline"
+              disabled={isRefreshing}
+              className="min-h-[44px] flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground">
+            Your session will expire automatically if no action is taken.
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

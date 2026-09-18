@@ -17,4 +17,11 @@ class Job(BaseModel):
     updated_at: datetime = datetime.utcnow()
     expires_at: Optional[datetime] = None
     posted_at: Optional[datetime] = None
-    questions: Optional[List[str]] = None  # List of question IDs 
+    questions: Optional[List[str]] = None  # List of question IDs
+    auto_open_enabled: Optional[bool] = False
+    auto_open_at: Optional[datetime] = None
+    auto_open_cron: Optional[str] = None
+    auto_close_enabled: Optional[bool] = False
+    auto_close_at: Optional[datetime] = None
+    auto_close_cron: Optional[str] = None
+ 

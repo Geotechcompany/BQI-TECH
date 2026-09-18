@@ -3,6 +3,8 @@ export type AdminModuleKey =
   | "help"
   | "candidates"
   | "recruitment"
+  | "people"
+  | "leave"
   | "content"
   | "user_management"
   | "notifications"
@@ -34,19 +36,31 @@ export const ADMIN_MODULE_DEFINITIONS: AdminModuleDefinition[] = [
   {
     key: "candidates",
     label: "Candidates",
-    description: "Applications, pipeline stages, and CV vault",
+    description: "Applicants, applications, archive, and pipeline",
     group: "Hiring",
   },
   {
     key: "recruitment",
     label: "Recruitment",
-    description: "Job postings and interview question bank",
+    description: "Create and manage positions",
     group: "Hiring",
+  },
+  {
+    key: "people",
+    label: "People",
+    description: "Employees, departments, attendance, and org chart",
+    group: "People",
+  },
+  {
+    key: "leave",
+    label: "Leave",
+    description: "Leave requests, balances, calendar, types, and policies",
+    group: "People",
   },
   {
     key: "content",
     label: "Content",
-    description: "Blog, surveys, and release notes",
+    description: "Blog, surveys, documents, and release notes",
     group: "Marketing",
   },
   {
@@ -89,8 +103,14 @@ export const ADMIN_MODULE_DEFINITIONS: AdminModuleDefinition[] = [
 
 const ROUTE_MODULE_MAP: Record<string, AdminModuleKey> = {
   "/admin/overview": "overview",
+  "/admin/reports": "overview",
   "/admin/help": "help",
   "/admin/applications": "candidates",
+  "/admin/candidates": "candidates",
+  "/admin/calendar": "candidates",
+  "/admin/inbox": "candidates",
+  "/admin/tasks": "candidates",
+  "/admin/communications": "email_broadcast",
   "/admin/shortlisted": "candidates",
   "/admin/technical-assessment": "candidates",
   "/admin/interviewing": "candidates",
@@ -98,10 +118,17 @@ const ROUTE_MODULE_MAP: Record<string, AdminModuleKey> = {
   "/admin/disqualified": "candidates",
   "/admin/archived": "candidates",
   "/admin/cv-vault": "candidates",
+  "/admin/applicants": "candidates",
+  "/admin/jobs": "candidates",
   "/admin/rejected": "candidates",
   "/admin/job-postings": "recruitment",
+  "/admin/employees": "people",
+  "/admin/departments": "people",
+  "/admin/attendance": "people",
+  "/admin/leave": "leave",
   "/admin/blog-management": "content",
   "/admin/surveys": "content",
+  "/admin/documents": "content",
   "/admin/whats-new": "content",
   "/admin/user-management": "user_management",
   "/admin/notifications": "notifications",
@@ -191,16 +218,38 @@ export function groupModulesByCategory(
 
 export interface AdminMenuItemLike {
   name: string;
-  href: string;
+  href?: string;
   icon: unknown;
   moduleKey?: AdminModuleKey;
+  /** When set, any matching module grants access (OR). */
+  anyModuleKeys?: AdminModuleKey[];
+  /** Nested children for collapsible groups (admin-nav). */
+  children?: AdminMenuItemLike[];
+  kind?: "link" | "group";
 }
 
 export interface AdminMenuSectionLike {
   title: string;
-  icon: unknown;
-  alwaysExpanded: boolean;
+  icon?: unknown;
+  alwaysExpanded?: boolean;
   items: AdminMenuItemLike[];
+}
+
+function itemHasModuleAccess(
+  item: AdminMenuItemLike,
+  role?: string,
+  modules?: string[] | null
+): boolean {
+  if (item.anyModuleKeys?.length) {
+    return item.anyModuleKeys.some((key) =>
+      hasAdminModule(role, modules, key)
+    );
+  }
+  const moduleKey =
+    item.moduleKey ??
+    (item.href ? resolveModuleForPath(item.href) ?? undefined : undefined);
+  if (!moduleKey) return true;
+  return hasAdminModule(role, modules, moduleKey);
 }
 
 export function filterAdminMenuSections<T extends AdminMenuSectionLike>(
@@ -211,12 +260,23 @@ export function filterAdminMenuSections<T extends AdminMenuSectionLike>(
   return sections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => {
-        const moduleKey =
-          item.moduleKey ?? resolveModuleForPath(item.href) ?? undefined;
-        if (!moduleKey) return true;
-        return hasAdminModule(role, modules, moduleKey);
-      }),
+      items: section.items
+        .map((item) => {
+          if (item.children?.length) {
+            const children = item.children.filter((child) =>
+              itemHasModuleAccess(child, role, modules)
+            );
+            return { ...item, children };
+          }
+          return item;
+        })
+        .filter((item) => {
+          if (item.children) {
+            if (item.children.length === 0) return false;
+            return itemHasModuleAccess(item, role, modules);
+          }
+          return itemHasModuleAccess(item, role, modules);
+        }),
     }))
     .filter((section) => section.items.length > 0);
 }

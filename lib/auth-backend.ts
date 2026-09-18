@@ -9,6 +9,7 @@ interface User {
   name: string;
   role: string;
   avatarUrl?: string;
+  avatar?: string;
   adminModules?: string[];
   isEmailVerified: boolean;
 }
@@ -287,13 +288,23 @@ class AuthService {
     }
   }
 
-  // Set session data (localStorage + cookie for middleware)
+  // Set session data (tokens in localStorage; slim cookie for middleware only)
   setSession(session: SessionData): void {
     if (typeof window !== "undefined") {
       localStorage.setItem(this.SESSION_KEY, JSON.stringify(session));
+      // Avoid stuffing JWTs into the cookie (4KB limit) — that silently fails
+      // and can leave middleware with a corrupt/missing session on navigation.
+      const cookiePayload = {
+        user: {
+          id: session.user.id,
+          email: session.user.email,
+          role: session.user.role,
+          isEmailVerified: session.user.isEmailVerified,
+        },
+      };
       const maxAge = 30 * 24 * 60 * 60;
       document.cookie = `${this.SESSION_KEY}=${encodeURIComponent(
-        JSON.stringify(session)
+        JSON.stringify(cookiePayload)
       )}; path=/; max-age=${maxAge}; SameSite=Lax`;
     }
   }
@@ -415,6 +426,64 @@ class AuthService {
     }
   }
 
+  /**
+   * Re-verify credentials for an already signed-in user (e.g. lock screen).
+   * On failure, leaves the existing session intact.
+   */
+  async reauthenticate(email: string, password: string): Promise<AuthResponse> {
+    const formData = new URLSearchParams();
+    formData.append("username", email.toLowerCase());
+    formData.append("password", password);
+
+    const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData,
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      const detail = errorBody?.detail;
+      const message = formatFastApiDetail(detail);
+      const err = new Error(message || "Incorrect password") as AuthRequestError;
+      err.status = response.status;
+      err.code = extractFastApiErrorCode(detail);
+      throw err;
+    }
+
+    const rawData = await response.json();
+    let data: AuthResponse;
+    try {
+      data = await ResponseDecryption.decrypt(rawData);
+    } catch {
+      data = ResponseDecoder.decode(rawData);
+    }
+
+    if (!data.access_token || !data.refresh_token || !data.user) {
+      throw new Error("Invalid login response");
+    }
+
+    const user = {
+      ...data.user,
+      id: data.user.id || data.user._id,
+      isEmailVerified: resolveEmailVerified(data.user?.isEmailVerified, false),
+    };
+
+    this.setSession({
+      user,
+      token: data.access_token,
+      refreshToken: data.refresh_token,
+    });
+
+    return {
+      ...data,
+      user,
+    };
+  }
+
   // Register new user (no auto-login; returns initiation info only)
   async register(
     email: string,
@@ -458,7 +527,7 @@ class AuthService {
     }
   }
 
-  // Logout user
+  // Logout user (caller owns navigation — no hard reload here)
   async logout(): Promise<void> {
     try {
       const response = await fetch(`${BACKEND_URL}/api/auth/logout`, {
@@ -470,18 +539,12 @@ class AuthService {
       if (!response.ok) {
         throw new Error("Logout failed");
       }
-
-      // Clear session data
-      this.clearSession();
-      this.clearAuthData();
-
-      // Redirect to login page with success message
-      if (typeof window !== "undefined") {
-        window.location.href = "/login?message=Successfully logged out";
-      }
     } catch (error) {
       console.error("Logout error:", error);
-      throw error;
+      // Still clear local session so the UI can leave the protected area
+    } finally {
+      this.clearSession();
+      this.clearAuthData();
     }
   }
 
@@ -548,7 +611,10 @@ class AuthService {
 
       if (!response.ok) {
         console.error("Token refresh failed:", response.status);
-        this.clearSession();
+        // Only invalidate the session when the refresh token itself is rejected
+        if (response.status === 401 || response.status === 403) {
+          this.clearSession();
+        }
         return null;
       }
 
@@ -572,6 +638,24 @@ class AuthService {
             ...session.user,
             ...data.user,
             id: data.user.id || data.user._id || session.user.id,
+            // Never clobber role / verification from a partial refresh payload
+            role: data.user.role || session.user.role,
+            isEmailVerified: resolveEmailVerified(
+              data.user.isEmailVerified,
+              session.user.isEmailVerified
+            ),
+            avatar:
+              data.user.avatar ||
+              data.user.avatarUrl ||
+              session.user.avatar ||
+              session.user.avatarUrl ||
+              "",
+            avatarUrl:
+              data.user.avatarUrl ||
+              data.user.avatar ||
+              session.user.avatarUrl ||
+              session.user.avatar ||
+              "",
           }
         : session.user;
 
@@ -591,8 +675,8 @@ class AuthService {
         user: refreshedUser,
       };
     } catch (error) {
+      // Network/timeout errors must not wipe the session — caller can retry
       console.error("Token refresh error:", error);
-      this.clearSession();
       return null;
     }
   }
@@ -685,8 +769,12 @@ class AuthService {
       const refreshResult = await this.refreshToken();
 
       if (!refreshResult) {
-        this.clearSession();
-        throw new Error("Authentication failed");
+        // performRefreshToken already clears on hard 401/403; do not wipe
+        // the session again on soft/network failures (Stay Logged In can retry).
+        if (!this.getSession()?.refreshToken) {
+          throw new Error("Authentication failed");
+        }
+        throw new Error("Failed to refresh session");
       }
 
       // Retry with new token
@@ -752,6 +840,12 @@ class AuthService {
             profileData.isEmailVerified,
             resolveEmailVerified(currentSession.user?.isEmailVerified, false)
           );
+          const resolvedAvatar =
+            profileData.avatar ||
+            profileData.avatarUrl ||
+            currentSession.user.avatar ||
+            currentSession.user.avatarUrl ||
+            "";
           const updatedSession = {
             ...currentSession,
             user: {
@@ -763,6 +857,8 @@ class AuthService {
                 currentSession.user.id,
               firstName: profileData.firstName || "",
               lastName: profileData.lastName || "",
+              avatar: resolvedAvatar,
+              avatarUrl: resolvedAvatar,
               isEmailVerified,
               adminModules: profileData.adminModules || currentSession.user.adminModules,
             },
@@ -786,9 +882,79 @@ const authService = AuthService.getInstance();
 export { authService };
 export type { User, AuthResponse, SessionData };
 
+export type AdminLoginDirectoryAccount = {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string | null;
+};
+
+export type AdminLoginDirectoryResponse = {
+  enabled: boolean;
+  accounts: AdminLoginDirectoryAccount[];
+};
+
+/** Public admin account list for the login picker (disabled in production by default). */
+export async function fetchAdminLoginDirectory(): Promise<AdminLoginDirectoryResponse> {
+  try {
+    const response = await fetch(
+      `${BACKEND_URL}/api/auth/admin-login-directory`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "include",
+        signal: createFetchTimeoutSignal(AUTH_FETCH_TIMEOUT_MS),
+      }
+    );
+
+    if (!response.ok) {
+      return { enabled: false, accounts: [] };
+    }
+
+    const rawData = await response.json();
+    let payload: AdminLoginDirectoryResponse;
+    try {
+      payload = await ResponseDecryption.decrypt(rawData);
+    } catch {
+      payload = ResponseDecoder.decode(rawData);
+    }
+
+    if (!payload || typeof payload !== "object") {
+      return { enabled: false, accounts: [] };
+    }
+
+    const accounts = Array.isArray(payload.accounts)
+      ? payload.accounts
+          .filter(
+            (account): account is AdminLoginDirectoryAccount =>
+              !!account &&
+              typeof account === "object" &&
+              typeof account.email === "string" &&
+              account.email.trim().length > 0
+          )
+          .map((account) => ({
+            id: String(account.id ?? account.email),
+            email: account.email.trim(),
+            name: (account.name || account.email).trim(),
+            avatarUrl: account.avatarUrl ?? null,
+          }))
+      : [];
+
+    return {
+      enabled: Boolean(payload.enabled),
+      accounts,
+    };
+  } catch (error) {
+    console.error("Admin login directory fetch failed:", error);
+    return { enabled: false, accounts: [] };
+  }
+}
+
 // Export convenience methods
 export const login = (email: string, password: string) =>
   authService.login(email, password);
+export const reauthenticate = (email: string, password: string) =>
+  authService.reauthenticate(email, password);
 export const register = (email: string, password: string, name: string) =>
   authService.register(email, password, name);
 export const logout = () => authService.logout();

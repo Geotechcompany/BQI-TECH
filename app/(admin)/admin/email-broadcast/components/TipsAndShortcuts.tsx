@@ -35,8 +35,8 @@ export function TipsAndShortcuts({ isOpen, onClose }: TipsAndShortcutsProps) {
             <div className="flex items-start gap-2">
               <Bell className="h-4 w-4 text-orange-600 mt-0.5" />
               <div className="text-sm text-orange-700">
-                <strong>Pro Tip:</strong> Use AI generation for personalized
-                content that resonates with your audience.
+                <strong>Pro Tip:</strong> Use BQI Intelligence generation for
+                personalized content that resonates with your audience.
               </div>
             </div>
             <div className="flex items-start gap-2">

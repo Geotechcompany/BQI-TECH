@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -322,8 +324,10 @@ function BackupPageContent() {
     <AdminPageLayout
       title="Backup & Recovery"
       showSearch={false}
+      tourId="backup"
+      guideInBanner
       headerActions={
-        <div className="flex gap-2">
+        <div className="flex gap-2" data-tour="backup-run">
           <Button variant="outline" onClick={load} disabled={isLoading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -339,8 +343,10 @@ function BackupPageContent() {
         </div>
       }
     >
+      <TourPageHelper tourId="backup" />
       <div className="mx-auto max-w-screen-2xl space-y-6 px-4 pb-8">
-        <Card>
+        <AdminPageWelcomeBanner bannerKey="backup" tourId="backup" />
+        <Card data-tour="backup-schedule">
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -733,9 +739,11 @@ function BackupPageContent() {
           </Button>
         </div>
 
-        <Card>
+        <Card data-tour="backup-history">
           <CardHeader>
-            <CardTitle className="text-lg">Recent backup runs</CardTitle>
+            <CardTitle className="text-lg">
+              Recent backup runs
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {runs.length === 0 ? (

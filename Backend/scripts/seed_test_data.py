@@ -141,9 +141,51 @@ async def _build_and_upload_cv(
             return cv_url, dropbox_path, size
         except Exception as error:
             logger.warning(
-                "Dropbox upload failed for %s (%s); using placeholder URL",
+                "Dropbox upload failed for %s (%s); trying existing shared link",
                 name,
                 error,
+            )
+            # File may already exist from a prior seed — reuse its shared link.
+            try:
+                from app.lib.dropbox import get_dropbox_access_token
+                import dropbox as dropbox_sdk
+
+                token = await get_dropbox_access_token()
+                dbx = dropbox_sdk.Dropbox(token)
+                dropbox_path = f"/uploads/seed/{file_name}"
+                links = dbx.sharing_list_shared_links(path=dropbox_path).links
+                if links:
+                    cv_url = links[0].url.replace(
+                        "www.dropbox.com", "dl.dropboxusercontent.com"
+                    )
+                    if "?dl=0" in cv_url:
+                        cv_url = cv_url.replace("?dl=0", "?dl=1")
+                    elif "dl=1" not in cv_url:
+                        cv_url = f"{cv_url}{'&' if '?' in cv_url else '?'}dl=1"
+                    return cv_url, dropbox_path, len(pdf_bytes)
+            except Exception as link_error:
+                logger.warning(
+                    "Could not reuse Dropbox link for %s (%s)",
+                    name,
+                    link_error,
+                )
+
+    # Last resort only — W3 dummy has no contact fields; prefer local path marker.
+    if save_local:
+        local_path = os.path.join(LOCAL_CV_DIR, file_name)
+        if os.path.isfile(local_path):
+            logger.warning(
+                "Using local seed CV path for %s (Dropbox unavailable). "
+                "Contact sync will read scripts/seed_assets/cvs/%s",
+                name,
+                file_name,
+            )
+            # file:// is not fetchable by the API; store a dropbox-shaped path and
+            # a placeholder URL that extract_text_from_cv_url can map to local seed.
+            return (
+                f"https://dl.dropboxusercontent.com/uploads/seed/{file_name}?local_seed=1",
+                f"/uploads/seed/{file_name}",
+                len(pdf_bytes),
             )
 
     cv_url = f"{SAMPLE_CV_URL}?seed={index + 1}"

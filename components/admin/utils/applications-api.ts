@@ -5,6 +5,7 @@
  */
 
 import { authService } from "../../../lib/auth-backend";
+import type { Application } from "@/types/application";
 
 export interface ApplicationFilters {
   position?: string;
@@ -31,6 +32,23 @@ export interface BulkUpdateRequest {
   status: string;
 }
 
+/** Strip read-only aggregation fields before PUT /applications/:id */
+export function sanitizeApplicationUpdate(
+  updateData: Record<string, unknown>
+): Record<string, unknown> {
+  const {
+    id: _id,
+    _id: _mongoId,
+    jobDetails,
+    userDetails,
+    jobTitle,
+    user,
+    job,
+    ...rest
+  } = updateData;
+  return rest;
+}
+
 import { BACKEND_URL } from "@/lib/config";
 
 /**
@@ -52,7 +70,7 @@ function createTimeoutSignal(timeoutMs: number): AbortSignal {
 function formatRequestTimeoutError(timeoutMs?: number): Error {
   const seconds = timeoutMs ? Math.round(timeoutMs / 1000) : 360;
   return new Error(
-    `AI ranking timed out after ${seconds}s. Large CVs can take several minutes — keep this tab open and try again.`
+    `BQI Intelligence ranking timed out after ${seconds}s. Large CVs can take several minutes — keep this tab open and try again.`
   );
 }
 
@@ -135,13 +153,37 @@ class AdminApplicationsApi {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const detail = errorData.detail;
-      const message =
-        typeof detail === "string"
-          ? detail
-          : detail?.message ||
-            detail?.error ||
-            errorData.message ||
-            `Request failed: ${response.status}`;
+      let message: string;
+      if (typeof detail === "string" && detail.trim()) {
+        message = detail;
+      } else if (Array.isArray(detail)) {
+        // FastAPI 422 validation errors: [{ loc, msg, type }, ...]
+        const parts = detail
+          .map((item: unknown) => {
+            if (!item || typeof item !== "object") return null;
+            const row = item as { msg?: string; loc?: unknown[] };
+            const msg = typeof row.msg === "string" ? row.msg : null;
+            if (!msg) return null;
+            const field = Array.isArray(row.loc)
+              ? row.loc.filter((p) => p !== "body" && p !== "query").join(".")
+              : "";
+            return field ? `${field}: ${msg}` : msg;
+          })
+          .filter(Boolean);
+        message =
+          parts.length > 0
+            ? parts.join("; ")
+            : `Request failed: ${response.status}`;
+      } else if (detail && typeof detail === "object") {
+        message =
+          (detail as { message?: string }).message ||
+          (detail as { error?: string }).error ||
+          errorData.message ||
+          `Request failed: ${response.status}`;
+      } else {
+        message =
+          errorData.message || `Request failed: ${response.status}`;
+      }
       throw new Error(message);
     }
 
@@ -228,11 +270,15 @@ class AdminApplicationsApi {
     return response;
   }
 
+  async getApplication(applicationId: string) {
+    return this.makeRequest(`/applications/${applicationId}`);
+  }
+
   // Update single application
   async updateApplication(applicationId: string, updateData: any) {
     return this.makeRequest(`/applications/${applicationId}`, {
       method: "PUT",
-      body: JSON.stringify(updateData),
+      body: JSON.stringify(sanitizeApplicationUpdate(updateData)),
     });
   }
 
@@ -274,6 +320,17 @@ class AdminApplicationsApi {
     });
   }
 
+  // Permanently delete selected applications
+  async bulkDeleteApplications(ids: string[]) {
+    return this.makeRequest<{
+      message?: string;
+      deleted_count?: number;
+    }>("/applications/bulk", {
+      method: "DELETE",
+      body: JSON.stringify({ ids }),
+    });
+  }
+
   // Restore archived applications
   async bulkUnarchiveApplications(ids: string[]) {
     return this.makeRequest<{
@@ -286,10 +343,13 @@ class AdminApplicationsApi {
     });
   }
 
-  // Get job postings for position filtering
-  async getJobPostings(params?: { limit?: number }) {
-    const query = params?.limit ? `?limit=${params.limit}` : "";
-    return this.makeRequest(`/job-postings${query}`);
+  // Get job postings for position filtering (backend max limit is 100)
+  async getJobPostings(params?: { limit?: number; skip?: number }) {
+    const search = new URLSearchParams();
+    if (params?.limit !== undefined) search.set("limit", String(params.limit));
+    if (params?.skip !== undefined) search.set("skip", String(params.skip));
+    const query = search.toString();
+    return this.makeRequest(`/job-postings${query ? `?${query}` : ""}`);
   }
 
   // Get application positions for filtering
@@ -373,6 +433,41 @@ class AdminApplicationsApi {
     return this.getAllApplicationsWithStatusFilter(filters);
   }
 
+  /** Fetch every page when a view needs more than the API max limit (100). */
+  async getAllApplicationsPaginated(
+    filters: ApplicationFilters = {},
+    status?: string
+  ): Promise<ApiResponse<any>> {
+    const pageSize = 100;
+    let skip = 0;
+    const allApplications: any[] = [];
+    let total = 0;
+
+    while (true) {
+      const response = await this.getAllApplicationsWithStatusFilter(
+        { ...filters, limit: pageSize, skip },
+        status
+      );
+
+      const page = response.applications || [];
+      allApplications.push(...page);
+      total = response.total ?? allApplications.length;
+
+      if (page.length < pageSize || allApplications.length >= total) {
+        break;
+      }
+
+      skip += pageSize;
+    }
+
+    return {
+      applications: allApplications,
+      total,
+      page: 1,
+      totalPages: 1,
+    };
+  }
+
   // Status-specific methods for easier use
   async getShortlistedApplications(filters: ApplicationFilters = {}) {
     return this.getApplicationsByStatus("shortlisted", filters);
@@ -398,6 +493,98 @@ class AdminApplicationsApi {
 
   async getArchivedApplications(filters: ApplicationFilters = {}) {
     return this.getApplicationsByStatus("archived", filters);
+  }
+
+  async createManualApplication(payload: {
+    jobId: string;
+    name: string;
+    email: string;
+    status?: string;
+    cvUrl?: string;
+    phoneNumber?: string;
+    location?: string;
+  }) {
+    return this.makeRequest<{
+      applicationId: string;
+      application: Record<string, unknown>;
+      userId: string;
+      userCreated: boolean;
+      passwordSetupEmailSent: boolean;
+    }>("/applications/manual", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Extract name/email/phone/location from a CV URL without creating an application. */
+  extractContactPreview(payload: { cvUrl: string }) {
+    return this.makeRequest<{
+      cvUrl?: string | null;
+      extracted: Partial<{
+        phoneNumber: string;
+        email: string;
+        location: string;
+        name: string;
+      }>;
+      hasText: boolean;
+      source: string;
+      warning?: string | null;
+    }>("/applications/extract-contact-preview", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /** Upload a resume file to storage; returns the public URL. */
+  async uploadResumeFile(file: File): Promise<{ url: string; fileName: string }> {
+    const session = authService.getSession();
+    if (!session) {
+      throw new Error("No authentication session");
+    }
+
+    const uploadWithToken = async (token: string) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`${this.baseUrl}/api/upload/`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: formData,
+      });
+      return response;
+    };
+
+    let response = await uploadWithToken(session.token);
+    if (response.status === 401) {
+      const refreshed = await authService.refreshToken();
+      if (!refreshed) {
+        window.location.href = "/login";
+        throw new Error("Session expired");
+      }
+      response = await uploadWithToken(refreshed.access_token);
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      const detail =
+        typeof errorBody.detail === "string"
+          ? errorBody.detail
+          : "Failed to upload resume";
+      throw new Error(detail);
+    }
+
+    const payload = await response.json();
+    const url = String(payload.url || "").trim();
+    if (!url) {
+      throw new Error("Upload succeeded but no file URL was returned");
+    }
+    return {
+      url,
+      fileName: String(payload.fileName || file.name),
+    };
   }
 
   async rankApplications(request: {
@@ -434,6 +621,51 @@ class AdminApplicationsApi {
       method: "POST",
       body: JSON.stringify(request),
     }, true, AI_RANK_TIMEOUT_MS);
+  }
+
+  /** Fill empty phone/location/name/email + experience from CV text (fill-if-empty). */
+  extractContactFromCv(applicationId: string, options?: { force?: boolean }) {
+    return this.makeRequest<{
+      updated: boolean;
+      skipped?: string | null;
+      filled: Partial<{
+        phoneNumber: string;
+        email: string;
+        location: string;
+        name: string;
+        experience: string;
+        cvProfessionalSummary: string;
+        cvWorkExperience: Array<{
+          title: string;
+          company?: string;
+          dates?: string;
+          bullets?: string[];
+        }>;
+      }>;
+      extracted: Partial<{
+        phoneNumber: string;
+        email: string;
+        location: string;
+        name: string;
+        experience: string;
+        cvProfessionalSummary: string;
+        cvWorkExperience: Array<{
+          title: string;
+          company?: string;
+          dates?: string;
+          bullets?: string[];
+        }>;
+      }>;
+      experience?: {
+        updated?: boolean;
+        skipped?: string | null;
+        filled?: Record<string, unknown>;
+      };
+      application: Application;
+    }>(`/applications/${applicationId}/extract-contact`, {
+      method: "POST",
+      body: JSON.stringify({ force: Boolean(options?.force) }),
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import type { AiRankRequirement } from "@/types/application";
+import { GenerateButton } from "@/components/ui/generate-button";
 import {
   Tooltip,
   TooltipContent,
@@ -68,15 +69,15 @@ export function AiRankScoreCell({
     }
 
     return (
-      <button
-        type="button"
+      <GenerateButton
+        label="BQI Intelligence"
+        generatingLabel="Ranking…"
+        isGenerating={isRanking}
         onClick={onRank}
         disabled={isRanking || Boolean(disabledReason)}
         title={disabledReason}
-        className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 transition hover:bg-violet-100 disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {isRanking ? "Ranking..." : "AI Rank"}
-      </button>
+        className="text-xs"
+      />
     );
   }
 

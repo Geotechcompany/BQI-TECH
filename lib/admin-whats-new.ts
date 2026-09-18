@@ -11,6 +11,12 @@ export const WHATS_NEW_STORAGE_KEY = "admin_whats_new_dismissed_v2";
 // first-login preview dialog only reappears when a newer release ships.
 export const FEATURE_PREVIEW_STORAGE_KEY = "admin_feature_preview_seen_v1";
 
+/** Right-side "What's New" float. Off while Version 4 welcome owns first-run UX. */
+export const WHATS_NEW_FLOAT_ENABLED = false;
+
+/** Multi-step "Hiring Workflow Refinements" preview. Off while V4 welcome is active. */
+export const FEATURE_PREVIEW_DIALOG_ENABLED = false;
+
 export function getSeenFeatureRelease(): string | null {
   try {
     return localStorage.getItem(FEATURE_PREVIEW_STORAGE_KEY);
@@ -44,23 +50,23 @@ export interface WhatsNewRelease {
 
 export const WHATS_NEW_FLOAT_FEATURES: WhatsNewFeature[] = [
   {
-    title: "AI Score column",
+    title: "BQI Intelligence score column",
     description:
       "See a 0–100 fit score and recommendation (Strong Fit, Good Fit, etc.) for every applicant on the Applications table.",
     icon: Sparkles,
     accent: "from-violet-500 to-purple-600",
   },
   {
-    title: "AI Assessment summaries",
+    title: "BQI Intelligence assessment summaries",
     description:
-      "Read why each candidate matches the role they applied for — hover for strengths, gaps, and full reasoning.",
+      "Read why each candidate matches the position they applied for — hover for strengths, gaps, and full reasoning.",
     icon: Brain,
     accent: "from-blue-500 to-indigo-600",
   },
   {
     title: "Rank & update in one place",
     description:
-      "Use AI Rank Page to score the current list, or open a candidate with the eye icon to change status and re-rank inline.",
+      "Use Score with BQI Intelligence to score the current list, or open a candidate with the eye icon to change status and re-score inline.",
     icon: Eye,
     accent: "from-emerald-500 to-teal-600",
   },
@@ -68,17 +74,17 @@ export const WHATS_NEW_FLOAT_FEATURES: WhatsNewFeature[] = [
 
 export const WHATS_NEW_PAGE_RELEASES: WhatsNewRelease[] = [
   {
-    title: "AI Applicant Ranking",
+    title: "BQI Intelligence applicant ranking",
     description:
-      "Rank candidates against their applied role using CV text and application answers. Scores and assessments are saved on each application and visible across pipeline views.",
+      "Rank candidates against their applied position using CV text and application answers. Scores and assessments are saved on each application and visible across pipeline views.",
     date: "June 22, 2026",
     icon: Sparkles,
     category: "New Feature",
   },
   {
-    title: "AI Score & Assessment columns",
+    title: "BQI Intelligence score & assessment columns",
     description:
-      "Applications table now shows color-coded AI scores and role-specific assessment summaries. Hover an assessment to see strengths and gaps.",
+      "Applications table now shows color-coded BQI Intelligence scores and position-specific assessment summaries. Hover an assessment to see strengths and gaps.",
     date: "June 22, 2026",
     icon: Brain,
     category: "New Feature",
@@ -92,9 +98,9 @@ export const WHATS_NEW_PAGE_RELEASES: WhatsNewRelease[] = [
     category: "Improvement",
   },
   {
-    title: "Animated AI ranking progress",
+    title: "Animated BQI Intelligence ranking progress",
     description:
-      "Batch and single-candidate ranking show a live progress overlay with step-by-step feedback while NVIDIA AI evaluates each applicant.",
+      "Batch and single-candidate ranking show a live progress overlay with step-by-step feedback while BQI Intelligence evaluates each applicant.",
     date: "June 22, 2026",
     icon: Sparkles,
     category: "Improvement",

@@ -216,7 +216,7 @@ export function EmailContent({
                   className="bg-purple-100 text-purple-700"
                 >
                   <div className="w-2 h-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full mr-1"></div>
-                  AI Generated
+                  BQI Intelligence
                 </Badge>
               )}
             </div>
@@ -336,9 +336,9 @@ export function EmailContent({
                 ) : (
                   <div className="flex items-center gap-2">
                     <div className="p-1 bg-white/20 rounded mr-1">
-                      <span className="text-xs font-bold">AI</span>
+                      <span className="text-xs font-bold">BQI</span>
                     </div>
-                    Generate with AI
+                    Generate with BQI Intelligence
                   </div>
                 )}
               </Button>

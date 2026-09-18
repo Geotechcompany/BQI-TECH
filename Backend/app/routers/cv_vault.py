@@ -218,6 +218,7 @@ async def create_cv_vault_application(
         )
 
     from app.lib.cors import resolve_frontend_url
+    from app.utils.status_history import admin_actor_label
 
     try:
         result = await create_application_from_cv_vault(
@@ -227,7 +228,7 @@ async def create_cv_vault_application(
             body.status,
             email_override=body.email,
             name_override=body.name,
-            created_by_admin_id=str(current_admin.get("_id") or current_admin.get("id") or ""),
+            created_by=admin_actor_label(current_admin),
             frontend_url=resolve_frontend_url(request.headers.get("origin")),
         )
     except ValueError as e:

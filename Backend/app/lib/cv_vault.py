@@ -164,13 +164,23 @@ def extract_text_from_pdf_bytes(data: bytes, max_pages: int = 4) -> str:
         for page in reader.pages[:max_pages]:
             chunks.append(page.extract_text() or "")
         return "\n".join(chunks)
+    except ImportError as missing:
+        logger.error("PDF text extraction unavailable: install pypdf (%s)", missing)
+        return ""
     except Exception as e:
-        logger.debug("PDF text extraction failed: %s", e)
+        logger.warning("PDF text extraction failed: %s", e)
         return ""
 
 
 def extract_contact_from_cv_text(text: str) -> Tuple[str, str]:
     return extract_name_from_cv_text(text), extract_email_from_text(text)
+
+
+def extract_phone_from_cv_text(text: str) -> str:
+    """Delegate to shared CV contact extractor."""
+    from app.lib.cv_contact_extract import extract_phone_from_text
+
+    return extract_phone_from_text(text)
 
 
 def extract_name_from_answers(answers: List[Dict[str, Any]]) -> str:
@@ -725,7 +735,7 @@ def db_doc_to_entry(doc: Dict[str, Any]) -> Dict[str, Any]:
 async def _enrich_vault_items_with_application_data(
     db, items: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
-    """Overlay live application status, position, AI rank, and applied date on cached vault rows."""
+    """Overlay live application status, AI rank, and applied date on cached vault rows."""
     from bson import ObjectId
 
     app_ids = [item["applicationId"] for item in items if item.get("applicationId")]
@@ -746,11 +756,14 @@ async def _enrich_vault_items_with_application_data(
         {"_id": {"$in": object_ids}},
         {
             "status": 1,
-            "position": 1,
-            "jobId": 1,
             "aiRankScore": 1,
             "aiRankRecommendation": 1,
             "appliedDate": 1,
+            "position": 1,
+            "phoneNumber": 1,
+            "location": 1,
+            "jobId": 1,
+            "user": 1,
         },
     )
     async for doc in cursor:
@@ -763,17 +776,26 @@ async def _enrich_vault_items_with_application_data(
         app = app_map[app_id]
         if app.get("status"):
             item["applicationStatus"] = app["status"]
-        if app.get("position"):
-            item["position"] = app["position"]
-        job_id = app.get("jobId")
-        if job_id is not None:
-            item["jobId"] = str(job_id)
         if app.get("aiRankScore") is not None:
             item["aiRankScore"] = app["aiRankScore"]
         if app.get("aiRankRecommendation"):
             item["aiRankRecommendation"] = app["aiRankRecommendation"]
         if app.get("appliedDate"):
             item["appliedDate"] = _serialize_date(app["appliedDate"])
+        if app.get("position"):
+            item["position"] = app["position"]
+        phone = app.get("phoneNumber") or ""
+        if not phone and isinstance(app.get("user"), dict):
+            phone = app["user"].get("phoneNumber") or ""
+        if phone:
+            item["phoneNumber"] = phone
+        if app.get("location"):
+            item["location"] = app["location"]
+        job_id = app.get("jobId")
+        if job_id is not None:
+            if isinstance(job_id, dict):
+                job_id = job_id.get("_id") or job_id.get("id")
+            item["jobId"] = str(job_id) if job_id else None
 
     return items
 
@@ -1180,7 +1202,7 @@ async def create_application_from_cv_vault(
     *,
     email_override: Optional[str] = None,
     name_override: Optional[str] = None,
-    created_by_admin_id: Optional[str] = None,
+    created_by: Optional[str] = None,
     frontend_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create an application (and user if needed) from a CV vault row, then link it."""
@@ -1265,7 +1287,7 @@ async def create_application_from_cv_vault(
     status_history = StatusHistoryManager.initialize_status_history(
         initial_status=normalized_status,
         applied_date=now,
-        user_id=created_by_admin_id,
+        user_id=created_by,
     )
     if status_history:
         status_history[0]["reason"] = "Created from CV vault"
@@ -1295,6 +1317,11 @@ async def create_application_from_cv_vault(
 
     insert_result = await db.applications.insert_one(application_doc)
     application_id = str(insert_result.inserted_id)
+
+    if cv_url:
+        from app.lib.cv_contact_extract import sync_contact_after_insert
+
+        await sync_contact_after_insert(db, insert_result.inserted_id, cv_url=cv_url)
 
     entry = db_doc_to_entry(vault_doc)
     await _apply_manual_link_to_entry(db, entry, application_id)
@@ -1335,6 +1362,176 @@ async def create_application_from_cv_vault(
     return {
         "item": linked_item,
         "applicationId": application_id,
+        "userId": user_id,
+        "userCreated": user_created,
+        "passwordSetupEmailSent": password_setup_email_sent,
+    }
+
+
+async def create_manual_application_for_job(
+    db,
+    job_id: str,
+    *,
+    email: str,
+    name: str,
+    status: str = "New",
+    cv_url: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    location: Optional[str] = None,
+    created_by: Optional[str] = None,
+    frontend_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create an application (and user if needed) from admin manual pipeline entry."""
+    import asyncio
+    import secrets
+    from bson import ObjectId
+
+    from app.auth import get_password_hash
+    from app.utils.status_history import StatusHistoryManager
+
+    if not job_id:
+        raise ValueError("jobId is required")
+
+    normalized_status = (status or "New").strip()
+    if normalized_status not in CV_VAULT_APPLICATION_STATUSES:
+        raise ValueError(
+            f"Invalid status. Must be one of: {', '.join(CV_VAULT_APPLICATION_STATUSES)}"
+        )
+
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        raise ValueError("A valid email is required.")
+
+    name = (name or "").strip()
+    if not name or name.lower() in INVALID_NAMES:
+        name = email.split("@")[0]
+
+    phone_number = (phone_number or "").strip() or None
+    location = (location or "").strip() or None
+
+    try:
+        job_oid = ObjectId(job_id)
+    except Exception:
+        raise ValueError("Invalid job ID")
+
+    job = await db.jobpostings.find_one({"_id": job_oid})
+    if not job:
+        raise ValueError("Job posting not found")
+
+    email_filter = {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}}
+    user = await db.users.find_one(email_filter)
+    user_created = False
+    password_setup_email_sent = False
+    now = datetime.utcnow()
+
+    if not user:
+        temp_password = secrets.token_urlsafe(24)
+        hashed_password = await asyncio.to_thread(get_password_hash, temp_password)
+        user_doc = {
+            "email": email,
+            "name": name,
+            "password": hashed_password,
+            "role": "USER",
+            "isEmailVerified": True,
+            "needsPasswordSetup": True,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        insert_result = await db.users.insert_one(user_doc)
+        user = {**user_doc, "_id": insert_result.inserted_id}
+        user_created = True
+
+    user_id = str(user["_id"])
+
+    existing_application = await db.applications.find_one(
+        {"userId": user_id, "jobId": job_id}
+    )
+    if existing_application:
+        raise ValueError("This user already has an application for the selected job")
+
+    position = job.get("title") or "Position"
+    status_history = StatusHistoryManager.initialize_status_history(
+        initial_status=normalized_status,
+        applied_date=now,
+        user_id=created_by,
+    )
+    if status_history:
+        status_history[0]["reason"] = "Added manually from pipeline"
+        status_history[0]["metadata"] = {
+            "source": "admin_manual",
+            "automatedChange": True,
+        }
+
+    legacy_fields = StatusHistoryManager.sync_legacy_fields(status_history)
+    application_doc: Dict[str, Any] = {
+        "userId": user_id,
+        "jobId": job_id,
+        "name": name,
+        "email": email,
+        "position": position,
+        "status": normalized_status,
+        "cvUrl": (cv_url or "").strip(),
+        "appliedDate": now,
+        "createdAt": now,
+        "updatedAt": now,
+        "statusHistory": status_history,
+        "source": "admin_manual",
+        "user": {"id": user_id, "email": email, "name": name},
+    }
+    if phone_number:
+        application_doc["phoneNumber"] = phone_number
+    if location:
+        application_doc["location"] = location
+    application_doc.update(legacy_fields)
+
+    insert_result = await db.applications.insert_one(application_doc)
+    application_id = str(insert_result.inserted_id)
+
+    if (cv_url or "").strip():
+        from app.lib.cv_contact_extract import sync_contact_after_insert
+
+        await sync_contact_after_insert(
+            db, insert_result.inserted_id, cv_url=(cv_url or "").strip()
+        )
+
+    needs_password_email = user_created or bool(
+        user.get("needsPasswordSetup")
+    ) or not user.get("password")
+
+    if needs_password_email and frontend_url:
+        try:
+            from app.lib.email import send_password_reset_email
+
+            token = await _upsert_password_reset_token(db, email, user_id)
+            reset_link = f"{frontend_url.rstrip('/')}/reset-password?token={token}"
+            sent = await send_password_reset_email(
+                email=email,
+                reset_link=reset_link,
+                frontend_url=frontend_url,
+            )
+            password_setup_email_sent = bool(sent)
+            if needs_password_email:
+                await db.users.update_one(
+                    {"_id": user["_id"]},
+                    {"$set": {"needsPasswordSetup": True, "updatedAt": now}},
+                )
+        except Exception as exc:
+            logger.warning("Failed to send password setup email to %s: %s", email, exc)
+
+    saved = await db.applications.find_one({"_id": insert_result.inserted_id})
+    if saved:
+        saved["id"] = str(saved.pop("_id"))
+        if "userId" in saved and not isinstance(saved["userId"], str):
+            saved["userId"] = str(saved["userId"])
+        if "jobId" in saved and not isinstance(saved["jobId"], str):
+            try:
+                saved["jobId"] = str(saved["jobId"])
+            except Exception:
+                pass
+
+    return {
+        "applicationId": application_id,
+        "application": saved,
         "userId": user_id,
         "userCreated": user_created,
         "passwordSetupEmailSent": password_setup_email_sent,

@@ -25,8 +25,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GenerateButton } from "@/components/ui/generate-button";
 import { CVPreviewFrame } from "./CVPreviewFrame";
+import { StatusHistoryTimeline } from "./StatusHistoryTimeline";
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
+import { useBqiIntelligence } from "@/contexts/BqiIntelligenceContext";
 
 function aiMatchLabel(match: AiRankRequirement["match"]): string {
   const labels: Record<AiRankRequirement["match"], string> = {
@@ -77,6 +80,7 @@ export function ViewApplicationModal({
   const [status, setStatus] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { isUnconfigured: aiUnconfigured } = useAiStatus();
+  const { applicantInsights } = useBqiIntelligence();
   const { progress: rankProgress, isBackground, inFlightApplicationIds } = useAiRank();
 
   const isRanking = inFlightApplicationIds.includes(application?.id ?? "");
@@ -181,7 +185,7 @@ export function ViewApplicationModal({
                   <div className="flex-1">
                     <h4 className="text-sm sm:text-base font-semibold text-gray-700 flex items-center gap-2 mb-2">
                       <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-violet-500 flex-shrink-0" />
-                      <span>AI Fit Score</span>
+                      <span>BQI Intelligence Fit Score</span>
                     </h4>
                     {application.aiRankScore != null ? (
                       <div className="space-y-3">
@@ -292,34 +296,27 @@ export function ViewApplicationModal({
                       </div>
                     ) : (
                       <p className="text-sm text-gray-600">
-                        No AI score yet. Run AI ranking to evaluate this candidate against the role.
+                        No BQI Intelligence score yet. Run BQI Intelligence ranking to evaluate this candidate against the position.
                       </p>
                     )}
                   </div>
-                  {onRank && (
+                  {applicantInsights && onRank && (
                     <span
                       title={aiUnconfigured ? AI_UNCONFIGURED_MESSAGE : undefined}
                       className="inline-flex flex-shrink-0"
                     >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRank}
+                      <GenerateButton
+                        label={
+                          application.aiRankScore != null
+                            ? "Re-score"
+                            : "BQI Intelligence"
+                        }
+                        generatingLabel="Ranking…"
+                        isGenerating={isRanking}
+                        onClick={() => void handleRank()}
                         disabled={isRanking || aiUnconfigured}
-                        className="border-violet-200 text-violet-700 hover:bg-violet-50"
-                      >
-                        {isRanking ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Ranking...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            {application.aiRankScore != null ? "Re-rank" : "AI Rank"}
-                          </>
-                        )}
-                      </Button>
+                        className="text-sm"
+                      />
                     </span>
                   )}
                 </div>
@@ -404,6 +401,15 @@ export function ViewApplicationModal({
                 </div>
               </div>
             </div>
+
+            {application.statusHistory && application.statusHistory.length > 0 && (
+              <StatusHistoryTimeline
+                statusHistory={application.statusHistory}
+                showStats={false}
+                compact
+                className="border-gray-100 shadow-sm"
+              />
+            )}
 
             <div className="p-4 sm:p-5 bg-white border border-gray-100 rounded-lg sm:rounded-xl shadow-sm">
               <h4 className="text-sm sm:text-base font-semibold text-gray-500 flex items-center gap-2 mb-4 sm:mb-5">

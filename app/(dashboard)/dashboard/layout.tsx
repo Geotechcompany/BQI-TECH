@@ -1,50 +1,67 @@
 "use client";
 
-import { ReactNode, useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import UserDashboardSidebar, { MobileBottomTabs } from '@/components/user/UserDashboardSidebar';
-import { DashboardHeader } from '@/components/user/DashboardHeader';
-import { EmailVerificationGuard } from '@/components/auth/EmailVerificationGuard';
-import { useRouter, usePathname } from 'next/navigation';
+import { ReactNode, useEffect } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSettings } from "@/contexts/SettingsContext";
+import UserDashboardSidebar, {
+  MobileBottomTabs,
+  userShellOffset,
+  userSidebarSpring,
+} from "@/components/user/UserDashboardSidebar";
+import { DashboardHeader } from "@/components/user/DashboardHeader";
+import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
+import { useRouter, usePathname } from "next/navigation";
+import {
+  PremiumDashboardLoader,
+  USER_LOADING_PHRASES,
+} from "@/components/admin/PremiumDashboardLoader";
+import { usePremiumLoaderGate } from "@/hooks/usePremiumLoaderGate";
+import { PlatformTourProvider } from "@/components/admin/tour/PlatformTour";
+import { getUserTourIdForPath } from "@/lib/user-tours";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, authLoading, user } = useAuth();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isAuthenticated, authLoading, isExtendingSession } = useAuth();
+  const { sidebarCollapsed } = useSettings();
+  const reducedMotion = useReducedMotion();
   const router = useRouter();
   const pathname = usePathname();
+  const shellOffset = userShellOffset(sidebarCollapsed);
+  const shellSpring = userSidebarSpring(!!reducedMotion);
+  const showPremiumLoader = usePremiumLoaderGate({
+    isLoginRoute: false,
+    authLoading,
+  });
 
   useEffect(() => {
+    if (isExtendingSession) return;
     if (!authLoading && !isAuthenticated) {
-      router.push('/login');
+      router.replace("/login");
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, isExtendingSession]);
 
-  // Get page title based on pathname
+  const tourId = getUserTourIdForPath(pathname);
+  const guideInBanner = tourId === "user-overview";
+
   const getPageTitle = () => {
-    const path = pathname.split('/').pop();
+    if (pathname.includes("/dashboard/apply/")) return "Apply";
+    const path = pathname.split("/").pop();
     switch (path) {
-      case 'overview':
-        return 'Dashboard Overview';
-      case 'applications':
-        return 'My Applications';
-      case 'jobs':
-        return 'Available Jobs';
-      case 'settings':
-        return 'Settings';
+      case "overview":
+        return "Dashboard Overview";
+      case "applications":
+        return "My Applications";
+      case "jobs":
+        return "Available Jobs";
+      case "settings":
+        return "Settings";
       default:
-        return 'Dashboard';
+        return "Dashboard";
     }
   };
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
+  if (showPremiumLoader) {
+    return <PremiumDashboardLoader phrases={USER_LOADING_PHRASES} />;
   }
 
   if (!isAuthenticated) {
@@ -53,36 +70,37 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <EmailVerificationGuard requireVerification={true}>
-      <div id="user-root" className="flex flex-col h-screen w-screen bg-gray-50 dark:bg-gray-950 md:flex-row overflow-hidden">
-        {/* Desktop Sidebar */}
-        <UserDashboardSidebar 
-          onClose={() => {}} 
-          isCollapsed={isCollapsed}
-          onCollapse={setIsCollapsed}
-        />
-        
-        <div className={`
-          flex-1 flex flex-col h-full w-full overflow-hidden
-          transition-all duration-300
-          ${isCollapsed ? 'md:pl-[80px]' : 'md:pl-[280px]'}
-          pb-20 md:pb-0
-        `}>
-          {/* Dashboard Header */}
-          <DashboardHeader 
-            title={getPageTitle()}
+      <PlatformTourProvider>
+        <div
+          id="user-root"
+          className="flex h-screen w-screen flex-col overflow-hidden bg-gray-100 dark:bg-gray-950 md:flex-row"
+        >
+          <UserDashboardSidebar />
+
+          {/* Spacer mirrors fixed dual-rail width so content tracks the spring */}
+          <motion.div
+            aria-hidden
+            className="hidden shrink-0 md:block"
+            initial={false}
+            animate={{ width: shellOffset }}
+            transition={shellSpring}
+            style={{ willChange: "width" }}
           />
-          
-          {/* Main Content */}
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 dark:bg-gray-950">
-            <div className="h-full w-full p-6 md:p-8">
-              {children}
+
+          <main className="flex h-full w-full min-w-0 flex-1 flex-col overflow-hidden bg-gray-100 pb-20 dark:bg-gray-950 md:pb-0">
+            <DashboardHeader
+              title={getPageTitle()}
+              tourId={guideInBanner ? undefined : tourId}
+            />
+
+            <div className="h-full w-full flex-1 overflow-x-hidden overflow-y-auto">
+              <div className="h-full w-full p-4 sm:p-6 md:p-8">{children}</div>
             </div>
           </main>
-        </div>
 
-        {/* iOS-style Bottom Tabs for Mobile */}
-        <MobileBottomTabs />
-      </div>
+          <MobileBottomTabs />
+        </div>
+      </PlatformTourProvider>
     </EmailVerificationGuard>
   );
 }

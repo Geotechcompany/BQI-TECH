@@ -3,6 +3,7 @@
 import { SettingsProvider } from "@/contexts/SettingsContext"
 import { JsonLd } from '@/components/JsonLd'
 import ClientLayout from "@/components/ClientLayout"
+import { CustomCursor } from "@/components/effects/CustomCursor"
 import Script from 'next/script'
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
           {children}
         </ClientLayout>
       </SettingsProvider>
+      <CustomCursor />
       <JsonLd />
     </>
   )

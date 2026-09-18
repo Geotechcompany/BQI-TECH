@@ -3,36 +3,27 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
 import { FEATURE_RELEASES } from "@/lib/feature-releases";
-import { ArrowRight, Rocket, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function FeatureReleasesPage() {
   return (
     <AdminPageLayout title="Feature Releases" showSearch={false}>
       <div className="mx-auto max-w-5xl space-y-8">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="overflow-hidden rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-blue-50 p-8 dark:border-violet-900 dark:from-violet-950/30 dark:via-slate-950 dark:to-blue-950/20"
-        >
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
-                <Rocket className="h-3.5 w-3.5" />
-                Product releases
-              </div>
-              <h1 className="text-3xl font-bold text-foreground">Feature Releases</h1>
-              <p className="mt-2 max-w-2xl text-muted-foreground">
-                Deep dives into major platform capabilities. Each release explains what
-                shipped, why it matters, and how to use it in your hiring workflow.
-              </p>
-            </div>
-            <Button asChild variant="outline">
+        <AdminPageWelcomeBanner
+          bannerKey="releases"
+          actions={
+            <Button
+              asChild
+              variant="secondary"
+              className="bg-white text-[#272055] hover:bg-white/90"
+            >
               <Link href="/admin/whats-new">View changelog</Link>
             </Button>
-          </div>
-        </motion.div>
+          }
+        />
 
         <div className="grid gap-6">
           {FEATURE_RELEASES.map((release, index) => (

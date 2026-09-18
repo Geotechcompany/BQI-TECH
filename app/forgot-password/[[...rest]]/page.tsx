@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { BACKEND_URL } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +10,19 @@ import { z } from "zod";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import { useState } from "react";
-import { Loader2, Zap, ArrowLeft } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { FieldError } from "react-hook-form";
+import { motion, useReducedMotion } from "framer-motion";
+import { PortalAuthCard } from "@/components/auth/PortalAuthCard";
+import { PortalBrandPanel } from "@/components/auth/PortalBrandPanel";
+import {
+  criticallyDampedSpring,
+  portalAuthAutofillCss,
+  portalAuthButtonClass,
+  portalAuthInputClass,
+  portalAuthLabelClass,
+  portalAuthLinkClass,
+} from "@/components/auth/portal-auth-styles";
 
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -20,6 +30,7 @@ const formSchema = z.object({
 
 export default function ForgotPasswordPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const reduceMotion = useReducedMotion();
   const {
     register,
     handleSubmit,
@@ -51,82 +62,67 @@ export default function ForgotPasswordPage() {
     }
   };
 
+  const fadeUp = (delay: number) =>
+    reduceMotion
+      ? {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          transition: { duration: 0.28, delay },
+        }
+      : {
+          initial: { opacity: 0, y: 14 },
+          animate: { opacity: 1, y: 0 },
+          transition: { ...criticallyDampedSpring, delay },
+        };
+
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left Panel - Gradient Background */}
-      <div className="hidden lg:block relative bg-gradient-to-br from-[#31CDFF] to-blue-600">
-        <div className="absolute inset-0 pattern-dots pattern-blue-500 pattern-bg-transparent pattern-opacity-20 pattern-size-4" />
-        <div className="relative h-full flex flex-col justify-between p-12 text-white">
-          <Zap className="w-12 h-12" />
-          <div className="space-y-4">
-            <h2 className="text-4xl font-bold">BQI Tech Portal</h2>
-            <p className="text-lg opacity-90">
-              Secure account recovery process
-            </p>
-          </div>
-          <div className="flex gap-4 opacity-75">
-            <span className="text-sm">v2.4.0</span>
-            <span className="text-sm">•</span>
-            <span className="text-sm">Enterprise Security</span>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-[100dvh] grid lg:grid-cols-2">
+      <PortalBrandPanel
+        subtitle="Recover your BQI HR account with a secure email reset link."
+        footerLabel="Secure Login"
+      />
 
-      {/* Right Panel - Form */}
-      <div className="flex items-center justify-center p-8 bg-background">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="relative z-10 bg-background p-8 rounded-lg shadow-2xl w-full max-w-md"
-        >
-          <Link
-            href="/login"
-            className="flex items-center text-sm text-[#31CDFF] hover:text-[#31CDFF]/90 mb-8"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to login
-          </Link>
-
-          <div className="text-center space-y-2 mb-8">
-            <motion.h1
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-3xl font-bold"
-            >
+      <PortalAuthCard backHref="/login" backLabel="Back to login">
+        <div className="space-y-7">
+          <motion.div {...fadeUp(0.05)} className="space-y-2 text-center">
+            <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.025em] text-[#1d1d1f] sm:text-[2rem]">
               Reset Password
-            </motion.h1>
-            <p className="text-muted-foreground">
+            </h1>
+            <p className="text-[15px] leading-relaxed text-[#6e6e73]">
               Enter your email to receive reset instructions
             </p>
-          </div>
+          </motion.div>
 
-          <motion.form
+          <style>{portalAuthAutofillCss}</style>
+
+          <form
             onSubmit={handleSubmit(onSubmit)}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-6"
+            className="portal-auth-form space-y-4"
           >
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  {...register("email")}
-                  className="h-12 focus:ring-2 focus:ring-[#31CDFF]"
-                />
-                {errors.email && (
-                  <p className="text-sm text-red-500">
-                    {(errors.email as FieldError).message}
-                  </p>
-                )}
-              </div>
+            <motion.div {...fadeUp(0.1)} className="space-y-2">
+              <Label htmlFor="email" className={portalAuthLabelClass}>
+                Email Address
+              </Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                autoComplete="email"
+                disabled={isSubmitting}
+                {...register("email")}
+                className={portalAuthInputClass}
+              />
+              {errors.email && (
+                <p className="text-sm text-red-500">
+                  {(errors.email as FieldError).message}
+                </p>
+              )}
+            </motion.div>
 
+            <motion.div {...fadeUp(0.16)}>
               <Button
                 type="submit"
-                className="w-full h-12 text-base bg-gradient-to-r from-[#31CDFF] to-blue-500 hover:from-[#31CDFF]/90 hover:to-blue-500/90"
+                className={portalAuthButtonClass}
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
@@ -138,20 +134,20 @@ export default function ForgotPasswordPage() {
                   "Send Reset Instructions"
                 )}
               </Button>
-            </div>
+            </motion.div>
+          </form>
 
-            <div className="text-center text-sm text-muted-foreground">
-              Remember your password?{" "}
-              <Link
-                href="/login"
-                className="font-medium text-[#31CDFF] hover:underline"
-              >
-                Sign in
-              </Link>
-            </div>
-          </motion.form>
-        </motion.div>
-      </div>
+          <motion.div
+            {...fadeUp(0.22)}
+            className="text-center text-sm text-[#6e6e73]"
+          >
+            Remember your password?{" "}
+            <Link href="/login" className={portalAuthLinkClass}>
+              Sign in
+            </Link>
+          </motion.div>
+        </div>
+      </PortalAuthCard>
     </div>
   );
 }

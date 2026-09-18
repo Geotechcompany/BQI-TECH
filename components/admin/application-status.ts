@@ -9,8 +9,11 @@ export const APPLICATION_STATUS_OPTIONS = [
 ] as const;
 
 export function getStatusColor(status: string): string {
-  return (
-    APPLICATION_STATUS_OPTIONS.find((option) => option.value === status)?.color ??
-    "bg-gray-100 text-gray-700"
+  const exact = APPLICATION_STATUS_OPTIONS.find((option) => option.value === status);
+  if (exact) return exact.color;
+
+  const normalized = APPLICATION_STATUS_OPTIONS.find(
+    (option) => option.value.toLowerCase() === status.toLowerCase()
   );
+  return normalized?.color ?? "bg-gray-100 text-gray-700";
 }

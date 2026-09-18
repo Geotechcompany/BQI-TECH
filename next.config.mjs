@@ -1,3 +1,11 @@
+import withPWAInit from "@ducanh2912/next-pwa";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { pwaOptions } = require("./pwa.config.js");
+
+const withPWA = withPWAInit(pwaOptions);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     eslint: {
@@ -65,6 +73,7 @@ const nextConfig = {
                     "font-src 'self' https://fonts.gstatic.com https://fonts.googleapis.com",
                     "img-src 'self' data: https://*",
                     "frame-src 'self' https://www.google.com https://maps.google.com https://app.thinkstack.ai https://api.thinkstack.ai",
+                    "worker-src 'self' blob:",
                 ].join('; ')
             }]
         }]
@@ -114,10 +123,15 @@ const nextConfig = {
                 source: '/dashboard',
                 destination: '/dashboard/overview',
                 permanent: true,
-            }
+            },
+            {
+                source: '/admin/cv-vault',
+                destination: '/admin/applicants',
+                permanent: false,
+            },
         ];
     },
-    transpilePackages: ['@uiw/react-md-editor', 'react-beautiful-dnd'],
+    transpilePackages: ['@uiw/react-md-editor', '@hello-pangea/dnd'],
     async rewrites() {
         return [{
             source: '/sitemap.xml',
@@ -126,4 +140,4 @@ const nextConfig = {
     },
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);

@@ -83,8 +83,9 @@ def obfuscate_user_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
     """Obfuscate user profile data"""
     # Only return essential fields
     essential_fields = [
-        'id', 'email', 'name', 'firstName', 'lastName', 
-        'role', 'avatar', 'isEmailVerified', 'createdAt'
+        'id', 'email', 'name', 'firstName', 'lastName',
+        'role', 'avatar', 'avatarUrl', 'isEmailVerified', 'createdAt',
+        'adminModules',
     ]
     
     minimal_data = ResponseObfuscator.create_minimal_response(profile_data, essential_fields)

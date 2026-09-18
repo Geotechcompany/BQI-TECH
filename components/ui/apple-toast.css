@@ -1,0 +1,97 @@
+/* Apple-style toast motion for Sonner — enter/exit from the right */
+
+.apple-sonner-toaster[data-sonner-toaster] {
+  --width: 360px;
+  color: #171717;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.apple-sonner-toaster [data-sonner-toast] {
+  transition:
+    transform 360ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 280ms cubic-bezier(0.32, 0.72, 0, 1),
+    height 320ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  will-change: transform, opacity;
+}
+
+/* Enter from the right (symmetric with exit) */
+.apple-sonner-toaster[data-x-position="right"] [data-sonner-toast]:not([data-mounted="true"]) {
+  --y: translateX(28px);
+  opacity: 0;
+}
+
+.apple-sonner-toaster[data-x-position="right"]
+  [data-sonner-toast][data-mounted="true"][data-expanded="true"] {
+  --y: translateX(0) translateY(calc(var(--lift) * var(--offset)));
+}
+
+.apple-sonner-toaster[data-x-position="right"]
+  [data-sonner-toast][data-mounted="true"][data-expanded="false"][data-front="true"] {
+  --y: translateX(0);
+}
+
+.apple-sonner-toaster[data-x-position="right"]
+  [data-sonner-toast][data-removed="true"][data-front="true"][data-swipe-out="false"] {
+  --y: translateX(28px);
+  opacity: 0;
+}
+
+.apple-sonner-toaster [data-sonner-toast].apple-sonner-toast {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: 12px;
+  row-gap: 0;
+}
+
+.apple-sonner-toaster [data-sonner-toast] [data-close-button] {
+  position: absolute;
+}
+
+.apple-sonner-toaster [data-sonner-toast] [data-icon] {
+  order: 1;
+  flex: 0 0 auto;
+}
+
+.apple-sonner-toaster [data-sonner-toast] [data-content] {
+  order: 2;
+  /* Fill the first row so action links wrap underneath the copy */
+  flex: 1 1 calc(100% - 48px);
+  min-width: 0;
+  max-width: calc(100% - 48px);
+}
+
+.apple-sonner-toaster [data-sonner-toast] [data-button],
+.apple-sonner-toaster [data-sonner-toast] [data-cancel] {
+  order: 3;
+  flex: 0 0 auto;
+  margin-top: 10px !important;
+  margin-bottom: 0 !important;
+  margin-left: 48px !important;
+  margin-right: 0 !important;
+  box-shadow: none !important;
+}
+
+.apple-sonner-toaster [data-sonner-toast] [data-button] + [data-cancel],
+.apple-sonner-toaster [data-sonner-toast] [data-cancel] + [data-button] {
+  margin-left: 14px !important;
+}
+
+.apple-sonner-toaster [data-sonner-toast] [data-close-button] svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apple-sonner-toaster [data-sonner-toast] {
+    transition: opacity 180ms cubic-bezier(0.32, 0.72, 0, 1) !important;
+  }
+
+  .apple-sonner-toaster[data-x-position="right"]
+    [data-sonner-toast]:not([data-mounted="true"]),
+  .apple-sonner-toaster[data-x-position="right"]
+    [data-sonner-toast][data-removed="true"][data-front="true"][data-swipe-out="false"] {
+    --y: translateX(0) !important;
+  }
+}

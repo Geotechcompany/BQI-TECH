@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CardGridSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -159,9 +160,7 @@ export function EmailHistory({ isOpen, onClose }: EmailHistoryProps) {
 
           <div className="space-y-4 max-h-[70vh] overflow-y-auto">
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
+              <CardGridSkeleton count={3} className="sm:grid-cols-1 xl:grid-cols-1" />
             ) : campaigns.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-8">
@@ -250,9 +249,7 @@ export function EmailHistory({ isOpen, onClose }: EmailHistoryProps) {
 
           <div className="space-y-4 max-h-[60vh] overflow-y-auto">
             {logsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
+              <TableSkeleton rows={6} columns={4} />
             ) : (
               <Table>
                 <TableHeader>

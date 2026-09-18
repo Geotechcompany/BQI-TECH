@@ -670,9 +670,117 @@ async def send_admin_invite_email(
         return False
 
 # ---------------------- Generic & Bulk Email Utilities ----------------------
-def send_generic_email(to: str, subject: str, html: str) -> bool:
-    """Send a generic HTML email via the configured transport."""
-    return deliver_html_email(to, subject, html)
+def send_generic_email(
+    to: str,
+    subject: str,
+    html: str,
+    *,
+    email_type: str = "generic",
+    application_id: Optional[str] = None,
+    job_id: Optional[str] = None,
+    sent_by_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    skip_log: bool = False,
+) -> bool:
+    """Send a generic HTML email and optionally persist a delivery log.
+
+    Logging only runs when called on the main event-loop thread (Motor-safe).
+    Prefer ``send_generic_email_logged`` from async code, or pass
+    ``skip_log=True`` when the caller writes its own audit trail.
+    """
+    ok = False
+    error_message: Optional[str] = None
+    try:
+        ok = bool(deliver_html_email(to, subject, html))
+        if not ok:
+            error_message = "Email delivery failed"
+    except Exception as exc:
+        error_message = str(exc)
+        logger.error("send_generic_email failed for %s: %s", to, exc)
+        ok = False
+
+    if not skip_log:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            try:
+                from app.lib.communication_emails import (
+                    build_email_log_document,
+                    insert_email_log,
+                )
+
+                loop.create_task(
+                    insert_email_log(
+                        build_email_log_document(
+                            to=to,
+                            subject=subject,
+                            status="sent" if ok else "failed",
+                            email_type=email_type,
+                            error=error_message,
+                            html=html,
+                            application_id=application_id,
+                            job_id=job_id,
+                            sent_by_name=sent_by_name,
+                            metadata=metadata,
+                        )
+                    )
+                )
+            except Exception as log_exc:
+                logger.error("Failed to log outbound email to %s: %s", to, log_exc)
+        else:
+            logger.debug(
+                "Skipping email log for %s — no running event loop (use send_generic_email_logged)",
+                to,
+            )
+
+    return ok
+
+
+async def send_generic_email_logged(
+    to: str,
+    subject: str,
+    html: str,
+    *,
+    email_type: str = "generic",
+    application_id: Optional[str] = None,
+    job_id: Optional[str] = None,
+    sent_by_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Send email on a worker thread, then write email_logs on the main loop."""
+    ok = await asyncio.to_thread(
+        send_generic_email,
+        to,
+        subject,
+        html,
+        skip_log=True,
+    )
+    try:
+        from app.lib.communication_emails import (
+            build_email_log_document,
+            insert_email_log,
+        )
+
+        await insert_email_log(
+            build_email_log_document(
+                to=to,
+                subject=subject,
+                status="sent" if ok else "failed",
+                email_type=email_type,
+                error=None if ok else "Email delivery failed",
+                html=html,
+                application_id=application_id,
+                job_id=job_id,
+                sent_by_name=sent_by_name,
+                metadata=metadata,
+            )
+        )
+    except Exception as log_exc:
+        logger.error("Failed to log outbound email to %s: %s", to, log_exc)
+    return ok
 
 
 async def send_bulk_emails_backend(
@@ -732,23 +840,32 @@ async def send_bulk_emails_backend(
         async with sem:
             try:
                 loop = asyncio.get_running_loop()
-                ok = await loop.run_in_executor(None, send_generic_email, to, subject, html)
-                
+                ok = await loop.run_in_executor(
+                    None,
+                    lambda: send_generic_email(to, subject, html, skip_log=True),
+                )
+
                 # Store individual email log
                 if db is not None:
                     try:
-                        email_log = {
-                            "campaign_id": campaign_id,
-                            "recipient_email": to,
-                            "subject": subject,
-                            "sent_at": datetime.utcnow(),
-                            "status": "sent" if ok else "failed",
-                            "error": None if ok else "send failed"
-                        }
-                        await db.email_logs.insert_one(email_log)
+                        from app.lib.communication_emails import (
+                            build_email_log_document,
+                            insert_email_log,
+                        )
+
+                        await insert_email_log(
+                            build_email_log_document(
+                                to=to,
+                                subject=subject,
+                                status="sent" if ok else "failed",
+                                email_type="broadcast",
+                                error=None if ok else "send failed",
+                                campaign_id=campaign_id,
+                            )
+                        )
                     except Exception as e:
                         logger.error(f"Failed to store email log for {to}: {e}")
-                
+
                 if ok:
                     succeeded += 1
                 else:
@@ -757,18 +874,24 @@ async def send_bulk_emails_backend(
                 # Store failed email log
                 if db is not None:
                     try:
-                        email_log = {
-                            "campaign_id": campaign_id,
-                            "recipient_email": to,
-                            "subject": subject,
-                            "sent_at": datetime.utcnow(),
-                            "status": "failed",
-                            "error": str(e)
-                        }
-                        await db.email_logs.insert_one(email_log)
+                        from app.lib.communication_emails import (
+                            build_email_log_document,
+                            insert_email_log,
+                        )
+
+                        await insert_email_log(
+                            build_email_log_document(
+                                to=to,
+                                subject=subject,
+                                status="failed",
+                                email_type="broadcast",
+                                error=str(e),
+                                campaign_id=campaign_id,
+                            )
+                        )
                     except Exception as log_error:
                         logger.error(f"Failed to store email log for {to}: {log_error}")
-                
+
                 failures.append({"to": to, "error": str(e)})
 
     await asyncio.gather(*[_send(to) for to in normalized])

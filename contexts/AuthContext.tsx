@@ -1,9 +1,15 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { authService } from "@/lib/auth-backend";
-import { BACKEND_URL } from "@/lib/config";
+import { resolveEmailVerified } from "@/lib/resolve-email-verified";
 import { User } from "@/types/user";
 import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
 
@@ -27,6 +33,8 @@ interface AuthContextType {
   showSessionTimeout: boolean;
   sessionTimeRemaining: number;
   refreshSession: () => Promise<void>;
+  /** True while Stay Logged In is renewing tokens — layouts must not redirect */
+  isExtendingSession: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -42,10 +50,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [showSessionExpired, setShowSessionExpired] = useState(false);
   const [showSessionTimeout, setShowSessionTimeout] = useState(false);
   const [sessionTimeRemaining, setSessionTimeRemaining] = useState(0);
-  const [sessionTimeoutId, setSessionTimeoutId] =
-    useState<NodeJS.Timeout | null>(null);
-  const [sessionWarningId, setSessionWarningId] =
-    useState<NodeJS.Timeout | null>(null);
+  const [isExtendingSession, setIsExtendingSession] = useState(false);
+  const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionWarningRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionCountdownRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
+  const isExtendingSessionRef = useRef(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -57,6 +68,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Session timeout configuration (in minutes)
   const SESSION_TIMEOUT_MINUTES = 30; // 30 minutes
   const SESSION_WARNING_MINUTES = 5; // Show warning 5 minutes before expiry
+
+  const clearSessionTimers = () => {
+    if (sessionTimeoutRef.current) {
+      clearTimeout(sessionTimeoutRef.current);
+      sessionTimeoutRef.current = null;
+    }
+    if (sessionWarningRef.current) {
+      clearTimeout(sessionWarningRef.current);
+      sessionWarningRef.current = null;
+    }
+    if (sessionCountdownRef.current) {
+      clearInterval(sessionCountdownRef.current);
+      sessionCountdownRef.current = null;
+    }
+  };
+
+  const dismissSessionModals = () => {
+    setShowSessionTimeout(false);
+    setShowSessionExpired(false);
+    setSessionTimeRemaining(0);
+  };
 
   const roleIsAdmin = (role?: string): boolean => {
     if (!role) return false;
@@ -312,6 +344,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
+      clearSessionTimers();
+      dismissSessionModals();
+      setIsExtendingSession(false);
+      isExtendingSessionRef.current = false;
       setAuthState({
         isAuthenticated: false,
         isAdmin: false,
@@ -319,94 +355,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRole: undefined,
         authLoading: false,
       });
+      const currentPath =
+        typeof window !== "undefined"
+          ? window.location.pathname
+          : pathname || "";
+      if (currentPath.startsWith("/admin")) {
+        router.replace("/admin/login");
+      } else {
+        router.replace("/login");
+      }
     }
   };
 
   const refreshToken = async () => {
-    try {
-      const session = authService.getSession();
-      if (!session?.refreshToken) {
-        throw new Error("No refresh token");
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/auth/refresh`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          refresh_token: session.refreshToken,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("Token refresh failed:", response.status, errorData);
-
-        // If refresh token is expired, clear session and redirect to login
-        if (response.status === 401 || errorData.detail?.includes("expired")) {
-          console.log("Refresh token expired, redirecting to login");
-          authService.clearSession();
-          setAuthState((prev) => ({
-            ...prev,
-            isAuthenticated: false,
-            isAdmin: false,
-            user: null,
-            userRole: undefined,
-            authLoading: false,
-          }));
-          router.push("/login?message=Session expired. Please log in again.");
-          return;
-        }
-
-        throw new Error("Failed to refresh token");
-      }
-
-      const rawData = await response.json();
-      let data = rawData;
-      try {
-        const { ResponseDecryption } = await import("@/lib/encryption-decoder");
-        data = await ResponseDecryption.decrypt(rawData, session.user?.id);
-      } catch {
-        const { ResponseDecoder } = await import("@/lib/response-decoder");
-        data = ResponseDecoder.decode(rawData);
-      }
-
-      const refreshedUser = data.user
-        ? { ...session.user, ...data.user, id: data.user.id || data.user._id || session.user.id }
-        : session.user;
-
-      const newSession = {
-        ...session,
-        user: refreshedUser,
-        token: data.access_token,
-        refreshToken: data.refresh_token,
-      };
-
-      authService.setSession(newSession);
-
-      setAuthState((prev) => ({
-        ...prev,
-        isAuthenticated: true,
-        isAdmin: roleIsAdmin(refreshedUser.role),
-        user: refreshedUser,
-        userRole: refreshedUser.role,
-        authLoading: false,
-      }));
-    } catch (error) {
-      console.error("Token refresh failed:", error);
-      authService.clearSession();
-      setAuthState((prev) => ({
-        ...prev,
-        isAuthenticated: false,
-        isAdmin: false,
-        user: null,
-        userRole: undefined,
-        authLoading: false,
-      }));
-      router.push("/login?message=Session expired. Please log in again.");
+    const session = authService.getSession();
+    if (!session?.refreshToken) {
+      // Do not flip isAuthenticated here — that triggers layout hard-redirects
+      // mid "Stay Logged In". Caller shows an error; user can logout explicitly.
+      throw new Error("No refresh token");
     }
+
+    // Always go through authService so concurrent refreshes share one request
+    // and do not race on rotated refresh tokens.
+    const refreshed = await authService.refreshToken();
+    if (!refreshed) {
+      const stillHasSession = Boolean(authService.getSession()?.refreshToken);
+      throw new Error(
+        stillHasSession
+          ? "Failed to refresh session. Please try again."
+          : "Your session could not be renewed. Please log in again."
+      );
+    }
+
+    const activeSession = authService.getSession();
+    const refreshedUser = activeSession?.user ?? refreshed.user;
+
+    setAuthState((prev) => ({
+      ...prev,
+      isAuthenticated: true,
+      isAdmin: roleIsAdmin(refreshedUser.role),
+      user: refreshedUser,
+      userRole: refreshedUser.role,
+      authLoading: false,
+    }));
   };
 
   const updateUserAvatar = (avatarUrl: string) => {
@@ -415,11 +406,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const updatedUser = {
       ...authState.user,
       avatar: avatarUrl,
+      avatarUrl: avatarUrl,
       name:
         authState.user.firstName && authState.user.lastName
           ? `${authState.user.firstName} ${authState.user.lastName}`
           : authState.user.name || authState.user.email,
-      isEmailVerified: authState.user.isEmailVerified || false,
+      isEmailVerified: resolveEmailVerified(
+        authState.user.isEmailVerified,
+        false
+      ),
     };
 
     // Update local state
@@ -428,22 +423,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: updatedUser,
     }));
 
-    // Update session storage
+    // Update session storage — merge into existing user so verification/role stay intact
     const currentSession = authService.getSession();
     if (currentSession) {
-      // Create auth-backend compatible user object
-      const sessionUser = {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        name: updatedUser.name || updatedUser.email, // Ensure name is always present
-        role: updatedUser.role,
-        isEmailVerified: updatedUser.isEmailVerified || false,
-        avatarUrl: updatedUser.avatar,
-      };
-
       authService.setSession({
         ...currentSession,
-        user: sessionUser,
+        user: {
+          ...currentSession.user,
+          ...updatedUser,
+          id: updatedUser.id || currentSession.user.id,
+          avatar: avatarUrl,
+          avatarUrl: avatarUrl,
+          isEmailVerified: resolveEmailVerified(
+            updatedUser.isEmailVerified,
+            resolveEmailVerified(currentSession.user?.isEmailVerified, false)
+          ),
+        },
       });
     }
   };
@@ -485,6 +480,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         : null,
     });
 
+    const currentSession = authService.getSession();
+    if (currentSession?.user) {
+      authService.setSession({
+        ...currentSession,
+        user: {
+          ...currentSession.user,
+          isEmailVerified: isVerified,
+        },
+      });
+    }
+
     setAuthState((prevState) => {
       const updatedState = {
         ...prevState,
@@ -513,22 +519,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Session timeout management
   const startSessionTimeout = () => {
-    // Clear existing timeouts
-    if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
-    if (sessionWarningId) clearTimeout(sessionWarningId);
+    clearSessionTimers();
 
     // Set warning timeout (5 minutes before expiry)
     const warningTimeout =
       (SESSION_TIMEOUT_MINUTES - SESSION_WARNING_MINUTES) * 60 * 1000;
-    const warningId = setTimeout(() => {
+    sessionWarningRef.current = setTimeout(() => {
       setShowSessionTimeout(true);
       setSessionTimeRemaining(SESSION_WARNING_MINUTES * 60); // 5 minutes in seconds
 
-      // Start countdown timer
-      const countdownInterval = setInterval(() => {
+      // Start countdown timer — must be cleared on refresh or it will reopen the expired modal
+      sessionCountdownRef.current = setInterval(() => {
         setSessionTimeRemaining((prev) => {
           if (prev <= 1) {
-            clearInterval(countdownInterval);
+            if (sessionCountdownRef.current) {
+              clearInterval(sessionCountdownRef.current);
+              sessionCountdownRef.current = null;
+            }
             handleSessionExpiry();
             return 0;
           }
@@ -538,29 +545,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, warningTimeout);
 
     // Set actual session timeout
-    const timeoutId = setTimeout(() => {
+    sessionTimeoutRef.current = setTimeout(() => {
       handleSessionExpiry();
     }, SESSION_TIMEOUT_MINUTES * 60 * 1000);
-
-    setSessionWarningId(warningId);
-    setSessionTimeoutId(timeoutId);
   };
 
   const handleSessionExpiry = () => {
+    // Do not auto-logout while Stay Logged In is in flight
+    if (isExtendingSessionRef.current) return;
+    clearSessionTimers();
     setShowSessionTimeout(false);
     setShowSessionExpired(true);
     setSessionTimeRemaining(0);
   };
 
   const refreshSession = async () => {
+    // Stop idle / countdown timers first so auto-logout cannot fire mid-refresh
+    clearSessionTimers();
+    isExtendingSessionRef.current = true;
+    setIsExtendingSession(true);
     try {
       await refreshToken();
-      setShowSessionTimeout(false);
-      setSessionTimeRemaining(0);
-      startSessionTimeout(); // Restart the timeout
+      dismissSessionModals();
+      startSessionTimeout();
     } catch (error) {
-      console.error("Failed to refresh session:", error);
-      handleSessionExpiry();
+      // Keep expired dialog open for retry; never hard-redirect from here
+      setShowSessionTimeout(false);
+      setShowSessionExpired(true);
+      throw error;
+    } finally {
+      isExtendingSessionRef.current = false;
+      setIsExtendingSession(false);
     }
   };
 
@@ -573,17 +588,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (authState.isAuthenticated && !authState.authLoading && shouldRunSessionTimeout) {
       startSessionTimeout();
     } else {
-      // Clear timeouts when not authenticated
-      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
-      if (sessionWarningId) clearTimeout(sessionWarningId);
-      setShowSessionTimeout(false);
-      setSessionTimeRemaining(0);
+      clearSessionTimers();
+      dismissSessionModals();
     }
 
-    // Cleanup on unmount
     return () => {
-      if (sessionTimeoutId) clearTimeout(sessionTimeoutId);
-      if (sessionWarningId) clearTimeout(sessionWarningId);
+      clearSessionTimers();
     };
   }, [authState.isAuthenticated, authState.authLoading, pathname]);
 
@@ -624,6 +634,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         showSessionTimeout,
         sessionTimeRemaining,
         refreshSession,
+        isExtendingSession,
       }}
     >
       {children}
@@ -632,16 +643,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         <SessionExpiredDialog
           isOpen={showSessionExpired}
           onClose={() => setShowSessionExpired(false)}
-          onRefresh={async () => {
-            try {
-              await refreshToken();
-              setShowSessionExpired(false);
-            } catch (error) {
-              console.error("Failed to refresh token:", error);
-              // If refresh fails, let the dialog handle logout
-              throw error;
-            }
-          }}
+          onRefresh={refreshSession}
           countdownDuration={30}
         />
       ) : null}

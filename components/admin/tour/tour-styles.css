@@ -1,0 +1,417 @@
+.bqi-tour-popover.driver-popover {
+  --bqi-navy: #272055;
+  --bqi-cyan: #31cdff;
+  background: #ffffff;
+  border: 1px solid rgba(39, 32, 85, 0.12);
+  border-radius: 12px;
+  box-shadow:
+    0 4px 6px -1px rgba(39, 32, 85, 0.08),
+    0 20px 40px -12px rgba(39, 32, 85, 0.18);
+  color: var(--bqi-navy);
+  font-family: inherit;
+  max-width: min(calc(100vw - 2rem), 360px);
+  overflow: hidden;
+  padding: 0;
+}
+
+/* Shared brand hero (modal + driver popover) — login cover + navy/cyan scrim */
+.bqi-tour-brand-hero {
+  height: 7.5rem;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.bqi-tour-brand-hero--compact {
+  height: 4.25rem;
+}
+
+.bqi-tour-brand-hero-img {
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  width: 100%;
+}
+
+.bqi-tour-brand-hero-scrim {
+  background: linear-gradient(
+    135deg,
+    rgba(39, 32, 85, 0.88) 0%,
+    rgba(39, 32, 85, 0.55) 48%,
+    rgba(49, 205, 255, 0.45) 100%
+  );
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.bqi-tour-brand-hero-fade {
+  background: linear-gradient(
+    to top,
+    #ffffff 0%,
+    rgba(255, 255, 255, 0.4) 42%,
+    transparent 100%
+  );
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.bqi-tour-brand-hero-logo {
+  bottom: 0.65rem;
+  filter: drop-shadow(0 1px 2px rgba(39, 32, 85, 0.35));
+  height: 1.5rem;
+  left: 1rem;
+  object-fit: contain;
+  position: absolute;
+  width: auto;
+  z-index: 1;
+}
+
+.bqi-tour-brand-hero--compact .bqi-tour-brand-hero-logo {
+  bottom: 0.5rem;
+  height: 1.15rem;
+  left: 0.85rem;
+}
+
+.bqi-tour-popover--has-hero .driver-popover-close-btn {
+  color: rgba(255, 255, 255, 0.88);
+  right: 0.4rem;
+  top: 0.4rem;
+  z-index: 2;
+}
+
+.bqi-tour-popover--has-hero .driver-popover-close-btn:hover,
+.bqi-tour-popover--has-hero .driver-popover-close-btn:focus-visible {
+  background: rgba(49, 205, 255, 0.22);
+  color: #ffffff;
+}
+
+.bqi-tour-popover .driver-popover-title {
+  color: var(--bqi-navy);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin: 0;
+  padding: 1rem 1rem 0.35rem 1rem;
+}
+
+.bqi-tour-popover--has-hero .driver-popover-title {
+  padding-top: 0.75rem;
+}
+
+.bqi-tour-popover .driver-popover-description {
+  color: rgba(39, 32, 85, 0.78);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0;
+  padding: 0 1rem 0.75rem 1rem;
+}
+
+.bqi-tour-popover .driver-popover-close-btn {
+  align-items: center;
+  color: rgba(39, 32, 85, 0.45);
+  display: flex;
+  height: 2rem;
+  justify-content: center;
+  right: 0.5rem;
+  top: 0.5rem;
+  width: 2rem;
+}
+
+.bqi-tour-popover .driver-popover-close-btn:hover,
+.bqi-tour-popover .driver-popover-close-btn:focus-visible {
+  background: rgba(49, 205, 255, 0.12);
+  color: var(--bqi-navy);
+}
+
+.bqi-tour-popover .driver-popover-arrow {
+  border-color: #ffffff;
+}
+
+.bqi-tour-footer {
+  align-items: center;
+  border-top: 1px solid rgba(39, 32, 85, 0.08);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 1fr auto 1fr;
+  padding: 0.75rem 1rem;
+}
+
+.bqi-tour-footer-left {
+  justify-self: start;
+}
+
+.bqi-tour-footer-right {
+  justify-self: end;
+}
+
+.bqi-tour-progress {
+  color: rgba(39, 32, 85, 0.55);
+  font-size: 0.75rem;
+  font-weight: 500;
+  justify-self: center;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.bqi-tour-text-btn {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--bqi-navy);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  min-height: 2.25rem;
+  min-width: 2.75rem;
+  padding: 0.35rem 0.5rem;
+  transition: background-color 0.15s ease;
+}
+
+.bqi-tour-text-btn:hover,
+.bqi-tour-text-btn:focus-visible {
+  background: rgba(49, 205, 255, 0.12);
+  outline: none;
+}
+
+.bqi-tour-text-btn-muted {
+  color: rgba(39, 32, 85, 0.62);
+}
+
+.bqi-tour-primary-btn {
+  background: #272156;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  min-height: 2.25rem;
+  min-width: 4rem;
+  padding: 0.45rem 0.9rem;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bqi-tour-primary-btn:hover,
+.bqi-tour-primary-btn:focus-visible {
+  background: #1e1844;
+  box-shadow: 0 0 0 3px rgba(39, 33, 86, 0.35);
+  outline: none;
+}
+
+.driver-active-element,
+.driver-active-element * {
+  pointer-events: auto;
+}
+
+.driver-active-element {
+  box-shadow:
+    0 0 0 2px var(--bqi-cyan, #31cdff),
+    0 0 0 6px rgba(49, 205, 255, 0.28) !important;
+  outline: none !important;
+}
+
+@media (max-width: 640px) {
+  .bqi-tour-popover.driver-popover {
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  .bqi-tour-brand-hero {
+    height: 6.5rem;
+  }
+
+  .bqi-tour-brand-hero--compact {
+    height: 3.75rem;
+  }
+
+  .bqi-tour-footer {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "progress progress"
+      "left right";
+  }
+
+  .bqi-tour-progress {
+    grid-area: progress;
+    justify-self: center;
+  }
+
+  .bqi-tour-footer-left {
+    grid-area: left;
+  }
+
+  .bqi-tour-footer-right {
+    grid-area: right;
+    justify-self: end;
+  }
+
+  .bqi-tour-primary-btn {
+    min-width: 5rem;
+    text-align: center;
+  }
+}
+
+.bqi-tour-modal-root {
+  --bqi-navy: #272055;
+  --bqi-cyan: #31cdff;
+  inset: 0;
+  position: fixed;
+  z-index: 10000;
+}
+
+.bqi-tour-modal-backdrop {
+  background: rgba(39, 32, 85, 0.68);
+  border: none;
+  cursor: default;
+  inset: 0;
+  position: absolute;
+}
+
+.bqi-tour-modal-card {
+  background: #ffffff;
+  border: 1px solid rgba(39, 32, 85, 0.12);
+  border-radius: 12px;
+  box-shadow:
+    0 4px 6px -1px rgba(39, 32, 85, 0.08),
+    0 20px 40px -12px rgba(39, 32, 85, 0.18);
+  color: var(--bqi-navy);
+  left: 50%;
+  max-height: calc(100vh - 2rem);
+  max-width: min(calc(100vw - 2rem), 420px);
+  overflow-y: auto;
+  padding: 1.5rem 1.5rem 0;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+}
+
+.bqi-tour-modal-card--has-hero {
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.bqi-tour-modal-card--has-hero .bqi-tour-brand-hero {
+  margin: 0 -1.5rem;
+  width: calc(100% + 3rem);
+}
+
+.bqi-tour-modal-close {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(39, 32, 85, 0.45);
+  cursor: pointer;
+  display: flex;
+  height: 2rem;
+  justify-content: center;
+  position: absolute;
+  right: 0.75rem;
+  top: 0.75rem;
+  width: 2rem;
+  z-index: 2;
+}
+
+.bqi-tour-modal-card--has-hero .bqi-tour-modal-close {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.bqi-tour-modal-close:hover,
+.bqi-tour-modal-close:focus-visible {
+  background: rgba(49, 205, 255, 0.12);
+  color: var(--bqi-navy);
+  outline: none;
+}
+
+.bqi-tour-modal-card--has-hero .bqi-tour-modal-close:hover,
+.bqi-tour-modal-card--has-hero .bqi-tour-modal-close:focus-visible {
+  background: rgba(49, 205, 255, 0.22);
+  color: #ffffff;
+}
+
+.bqi-tour-modal-title {
+  color: var(--bqi-navy);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin: 0 2rem 0.75rem 0;
+  text-align: center;
+}
+
+.bqi-tour-modal-card--has-hero .bqi-tour-modal-title {
+  margin-top: 1.1rem;
+}
+
+.bqi-tour-modal-body {
+  color: rgba(39, 32, 85, 0.82);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  margin: 0 0 1rem;
+  text-align: center;
+}
+
+.bqi-tour-modal-illustration {
+  margin: 0 auto 1rem;
+  padding: 0 0.25rem;
+}
+
+.bqi-tour-modal-secondary {
+  color: rgba(39, 32, 85, 0.72);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0 0 0.75rem;
+  text-align: center;
+}
+
+.bqi-tour-modal-link {
+  color: var(--bqi-cyan);
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin: 0 auto 1rem;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  width: fit-content;
+}
+
+.bqi-tour-modal-link:hover,
+.bqi-tour-modal-link:focus-visible {
+  color: #1eb8eb;
+}
+
+.bqi-tour-modal-card .bqi-tour-footer {
+  margin: 0 -1.5rem;
+}
+
+@media (max-width: 640px) {
+  .bqi-tour-modal-card {
+    max-width: calc(100vw - 1.5rem);
+    padding: 1.25rem 1.25rem 0;
+  }
+
+  .bqi-tour-modal-card--has-hero {
+    padding-top: 0;
+  }
+
+  .bqi-tour-modal-card--has-hero .bqi-tour-brand-hero {
+    margin: 0 -1.25rem;
+    width: calc(100% + 2.5rem);
+  }
+
+  .bqi-tour-modal-title {
+    font-size: 1rem;
+  }
+
+  .bqi-tour-modal-body {
+    font-size: 0.875rem;
+  }
+
+  .bqi-tour-modal-card .bqi-tour-footer {
+    margin: 0 -1.25rem;
+  }
+}

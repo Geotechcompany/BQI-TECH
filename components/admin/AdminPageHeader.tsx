@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { 
   Menu, 
-  Search, 
+  Search,
   Settings,
   HelpCircle,
   ChevronDown,
@@ -12,10 +12,10 @@ import {
   Moon,
   Laptop,
   Sparkles,
+  Lock,
   LogOut,
   ShieldCheck,
 } from "lucide-react";
-import { useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "next-themes";
 import { useAdminTheme, type AdminTheme } from "@/contexts/AdminThemeContext";
+import { useOptionalAdminLockScreen } from "@/contexts/AdminLockScreenContext";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { adminApi } from "@/lib/api-backend";
@@ -36,31 +37,36 @@ import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/h
 import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { formatAdminRoleLabel, isAdminRoleLabel } from "@/lib/format-admin-role";
 import { AdminNotificationDropdown } from "@/components/admin/AdminNotificationDropdown";
+import { AdminFullscreenToggle } from "@/components/admin/AdminFullscreenToggle";
 import { AiRankHeaderIndicator } from "@/components/admin/AiRankProgress";
+import {
+  AdminCommandSearch,
+  openAdminCommandSearch,
+} from "@/components/admin/AdminCommandSearch";
+import {
+  EMPLOYEE_DEFAULT_AVATAR_SRC,
+  resolveEmployeeAvatarSrc,
+} from "@/lib/employee-portal-avatar";
+import { cn } from "@/lib/utils";
 
 interface AdminPageHeaderProps {
   title: string;
   onMenuClick?: () => void;
+  /** @deprecated Page filters use AdminPageLayout search; header always shows global search */
   showSearch?: boolean;
+  /** @deprecated Unused — global command search replaced header page filtering */
   onSearch?: (value: string) => void;
 }
 
 export default function AdminPageHeader({ 
   title, 
   onMenuClick,
-  showSearch = false,
-  onSearch 
 }: AdminPageHeaderProps) {
   const { user, logout, userRole } = useAuth();
+  const lockScreen = useOptionalAdminLockScreen();
   const { setTheme: setGlobalTheme } = useTheme();
   const { theme, setTheme } = useAdminTheme();
-  const { sidebarCollapsed } = useSettings();
-  const [searchValue, setSearchValue] = useState("");
-
-  const handleSearch = (value: string) => {
-    setSearchValue(value);
-    onSearch?.(value);
-  };
+  const { sidebarCollapsed, updateSettings } = useSettings();
 
   const displayRole = formatAdminRoleLabel(userRole || user?.role);
   const isAdminUser = isAdminRoleLabel(userRole || user?.role);
@@ -68,6 +74,12 @@ export default function AdminPageHeader({
     [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join("") ||
     user?.name?.slice(0, 2).toUpperCase() ||
     "A";
+  const avatarSrc = resolveEmployeeAvatarSrc(
+    user?.avatar,
+    user?.avatarUrl,
+    user?.profileImage
+  );
+  const isDefaultAvatar = avatarSrc === EMPLOYEE_DEFAULT_AVATAR_SRC;
 
   const applyAdminTheme = (next: AdminTheme) => {
     setTheme(next);
@@ -75,51 +87,84 @@ export default function AdminPageHeader({
   };
 
   return (
-    <div 
-      className="bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80 z-50 flex h-16 items-center border-b border-border/60 w-full fixed left-0 right-0 transition-all duration-300 ease-in-out shadow-sm overflow-visible"
+    <header
+      className="sticky top-0 z-50 flex h-16 w-full items-center overflow-visible border-b border-border/60 bg-background/95 shadow-sm backdrop-blur-md supports-[backdrop-filter]:bg-background/80"
       style={{ top: "var(--admin-banner-offset, 0px)" }}
       data-collapsed={sidebarCollapsed}
     >
-      <div className={`w-full flex items-center justify-between px-4 ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
+      <div className="flex w-full items-center justify-between gap-3 px-4">
         {/* Left Section */}
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={onMenuClick}
-            className="md:hidden"
+            className="md:hidden shrink-0"
           >
             <Menu className="h-5 w-5" />
           </Button>
+
+          <div className="hidden shrink-0 items-center gap-2.5 md:flex">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                void updateSettings({ sidebarCollapsed: !sidebarCollapsed })
+              }
+              aria-label={
+                sidebarCollapsed
+                  ? "Expand navigation panel"
+                  : "Collapse navigation panel"
+              }
+              className="h-8 w-8 rounded-md border border-border/60 bg-background hover:bg-muted"
+            >
+              <img
+                src="/collapse-svg-black.svg"
+                alt=""
+                width={16}
+                height={16}
+                className="block dark:hidden"
+                aria-hidden="true"
+              />
+              <img
+                src="/collapse-svg-white.svg"
+                alt=""
+                width={16}
+                height={16}
+                className="hidden dark:block"
+                aria-hidden="true"
+              />
+            </Button>
+            <div className="h-5 w-px bg-border/70" aria-hidden="true" />
+          </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight truncate">{title}</h1>
+          </div>
+
+          <div className="min-w-0 flex-1 md:max-w-md lg:max-w-lg">
+            <AdminCommandSearch className="hidden md:flex" />
           </div>
         </div>
 
-        {/* Search Section (Center) */}
-        {showSearch && (
-          <div className="hidden md:block flex-1 max-w-lg mx-6">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <input
-                type="search"
-                placeholder="Search..."
-                className="w-full rounded-full border border-input bg-background px-9 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={searchValue}
-                onChange={(e) => handleSearch(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
-
         {/* Right Section */}
-        <div className="flex items-center gap-1.5 overflow-visible sm:gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 overflow-visible sm:gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-xl md:hidden"
+            onClick={openAdminCommandSearch}
+            aria-label="Search BQI HR"
+          >
+            <Search className="h-5 w-5" aria-hidden="true" />
+          </Button>
           <BackendStatusIndicator />
 
           <AiRankHeaderIndicator />
 
           <div className="hidden sm:block h-6 w-px bg-border/70 mx-1" />
+
+          <AdminFullscreenToggle />
 
           {/* Theme Switcher */}
           <DropdownMenu>
@@ -184,7 +229,14 @@ export default function AdminPageHeader({
                 className="flex items-center gap-2.5 px-2.5 h-10 hover:bg-accent/70 rounded-xl border border-transparent hover:border-border/60"
               >
                 <Avatar className={`h-8 w-8 ${isAdminUser ? "ring-2 ring-blue-500/30 ring-offset-2 ring-offset-background" : ""}`}>
-                  <AvatarImage src={user?.avatar} alt={user?.name || "Admin"} />
+                  <AvatarImage
+                    src={avatarSrc}
+                    alt={user?.name || "Admin"}
+                    className={cn(
+                      "object-cover",
+                      isDefaultAvatar && "bg-[#272156]"
+                    )}
+                  />
                   <AvatarFallback className="bg-blue-600/10 text-blue-700 dark:text-blue-300 text-xs font-semibold">
                     {initials}
                   </AvatarFallback>
@@ -217,7 +269,14 @@ export default function AdminPageHeader({
                 <div className="flex flex-col space-y-2">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={user?.avatar} alt={user?.name || "Admin"} />
+                      <AvatarImage
+                        src={avatarSrc}
+                        alt={user?.name || "Admin"}
+                        className={cn(
+                          "object-cover",
+                          isDefaultAvatar && "bg-[#272156]"
+                        )}
+                      />
                       <AvatarFallback className="bg-blue-600/10 text-blue-700 dark:text-blue-300 text-sm font-semibold">
                         {initials}
                       </AvatarFallback>
@@ -253,6 +312,12 @@ export default function AdminPageHeader({
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
+              {lockScreen ? (
+                <DropdownMenuItem onClick={() => lockScreen.lock()}>
+                  <Lock className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Lock screen
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem 
                 className="text-red-600 focus:text-red-600" 
                 onClick={logout}
@@ -264,7 +329,7 @@ export default function AdminPageHeader({
           </DropdownMenu>
         </div>
       </div>
-    </div>
+    </header>
   );
 } 
 

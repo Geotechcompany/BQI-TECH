@@ -1,31 +1,43 @@
-import { Inter } from "next/font/google";
+import "@fontsource/inter/latin.css";
+import type { Viewport } from "next";
+import { ReactNode } from "react";
+import { AppToaster } from "@/components/ui/app-toaster";
 import ClientWrapper from "./ClientWrapper";
 import "./globals.css";
-import { ReactNode } from "react";
-
-export { metadata } from "./metadata";
-import { Toaster } from "react-hot-toast";
-import { Toaster as SonnerToaster } from "sonner";
 import { Providers } from "./providers";
 import ThinkStackScriptLoader from "./ThinkStackScriptLoader";
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["100", "200", "300", "400", "500", "600", "700", "800", "900"],
-});
+export { metadata } from "./metadata";
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#272156" },
+    { media: "(prefers-color-scheme: dark)", color: "#272156" },
+  ],
+  colorScheme: "light dark",
+  width: "device-width",
+  initialScale: 1,
+};
+
+const interFontFamily =
+  "'Inter', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.className} suppressHydrationWarning>
+    <html lang="en" style={{ fontFamily: interFontFamily }} suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#272156" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="BQI Tech" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body suppressHydrationWarning>
         <Providers>
           <ThinkStackScriptLoader />
           <ClientWrapper>{children}</ClientWrapper>
-          <Toaster />
-          <SonnerToaster position="top-right" richColors />
+          <AppToaster />
         </Providers>
       </body>
     </html>

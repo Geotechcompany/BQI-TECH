@@ -11,6 +11,126 @@ from typing import List, Dict, Any, Optional
 from bson import ObjectId
 from app.models.application import StatusHistoryEntry
 
+
+def is_mongo_object_id_string(value: Any) -> bool:
+    """True when value looks like a 24-char MongoDB ObjectId hex string."""
+    if not isinstance(value, str):
+        return False
+    trimmed = value.strip()
+    return len(trimmed) == 24 and ObjectId.is_valid(trimmed)
+
+
+def actor_label_from_user(user: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Prefer email, then name — matches admin status-update changedBy labels."""
+    if not user:
+        return None
+    email = str(user.get("email") or "").strip()
+    if email:
+        return email
+    name = str(user.get("name") or "").strip()
+    if name:
+        return name
+    first = str(user.get("firstName") or "").strip()
+    last = str(user.get("lastName") or "").strip()
+    combined = f"{first} {last}".strip()
+    return combined or None
+
+
+def admin_actor_label(user: Optional[Dict[str, Any]]) -> str:
+    """Label stored on statusHistory.changedBy for admin-driven writes."""
+    return actor_label_from_user(user) or "Admin"
+
+
+async def resolve_status_history_changed_by(
+    db,
+    status_history: Optional[List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """
+    Replace ObjectId changedBy values with email/name for API responses.
+    Leaves human-readable labels (emails, names) unchanged.
+    """
+    if not status_history:
+        return list(status_history or [])
+
+    unresolved_ids: List[str] = []
+    for entry in status_history:
+        raw = entry.get("changedBy")
+        if is_mongo_object_id_string(raw):
+            unresolved_ids.append(str(raw).strip())
+
+    label_by_id: Dict[str, str] = {}
+    if unresolved_ids and db is not None:
+        unique_ids = list(dict.fromkeys(unresolved_ids))
+        object_ids = [ObjectId(uid) for uid in unique_ids]
+        users = await db.users.find(
+            {"_id": {"$in": object_ids}},
+            {"email": 1, "name": 1, "firstName": 1, "lastName": 1},
+        ).to_list(length=len(object_ids))
+        for user in users:
+            uid = str(user["_id"])
+            label = actor_label_from_user(user)
+            if label:
+                label_by_id[uid] = label
+
+    resolved: List[Dict[str, Any]] = []
+    for entry in status_history:
+        new_entry = dict(entry)
+        raw = new_entry.get("changedBy")
+        if is_mongo_object_id_string(raw):
+            key = str(raw).strip()
+            if key in label_by_id:
+                new_entry["changedBy"] = label_by_id[key]
+        resolved.append(new_entry)
+    return resolved
+
+
+async def resolve_applications_changed_by(
+    db,
+    applications: List[Dict[str, Any]],
+) -> None:
+    """In-place: resolve ObjectId changedBy values across a list of applications."""
+    if not applications or db is None:
+        return
+
+    unresolved_ids: List[str] = []
+    for app in applications:
+        for entry in app.get("statusHistory") or []:
+            raw = entry.get("changedBy")
+            if is_mongo_object_id_string(raw):
+                unresolved_ids.append(str(raw).strip())
+
+    if not unresolved_ids:
+        return
+
+    unique_ids = list(dict.fromkeys(unresolved_ids))
+    object_ids = [ObjectId(uid) for uid in unique_ids]
+    users = await db.users.find(
+        {"_id": {"$in": object_ids}},
+        {"email": 1, "name": 1, "firstName": 1, "lastName": 1},
+    ).to_list(length=len(object_ids))
+
+    label_by_id: Dict[str, str] = {}
+    for user in users:
+        uid = str(user["_id"])
+        label = actor_label_from_user(user)
+        if label:
+            label_by_id[uid] = label
+
+    if not label_by_id:
+        return
+
+    for app in applications:
+        history = app.get("statusHistory")
+        if not history:
+            continue
+        for entry in history:
+            raw = entry.get("changedBy")
+            if is_mongo_object_id_string(raw):
+                key = str(raw).strip()
+                if key in label_by_id:
+                    entry["changedBy"] = label_by_id[key]
+
+
 class StatusHistoryManager:
     """Manager class for handling status history operations"""
     
@@ -36,6 +156,34 @@ class StatusHistoryManager:
         'Disqualified': 6
     }
     
+    @classmethod
+    def add_admin_status_change(
+        cls,
+        current_history: List[Dict[str, Any]],
+        new_status: str,
+        changed_by: str,
+        reason: Optional[str] = None,
+        previous_status: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Record a status change from admin UI without transition guards."""
+        new_entry = {
+            "status": new_status,
+            "date": datetime.now(timezone.utc),
+            "changedBy": changed_by,
+            "reason": reason or f"Status changed to {new_status}",
+            "metadata": {
+                **(metadata or {}),
+                "source": "admin_update",
+            },
+        }
+        if previous_status:
+            new_entry["metadata"]["previousStatus"] = previous_status
+
+        updated_history = list(current_history or [])
+        updated_history.append(new_entry)
+        return updated_history
+
     @classmethod
     def add_status_change(
         cls,
@@ -326,3 +474,121 @@ class StatusHistoryManager:
             'applicationDate': start_date,
             'lastUpdated': end_date
         }
+
+
+CANONICAL_APPLICATION_STATUSES = [
+    "New",
+    "Shortlisted",
+    "Technical Assessment",
+    "Interviewing",
+    "Hired",
+    "Rejected",
+    "Disqualified",
+]
+
+_STATUS_ALIAS_MAP = {
+    "new": "New",
+    "shortlisted": "Shortlisted",
+    "shortlist": "Shortlisted",
+    "technicalassessment": "Technical Assessment",
+    "technical assessment": "Technical Assessment",
+    "assessment": "Technical Assessment",
+    "interviewing": "Interviewing",
+    "interview": "Interviewing",
+    "hired": "Hired",
+    "rejected": "Rejected",
+    "disqualified": "Disqualified",
+}
+
+_STATUS_QUERY_VARIANTS = {
+    "New": ["New", "new", "NEW"],
+    "Shortlisted": ["Shortlisted", "shortlisted", "SHORTLISTED"],
+    "Technical Assessment": [
+        "Technical Assessment",
+        "technical assessment",
+        "technical_assessment",
+        "technical-assessment",
+        "Assessment",
+    ],
+    "Interviewing": ["Interviewing", "interviewing", "INTERVIEWING"],
+    "Hired": ["Hired", "hired", "HIRED"],
+    "Rejected": ["Rejected", "rejected", "REJECTED"],
+    "Disqualified": ["Disqualified", "disqualified", "DISQUALIFIED"],
+}
+
+
+def normalize_application_status(
+    status: Optional[str],
+    default: str = "New",
+) -> str:
+    """Map legacy or inconsistent status strings to canonical pipeline values."""
+    if not status or not str(status).strip():
+        return default
+
+    raw = str(status).strip()
+    if raw in CANONICAL_APPLICATION_STATUSES:
+        return raw
+
+    alias_key = raw.lower().replace("_", " ").replace("-", " ")
+    alias_key_compact = alias_key.replace(" ", "")
+    return _STATUS_ALIAS_MAP.get(alias_key, _STATUS_ALIAS_MAP.get(alias_key_compact, raw))
+
+
+def application_status_match(canonical_status: str) -> Dict[str, Any]:
+    """MongoDB filter for status, tolerating legacy casing in stored documents."""
+    normalized = normalize_application_status(canonical_status, canonical_status)
+    variants = _STATUS_QUERY_VARIANTS.get(normalized, [normalized])
+    if len(variants) == 1:
+        return {"status": variants[0]}
+    return {"status": {"$in": variants}}
+
+
+def ensure_status_history(existing: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Return status history for an application, migrating legacy dates when needed."""
+    history = existing.get("statusHistory") or []
+    if history:
+        return list(history)
+
+    migrated = StatusHistoryManager.migrate_legacy_dates(existing)
+    if migrated:
+        return migrated
+
+    initial_status = normalize_application_status(existing.get("status"), "New")
+    return StatusHistoryManager.initialize_status_history(initial_status=initial_status)
+
+
+def build_admin_status_update(
+    existing: Dict[str, Any],
+    new_status: str,
+    changed_by: str,
+    reason: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Build $set fields for an admin-driven status change, including history and legacy dates.
+    Admin updates may use any transition (e.g. Rejected -> Shortlisted).
+    """
+    normalized_status = normalize_application_status(new_status)
+    previous_status = normalize_application_status(existing.get("status"), "New")
+    current_time = datetime.now(timezone.utc)
+
+    update_data: Dict[str, Any] = {
+        "status": normalized_status,
+        "updatedAt": current_time,
+    }
+
+    if normalized_status == previous_status:
+        return update_data
+
+    current_history = ensure_status_history(existing)
+    updated_history = StatusHistoryManager.add_admin_status_change(
+        current_history=current_history,
+        new_status=normalized_status,
+        changed_by=changed_by,
+        reason=reason or f"Status changed to {normalized_status}",
+        previous_status=previous_status,
+    )
+    legacy_fields = StatusHistoryManager.sync_legacy_fields(updated_history)
+
+    update_data["statusHistory"] = updated_history
+    update_data.update(legacy_fields)
+    return update_data

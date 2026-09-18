@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation"
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query"
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout"
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner"
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper"
 import { Button } from "@/components/ui/button"
 import { PlusCircle, Eye, Pencil, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +24,7 @@ import {
 } from "@/components/ui/dialog"
 import type { BlogPost } from "@/types/blog"
 import { format } from "date-fns"
+import { TableSkeleton } from "@/components/ui/skeleton"
 
 export default function BlogManagementPage() {
   const router = useRouter()
@@ -227,9 +230,7 @@ export default function BlogManagementPage() {
   if (authLoading || isDataLoading) {
     return (
       <AdminPageLayout title="Blog Management">
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-        </div>
+        <TableSkeleton rows={8} columns={6} />
       </AdminPageLayout>
     )
   }
@@ -251,7 +252,8 @@ export default function BlogManagementPage() {
   }
 
   return (
-    <AdminPageLayout title="Blog Management">
+    <AdminPageLayout title="Blog Management" tourId="blog" guideInBanner>
+      <TourPageHelper tourId="blog" />
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -285,15 +287,23 @@ export default function BlogManagementPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Blog Posts</h1>
-        <Button onClick={() => router.push('/admin/blog-management/new')}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Create New Post
-        </Button>
+      <div className="mb-6">
+        <AdminPageWelcomeBanner tourId="blog"
+          bannerKey="blog"
+          actions={
+            <Button
+              onClick={() => router.push('/admin/blog-management/wizard')}
+              className="bg-white text-[#272055] hover:bg-white/90"
+              data-tour="blog-create"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Create New Post
+            </Button>
+          }
+        />
       </div>
 
-      <div className="rounded-md border">
+      <div className="rounded-md border" data-tour="blog-table">
         <div className="relative w-full overflow-auto">
           <table className="w-full caption-bottom text-sm">
             <thead className="[&_tr]:border-b">
@@ -352,7 +362,7 @@ export default function BlogManagementPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => router.push(`/admin/blog-management/${post.id}/edit`)}
+                        onClick={() => router.push(`/admin/blog-management/${post.id}/wizard`)}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>

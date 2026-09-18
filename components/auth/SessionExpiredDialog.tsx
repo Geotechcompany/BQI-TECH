@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,10 +9,11 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Clock, RefreshCw, LogOut, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "next/navigation";
+
+const BRAND_NAVY = "#272156";
+const BRAND_CYAN = "#31CDFF";
 
 interface SessionExpiredDialogProps {
   isOpen: boolean;
@@ -26,29 +26,59 @@ export function SessionExpiredDialog({
   isOpen,
   onClose,
   onRefresh,
-  countdownDuration = 30
+  countdownDuration = 30,
 }: SessionExpiredDialogProps) {
   const [countdown, setCountdown] = useState(countdownDuration);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const { logout, refreshToken } = useAuth();
-  const router = useRouter();
 
-  // Reset countdown when dialog opens
+  const isRefreshingRef = useRef(false);
+  const hasLoggedOutRef = useRef(false);
+  const isOpenRef = useRef(isOpen);
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  // Reset when dialog opens
   useEffect(() => {
     if (isOpen) {
       setCountdown(countdownDuration);
+      setRefreshError(null);
+      setIsRefreshing(false);
+      isRefreshingRef.current = false;
+      hasLoggedOutRef.current = false;
     }
   }, [isOpen, countdownDuration]);
 
-  // Countdown timer
+  const handleLogout = async () => {
+    if (hasLoggedOutRef.current) return;
+    hasLoggedOutRef.current = true;
+    isRefreshingRef.current = false;
+    setIsRefreshing(false);
+
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      onClose();
+      // logout() already soft-navigates to the correct login route
+    }
+  };
+
+  // Countdown — paused while refreshing; cancelled after successful stay-logged-in
   useEffect(() => {
-    if (!isOpen || countdown <= 0) return;
+    if (!isOpen || countdown <= 0 || isRefreshing) return;
 
     const timer = setInterval(() => {
-      setCountdown(prev => {
+      setCountdown((prev) => {
+        if (isRefreshingRef.current || hasLoggedOutRef.current || !isOpenRef.current) {
+          return prev;
+        }
         if (prev <= 1) {
-          // Auto-logout when countdown reaches 0
-          handleLogout();
+          void handleLogout();
           return 0;
         }
         return prev - 1;
@@ -56,138 +86,144 @@ export function SessionExpiredDialog({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isOpen, countdown]);
+  }, [isOpen, countdown, isRefreshing]);
 
   const handleRefresh = async () => {
+    if (isRefreshingRef.current || hasLoggedOutRef.current) return;
+
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    setRefreshError(null);
+
     try {
-      setIsRefreshing(true);
-      
       if (onRefresh) {
         await onRefresh();
       } else {
         await refreshToken();
       }
-      
+      // Success: parent dismisses via onRefresh/refreshSession; also close locally
       onClose();
     } catch (error) {
-      console.error('Failed to refresh session:', error);
-      // If refresh fails, logout immediately
-      handleLogout();
+      console.error("Failed to refresh session:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to refresh session. Please try again.";
+      setRefreshError(message);
+      // Keep modal open for retry; do not logout
     } finally {
+      isRefreshingRef.current = false;
       setIsRefreshing(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      router.push('/login');
-      onClose();
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Force redirect even if logout fails
-      router.push('/login');
-      onClose();
-    }
-  };
-
-  const progressPercentage = ((countdownDuration - countdown) / countdownDuration) * 100;
+  const progressPercentage =
+    ((countdownDuration - countdown) / countdownDuration) * 100;
 
   return (
     <Dialog open={isOpen} onOpenChange={() => {}}>
-      <DialogContent 
-        className="w-[95vw] max-w-md p-0 rounded-xl sm:rounded-2xl overflow-hidden border-0 shadow-2xl"
+      <DialogContent
+        className="w-[95vw] max-w-md gap-0 overflow-hidden rounded-xl border border-[#272156]/10 bg-white p-0 shadow-xl sm:rounded-xl [&>button]:hidden"
         style={{ zIndex: 10000 }}
       >
-        {/* Animated Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 dark:from-red-950/20 dark:via-orange-950/20 dark:to-yellow-950/20" />
-        
-        {/* Content */}
-        <div className="relative p-6 space-y-6">
-          {/* Header */}
-          <DialogHeader className="text-center space-y-4">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.1, type: "spring" }}
-              className="mx-auto p-3 bg-gradient-to-br from-orange-100 to-red-100 dark:from-orange-900/20 dark:to-red-900/20 rounded-full"
+        <div className="space-y-5 p-6">
+          <DialogHeader className="space-y-3 text-center sm:text-center">
+            <div
+              className="mx-auto flex h-12 w-12 items-center justify-center rounded-full"
+              style={{ backgroundColor: "rgba(245, 158, 11, 0.12)" }}
             >
-              <AlertTriangle className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-            </motion.div>
-            
-            <div className="space-y-2">
-              <DialogTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              <AlertTriangle className="h-6 w-6 text-amber-600" aria-hidden />
+            </div>
+
+            <div className="space-y-1.5">
+              <DialogTitle
+                className="text-lg font-semibold"
+                style={{ color: BRAND_NAVY }}
+              >
                 Session Expired
               </DialogTitle>
-              <DialogDescription className="text-gray-600 dark:text-gray-400 text-sm">
-                Your session has expired. You will be automatically logged out in:
+              <DialogDescription className="text-sm text-muted-foreground">
+                Your session has expired. You will be logged out automatically
+                in:
               </DialogDescription>
             </div>
           </DialogHeader>
 
-          {/* Countdown Display */}
-          <div className="text-center space-y-4">
-            <motion.div
-              key={countdown}
-              initial={{ scale: 1.2 }}
-              animate={{ scale: 1 }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-full border border-orange-200 dark:border-orange-700"
-            >
-              <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-              <span className="text-2xl font-bold text-orange-600 dark:text-orange-400 font-mono">
+          <div className="space-y-3 text-center">
+            <div className="inline-flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5">
+              <Clock className="h-4 w-4 text-amber-600" aria-hidden />
+              <span className="font-mono text-xl font-semibold text-amber-700">
                 {countdown}s
               </span>
-            </motion.div>
+            </div>
 
-            {/* Progress Bar */}
-            <div className="space-y-2">
-              <Progress 
-                value={progressPercentage} 
-                className="h-2 bg-gray-200 dark:bg-gray-700"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Auto-logout in progress...
+            <div className="space-y-1.5">
+              <div
+                className="h-1.5 w-full overflow-hidden rounded-full bg-[#272156]/10"
+                role="progressbar"
+                aria-valuenow={Math.round(progressPercentage)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-1000 ease-linear"
+                  style={{
+                    width: `${progressPercentage}%`,
+                    backgroundColor: BRAND_CYAN,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Auto-logout in progress…
               </p>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3">
+          {refreshError ? (
+            <p
+              className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-center text-sm text-red-700"
+              role="alert"
+            >
+              {refreshError}
+            </p>
+          ) : null}
+
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               onClick={handleRefresh}
               disabled={isRefreshing || countdown <= 0}
-              className="flex-1 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 min-h-[44px]"
+              className="min-h-[44px] flex-1 text-white hover:opacity-90"
+              style={{ backgroundColor: BRAND_NAVY }}
             >
               {isRefreshing ? (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Refreshing...
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Refreshing…
                 </>
               ) : (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
+                  <RefreshCw className="mr-2 h-4 w-4" />
                   Stay Logged In
                 </>
               )}
             </Button>
-            
+
             <Button
               onClick={handleLogout}
               variant="outline"
               disabled={isRefreshing}
-              className="flex-1 border-red-200 hover:bg-red-50 hover:border-red-300 text-red-600 hover:text-red-700 dark:border-red-700 dark:hover:bg-red-950/20 dark:text-red-400 dark:hover:text-red-300 min-h-[44px]"
+              className="min-h-[44px] flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
             >
-              <LogOut className="h-4 w-4 mr-2" />
+              <LogOut className="mr-2 h-4 w-4" />
               Logout Now
             </Button>
           </div>
 
-          {/* Helper Text */}
-          <p className="text-xs text-center text-gray-500 dark:text-gray-400">
-            Click "Stay Logged In" to refresh your session and continue working.
+          <p className="text-center text-xs text-muted-foreground">
+            Click Stay Logged In to refresh your session and continue working.
           </p>
         </div>
       </DialogContent>
     </Dialog>
   );
-} 
+}

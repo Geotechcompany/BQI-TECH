@@ -19,14 +19,27 @@ from app.lib.email import (
     send_bulk_emails_backend,
     send_admin_privilege_upgrade_email,
     send_admin_invite_email,
+    send_generic_email,
+)
+from app.lib.application_emails import (
+    format_email_document,
+    is_valid_email_address,
+    plain_text_to_email_html,
+    resolve_application_email,
 )
 from app.lib.email_transport import is_email_configured
-from app.lib.roles import is_admin_role, normalize_role, was_promoted_to_admin
+from app.lib.roles import (
+    is_admin_role,
+    normalize_role,
+    roles_matching_search_query,
+    was_promoted_to_admin,
+)
 from app.lib.admin_permissions import (
     ADMIN_MODULE_LABELS,
     can_manage_admin_users,
     can_manage_backup,
     get_effective_admin_modules,
+    has_admin_module,
     list_admin_modules_catalog,
     normalize_admin_modules,
 )
@@ -51,8 +64,62 @@ from app.lib.admin_notifications import (
     is_system_wide_notification,
     normalize_notification,
 )
+from app.lib.application_comments import (
+    author_display_name,
+    format_comment_document,
+    notify_mentioned_users,
+    parse_object_id,
+    serialize_mentions,
+)
+from app.lib.hiring_team_emails import notify_newly_assigned_hiring_team
+from app.models.application_comment import (
+    ApplicationCommentCreate,
+    ApplicationCommentUpdate,
+)
+from app.models.application_email import ApplicationEmailCreate
+from app.models.application_task import (
+    ApplicationAssigneesUpdate,
+    ApplicationBulkTagsUpdate,
+    ApplicationFollowUpdate,
+    ApplicationMergeRequest,
+    ApplicationPrivacyUpdate,
+    ApplicationReminderCreate,
+    ApplicationSendQuestionnaireRequest,
+    ApplicationTaskCreate,
+    ApplicationTaskUpdate,
+)
+from app.models.admin_task import AdminTaskCreate, AdminTaskUpdate
+from app.models.company_document import CompanyDocumentCreate, CompanyDocumentUpdate
+from app.lib.application_tasks import (
+    candidate_profile_href,
+    format_task_document,
+    interviewer_matches_user,
+    serialize_assignees,
+    user_on_hiring_team,
+)
+from app.lib.admin_tasks import (
+    build_admin_tasks_filter,
+    format_admin_task_document,
+    resolve_assignee_name,
+)
+from app.lib.company_documents import (
+    build_documents_query,
+    detect_document_format,
+    format_company_document,
+    parse_document_object_id,
+)
 from app.lib.nvidia_ai import test_nvidia_connection
+from app.lib.runtime_environment import get_frontend_url
 from app.lib.error_utils import format_exception_message
+from app.utils.status_history import (
+    build_admin_status_update,
+    application_status_match,
+    normalize_application_status,
+    CANONICAL_APPLICATION_STATUSES,
+    admin_actor_label,
+    resolve_applications_changed_by,
+    resolve_status_history_changed_by,
+)
 from app.auth import get_password_hash
 import secrets
 
@@ -100,6 +167,46 @@ def generate_slug(title: str) -> str:
     return slug
 
 
+def _normalize_pipeline_settings(raw: Any) -> Optional[Dict[str, Any]]:
+    """Normalize optional per-job pipeline settings stored on job postings."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        return None
+
+    template_id = str(raw.get("templateId") or "default").strip() or "default"
+    email_sender_name = str(raw.get("emailSenderName") or "").strip()
+
+    stage_actions: Dict[str, List[Dict[str, Any]]] = {}
+    raw_actions = raw.get("stageActions")
+    if isinstance(raw_actions, dict):
+        for stage_id, actions in raw_actions.items():
+            if not isinstance(stage_id, str) or not isinstance(actions, list):
+                continue
+            normalized_actions: List[Dict[str, Any]] = []
+            for index, action in enumerate(actions):
+                if not isinstance(action, dict):
+                    continue
+                action_type = action.get("type")
+                if action_type not in ("send_email", "notify_team"):
+                    action_type = "send_email"
+                normalized_actions.append(
+                    {
+                        "id": str(action.get("id") or f"{stage_id}-action-{index}").strip(),
+                        "type": action_type,
+                        "templateName": str(action.get("templateName") or "").strip() or None,
+                        "label": str(action.get("label") or "").strip() or None,
+                    }
+                )
+            stage_actions[stage_id] = normalized_actions
+
+    return {
+        "templateId": template_id,
+        "emailSenderName": email_sender_name,
+        "stageActions": stage_actions,
+    }
+
+
 def _normalize_text_value(value: Any) -> str:
     """Coerce mixed DB values (str, list, None) into a stripped string."""
     if value is None:
@@ -113,6 +220,9 @@ def _normalize_text_value(value: Any) -> str:
                 return normalized
         return ""
     return str(value).strip()
+
+# Pipeline email templates live in app.routers.email_templates
+# (mounted at /api/admin/emails/templates).
 
 # ---------------------- Admin Email Broadcast ----------------------
 @router.post("/emails/broadcast")
@@ -297,6 +407,221 @@ async def get_email_logs(
         logger.error(f"Failed to get email logs: {e}")
         raise HTTPException(status_code=500, detail="Failed to get email logs")
 
+
+@router.get("/communications/emails")
+async def list_communication_emails_endpoint(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    status: Optional[str] = Query(None, description="sent | failed | pending | all"),
+    type: Optional[str] = Query(
+        None,
+        description="candidate | request_application | broadcast | mention | hiring_team | generic",
+    ),
+    q: Optional[str] = Query(None, description="Search subject, recipient, candidate"),
+    starred: Optional[bool] = Query(None, description="Filter starred emails"),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Unified outbound email history across application threads and email logs."""
+    if not (
+        has_admin_module(current_user, "email_broadcast")
+        or has_admin_module(current_user, "candidates")
+    ):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        from app.lib.communication_emails import list_communication_emails
+
+        return await list_communication_emails(
+            status=status,
+            email_type=type,
+            q=q,
+            starred=starred,
+            skip=skip,
+            limit=limit,
+        )
+    except Exception as e:
+        logger.error(f"Failed to list communication emails: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list communication emails")
+
+
+@router.get("/communications/emails/counts")
+async def communication_email_counts(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Folder badge counts for the Communications Manager."""
+    if not (
+        has_admin_module(current_user, "email_broadcast")
+        or has_admin_module(current_user, "candidates")
+    ):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    try:
+        from app.lib.communication_emails import count_communication_emails
+
+        return await count_communication_emails()
+    except Exception as e:
+        logger.error(f"Failed to count communication emails: {e}")
+        raise HTTPException(status_code=500, detail="Failed to count communication emails")
+
+
+@router.patch("/communications/emails/{email_id}/star")
+async def star_communication_email(
+    email_id: str,
+    payload: dict = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Toggle starred flag on an application email or email log."""
+    if not (
+        has_admin_module(current_user, "email_broadcast")
+        or has_admin_module(current_user, "candidates")
+    ):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    starred = payload.get("starred")
+    if not isinstance(starred, bool):
+        raise HTTPException(status_code=400, detail="starred must be a boolean")
+
+    try:
+        from app.lib.communication_emails import set_communication_email_starred
+
+        item = await set_communication_email_starred(email_id, starred)
+        if not item:
+            raise HTTPException(status_code=404, detail="Email record not found")
+        return item
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update email star: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update email star")
+
+
+@router.post("/communications/emails/{email_id}/resend")
+async def resend_communication_email(
+    email_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Resend a previously failed outbound email when content is still available."""
+    if not (
+        has_admin_module(current_user, "email_broadcast")
+        or has_admin_module(current_user, "candidates")
+    ):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=400,
+            detail="Email delivery is not configured. Set it up in Admin → Settings → Email delivery.",
+        )
+
+    from app.lib.communication_emails import (
+        build_email_log_document,
+        get_communication_email,
+        insert_email_log,
+        normalize_application_email,
+        normalize_email_log,
+        resolve_resend_payload,
+    )
+
+    found = await get_communication_email(email_id)
+    if not found:
+        raise HTTPException(status_code=404, detail="Email record not found")
+
+    source, doc = found
+    if str(doc.get("status") or "").lower() != "failed":
+        raise HTTPException(status_code=400, detail="Only failed emails can be resent")
+
+    payload = await resolve_resend_payload(source, doc)
+    if not payload:
+        raise HTTPException(
+            status_code=400,
+            detail="This email cannot be resent — original content is unavailable",
+        )
+
+    to, subject, html = payload
+    email_type = (
+        "candidate"
+        if source == "application_email"
+        else str(doc.get("email_type") or doc.get("kind") or "generic")
+    )
+    ok = await asyncio.to_thread(
+        send_generic_email,
+        to,
+        subject,
+        html,
+        skip_log=True,
+    )
+
+    db = get_database()
+    now = datetime.utcnow()
+    status_value = "sent" if ok else "failed"
+    error_message = None if ok else "Email delivery failed"
+
+    if source == "application_email":
+        await db.application_emails.update_one(
+            {"_id": doc["_id"]},
+            {
+                "$set": {
+                    "status": status_value,
+                    "error": error_message,
+                    "sentAt": now,
+                    "resentAt": now,
+                    "resentById": str(
+                        current_user.get("_id", current_user.get("id", ""))
+                    ),
+                }
+            },
+        )
+        updated = await db.application_emails.find_one({"_id": doc["_id"]})
+        item = normalize_application_email(updated or doc)
+    else:
+        await db.email_logs.update_one(
+            {"_id": doc["_id"]},
+            {
+                "$set": {
+                    "status": status_value,
+                    "error": error_message,
+                    "sent_at": now,
+                    "resent_at": now,
+                }
+            },
+        )
+        # Also append a fresh log entry for the resend attempt
+        await insert_email_log(
+            build_email_log_document(
+                to=to,
+                subject=subject,
+                status=status_value,
+                email_type=email_type,
+                error=error_message,
+                html=html,
+                campaign_id=str(doc.get("campaign_id") or "") or None,
+                application_id=str(doc.get("application_id") or "") or None,
+                job_id=str(doc.get("job_id") or "") or None,
+                sent_by_name=str(current_user.get("email") or ""),
+                metadata={"resent_from": email_id},
+            )
+        )
+        updated = await db.email_logs.find_one({"_id": doc["_id"]})
+        item = normalize_email_log(updated or doc)
+
+    if not ok:
+        raise HTTPException(
+            status_code=502,
+            detail="Resend failed. Check email delivery settings and try again.",
+        )
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="resent",
+        resource_type="communication_email",
+        detail=f"to {to} — {subject[:80]}",
+        resource_title=subject,
+        resource_id=email_id,
+    )
+    return item
+
+
 async def get_enhanced_applications_data(db, query: Dict[Any, Any] = None, limit: int = None) -> List[Dict[Any, Any]]:
     """Get applications with enhanced job title resolution and data extraction"""
     
@@ -428,7 +753,23 @@ async def get_job_postings(
                 
                 # Ensure required fields exist with defaults
                 if "isActive" not in posting:
-                    posting["isActive"] = True
+                    # Prefer draft over active when the field is missing (wizard drafts).
+                    posting["isActive"] = (
+                        str(posting.get("status") or "").lower() == "active"
+                    )
+                if "status" not in posting:
+                    if posting.get("isActive"):
+                        # Incomplete rows wrongly stored as active → surface as draft
+                        title = str(posting.get("title") or "").strip()
+                        posting["status"] = "active" if title else "draft"
+                    else:
+                        posting["status"] = "inactive"
+                elif (
+                    posting.get("isActive")
+                    and str(posting.get("status")).lower() == "active"
+                    and not str(posting.get("title") or "").strip()
+                ):
+                    posting["status"] = "draft"
                 if "department" not in posting:
                     posting["department"] = "N/A"
                 if "location" not in posting:
@@ -438,7 +779,13 @@ async def get_job_postings(
                 
                 # Get application count for each job
                 try:
-                    posting["applicationCount"] = await db.applications.count_documents({"jobId": str(posting["_id"])})
+                    posting["applicationCount"] = await db.applications.count_documents(
+                        _apply_application_job_filter(
+                            _active_application_filter(),
+                            str(posting["_id"]),
+                            posting.get("title"),
+                        )
+                    )
                 except Exception as e:
                     logger.error(f"Error getting application count for job {posting['_id']}: {str(e)}")
                     posting["applicationCount"] = 0
@@ -527,6 +874,9 @@ async def create_job_posting(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Create new job posting"""
+    from app.lib.job_activation import ensure_can_activate, will_be_active
+    from app.lib.job_auto_status import normalize_auto_schedule_fields
+
     db = get_database()
     
     # Clean up HTML entities in description
@@ -537,6 +887,8 @@ async def create_job_posting(
             .replace("\\s+", " ")    # Normalize multiple spaces using proper regex escape
             .strip()                 # Trim extra spaces
         )
+
+    job_data = normalize_auto_schedule_fields(job_data)
     
     job_data["createdAt"] = datetime.utcnow()
     job_data["updatedAt"] = datetime.utcnow()
@@ -548,15 +900,41 @@ async def create_job_posting(
     # Allow postedDate from client, otherwise default to now
     if not job_data.get("postedDate"):
         job_data["postedDate"] = datetime.utcnow()
+
+    # New wizard saves default to draft unless explicitly published
+    if "isActive" not in job_data:
+        job_data["isActive"] = False
+    job_data["isActive"] = bool(job_data.get("isActive"))
+    status = str(job_data.get("status") or "").strip().lower()
+    if job_data["isActive"]:
+        job_data["status"] = "active"
+    elif status in ("inactive", "closed"):
+        job_data["status"] = "inactive"
+    else:
+        job_data["status"] = "draft"
+
+    if will_be_active(create_data=job_data):
+        ensure_can_activate(job_data)
     
     result = await db.jobpostings.insert_one(job_data)
-    job_data["_id"] = str(result.inserted_id)
-    job_data["id"] = str(result.inserted_id)
+    job_id = str(result.inserted_id)
+    job_data["_id"] = job_id
+    job_data["id"] = job_id
 
     await log_resource_created(
         db, current_user, resource_type="job_posting", doc=job_data, title_field="title"
     )
-    
+
+    if "hiringTeam" in job_data:
+        await notify_newly_assigned_hiring_team(
+            db,
+            previous_team=[],
+            next_team=job_data.get("hiringTeam"),
+            assigner=current_user,
+            job_id=job_id,
+            job_title=str(job_data.get("title") or ""),
+        )
+
     return job_data
 
 @router.get("/job-postings/{job_id}")
@@ -586,6 +964,9 @@ async def update_job_posting(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Update job posting"""
+    from app.lib.job_activation import ensure_can_activate, will_be_active
+    from app.lib.job_auto_status import normalize_auto_schedule_fields
+
     db = get_database()
     
     try:
@@ -607,8 +988,50 @@ async def update_job_posting(
                 .replace("  ", " ")
                 .strip()                 # Trim extra spaces
             )
+
+        if "pipelineSettings" in update_data:
+            normalized_settings = _normalize_pipeline_settings(update_data.get("pipelineSettings"))
+            if normalized_settings is None:
+                update_data.pop("pipelineSettings", None)
+            else:
+                update_data["pipelineSettings"] = normalized_settings
+
+        update_data = normalize_auto_schedule_fields(update_data)
         
         update_data["updatedAt"] = datetime.utcnow()
+
+        # Keep isActive and status aligned
+        if "isActive" in update_data:
+            update_data["isActive"] = bool(update_data.get("isActive"))
+            if update_data["isActive"]:
+                update_data["status"] = "active"
+            else:
+                incoming = str(update_data.get("status") or "").strip().lower()
+                if incoming == "draft":
+                    update_data["status"] = "draft"
+                elif incoming in ("inactive", "closed"):
+                    update_data["status"] = "inactive"
+                else:
+                    prior = str(existing.get("status") or "").strip().lower()
+                    update_data["status"] = (
+                        "inactive"
+                        if prior in ("active", "inactive", "closed")
+                        else "draft"
+                    )
+        elif "status" in update_data:
+            status = str(update_data.get("status") or "").strip().lower()
+            if status == "active":
+                update_data["isActive"] = True
+                update_data["status"] = "active"
+            elif status in ("inactive", "closed"):
+                update_data["isActive"] = False
+                update_data["status"] = "inactive"
+            else:
+                update_data["isActive"] = False
+                update_data["status"] = "draft"
+
+        if will_be_active(existing=existing, update_data=update_data):
+            ensure_can_activate({**existing, **update_data})
         
         result = await db.jobpostings.update_one(
             {"_id": ObjectId(job_id)},
@@ -627,7 +1050,20 @@ async def update_job_posting(
             resource_id=job_id,
             title_field="title",
         )
-        
+
+        if "hiringTeam" in update_data:
+            job_title = str(
+                update_data.get("title") or existing.get("title") or ""
+            )
+            await notify_newly_assigned_hiring_team(
+                db,
+                previous_team=existing.get("hiringTeam"),
+                next_team=update_data.get("hiringTeam"),
+                assigner=current_user,
+                job_id=job_id,
+                job_title=job_title,
+            )
+
         # Return the updated document for UI freshness
         updated = await db.jobpostings.find_one({"_id": ObjectId(job_id)})
         if not updated:
@@ -635,6 +1071,8 @@ async def update_job_posting(
         convert_objectids_to_strings(updated)
         updated["id"] = str(updated["_id"])
         return updated
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -675,6 +1113,8 @@ async def toggle_job_posting_status(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Toggle job posting active status"""
+    from app.lib.job_activation import ensure_can_activate
+
     db = get_database()
     
     try:
@@ -682,9 +1122,13 @@ async def toggle_job_posting_status(
         if not existing:
             raise HTTPException(status_code=404, detail="Job posting not found")
 
-        is_active = status_data.get("isActive", True)
+        is_active = bool(status_data.get("isActive", True))
+        if is_active:
+            ensure_can_activate(existing)
+
         update_data = {
             "isActive": is_active,
+            "status": "active" if is_active else "inactive",
             "updatedAt": datetime.utcnow()
         }
         
@@ -706,6 +1150,8 @@ async def toggle_job_posting_status(
         )
         
         return {"message": f"Job posting {'activated' if is_active else 'deactivated'} successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1773,18 +2219,19 @@ async def get_admin_overview(
             raise HTTPException(status_code=503, detail="Database connection failed")
         
         # Build job filter for applications
-        job_filter = {}
+        job_filter: Dict[str, Any] = _active_application_filter()
         if job_id:
             try:
-                job_filter["jobId"] = ObjectId(job_id)
-            except Exception:
+                ObjectId(job_id)
+            except InvalidId:
                 raise HTTPException(status_code=400, detail="Invalid job ID format")
+            job_title = await _resolve_job_posting_title(db, job_id)
+            job_filter = _apply_application_job_filter(job_filter, job_id, job_title)
         
         # Get base counts
         total_users = await db.users.count_documents({})
         total_jobs = await db.jobpostings.count_documents({})
         active_jobs = await db.jobpostings.count_documents({"isActive": True})
-        job_filter = {**job_filter, **_active_application_filter()}
         total_applications = await db.applications.count_documents(job_filter)
         
         # Get application counts by status
@@ -1870,6 +2317,49 @@ class CustomJSONEncoder(json.JSONEncoder):
 def _active_application_filter() -> Dict[str, Any]:
     """Exclude archived applications from active pipeline views."""
     return {"isArchived": {"$ne": True}}
+
+
+def _private_visibility_filter(user_id: Optional[str]) -> Dict[str, Any]:
+    """Hide private applications from everyone except the owner."""
+    uid = str(user_id or "").strip()
+    return {
+        "$or": [
+            {"isPrivate": {"$ne": True}},
+            {"privateOwnerId": uid},
+        ]
+    }
+
+
+def _with_private_visibility(
+    match_query: Dict[str, Any], user_id: Optional[str]
+) -> Dict[str, Any]:
+    return {"$and": [match_query, _private_visibility_filter(user_id)]}
+
+
+def _current_user_id(current_user: dict) -> str:
+    return str(current_user.get("_id") or current_user.get("id") or "")
+
+
+def _assert_application_visible(application: dict, current_user: dict) -> None:
+    if not application.get("isPrivate"):
+        return
+    owner_id = str(application.get("privateOwnerId") or "")
+    if owner_id and owner_id == _current_user_id(current_user):
+        return
+    raise HTTPException(status_code=404, detail="Application not found")
+
+
+# Fields returned by aggregation/list endpoints — never persist on PUT.
+_APPLICATION_UPDATE_BLOCKLIST = frozenset({
+    "id",
+    "_id",
+    "jobDetails",
+    "userDetails",
+    "jobTitle",
+    "user",
+    "job",
+    "isFollowed",
+})
 
 
 def _archived_application_filter() -> Dict[str, Any]:
@@ -1977,6 +2467,70 @@ def _append_position_filter(pipeline: list, position: Optional[str]) -> None:
     })
 
 
+def _missing_job_id_clause() -> Dict[str, Any]:
+    """Applications with no job reference (legacy position-only records)."""
+    return {
+        "$or": [
+            {"jobId": {"$exists": False}},
+            {"jobId": None},
+            {"jobId": ""},
+        ]
+    }
+
+
+def _application_job_filter(
+    job_id: str,
+    job_title: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Match applications by jobId (ObjectId or string) or legacy position title."""
+    clauses: List[Dict[str, Any]] = []
+    try:
+        oid = ObjectId(job_id)
+        clauses.append({"jobId": oid})
+        clauses.append({"jobId": job_id})
+    except InvalidId:
+        clauses.append({"jobId": job_id})
+
+    normalized_title = _normalize_text_value(job_title) if job_title else ""
+    if normalized_title:
+        clauses.append({
+            "$and": [
+                _missing_job_id_clause(),
+                {
+                    "position": {
+                        "$regex": f"^{re.escape(normalized_title)}$",
+                        "$options": "i",
+                    }
+                },
+            ]
+        })
+
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$or": clauses}
+
+
+def _apply_application_job_filter(
+    match_query: Dict[str, Any],
+    job_id: str,
+    job_title: Optional[str] = None,
+) -> Dict[str, Any]:
+    job_filter = _application_job_filter(job_id, job_title)
+    if not match_query:
+        return job_filter
+    return {"$and": [match_query, job_filter]}
+
+
+async def _resolve_job_posting_title(db, job_id: str) -> Optional[str]:
+    try:
+        job_doc = await db.jobpostings.find_one({"_id": ObjectId(job_id)}, {"title": 1})
+    except InvalidId:
+        return None
+    if not job_doc:
+        return None
+    return job_doc.get("title")
+
+
 def _job_posting_lookup_stage() -> Dict[str, Any]:
     """Join jobpostings when application.jobId is stored as a string or ObjectId."""
     return {
@@ -2051,19 +2605,25 @@ async def get_admin_applications(
         # Base query - include all applications or filter by status
         match_query = _archived_application_filter() if archived else _active_application_filter()
         if status and status != "all":
-            match_query["status"] = status
+            match_query.update(application_status_match(status))
         
-        # Add job filtering
+        # Add job filtering (ObjectId, string jobId, or legacy position title)
         if jobId:
             try:
-                match_query["jobId"] = ObjectId(jobId)
-            except Exception:
+                ObjectId(jobId)
+            except InvalidId:
                 raise HTTPException(status_code=400, detail="Invalid job ID format")
+            job_title = await _resolve_job_posting_title(db, jobId)
+            match_query = _apply_application_job_filter(match_query, jobId, job_title)
 
         # Add applied-date range filtering
         applied_date_range = _build_applied_date_range(date_from, date_to)
         if applied_date_range:
             match_query["appliedDate"] = applied_date_range
+
+        match_query = _with_private_visibility(
+            match_query, _current_user_id(current_user)
+        )
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
@@ -2202,6 +2762,8 @@ async def get_admin_applications(
                     app["email"] = user.get("email", "")
             else:
                 app["userDetails"] = None
+
+        await resolve_applications_changed_by(db, applications)
         
         # Return with proper JSON encoding for ObjectId compatibility
         response_data = {
@@ -2275,7 +2837,7 @@ async def get_application_positions(
         # Build match query
         match_query = _archived_application_filter() if archived else _active_application_filter()
         if status and status != "all":
-            match_query["status"] = status
+            match_query.update(application_status_match(status))
         
         # Aggregation pipeline to get unique positions from applications
         pipeline = [
@@ -2376,7 +2938,10 @@ async def get_shortlisted_applications(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Base query for shortlisted applications
-        match_query = {"status": "Shortlisted", **_active_application_filter()}
+        match_query = _with_private_visibility(
+            {**application_status_match("Shortlisted"), **_active_application_filter()},
+            _current_user_id(current_user),
+        )
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
@@ -2487,6 +3052,8 @@ async def get_shortlisted_applications(
                     app["email"] = user.get("email", "")
             else:
                 app["userDetails"] = None
+
+        await resolve_applications_changed_by(db, applications)
         
         # Return with proper JSON encoding for ObjectId compatibility
         response_data = {
@@ -2534,7 +3101,10 @@ async def get_disqualified_applications(
             raise HTTPException(status_code=503, detail="Database not available")
         
         # Base query for disqualified applications
-        match_query = {"status": "Disqualified", **_active_application_filter()}
+        match_query = _with_private_visibility(
+            {**application_status_match("Disqualified"), **_active_application_filter()},
+            _current_user_id(current_user),
+        )
         
         # Build aggregation pipeline for efficient data loading
         sort_direction = -1 if sort_order == "desc" else 1
@@ -2645,6 +3215,8 @@ async def get_disqualified_applications(
                     app["email"] = user.get("email", "")
             else:
                 app["userDetails"] = None
+
+        await resolve_applications_changed_by(db, applications)
         
         # Return with proper JSON encoding for ObjectId compatibility
         response_data = {
@@ -2839,6 +3411,384 @@ async def bulk_unarchive_applications(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _normalize_tag_list(raw_tags: Any) -> list[str]:
+    if not isinstance(raw_tags, list):
+        return []
+    seen: set[str] = set()
+    tags: list[str] = []
+    for item in raw_tags:
+        tag = str(item or "").strip()
+        if not tag:
+            continue
+        key = tag.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        tags.append(tag)
+    return tags
+
+
+def _parse_application_object_ids(ids: list[str]) -> list[ObjectId]:
+    object_ids: list[ObjectId] = []
+    for i, id_str in enumerate(ids):
+        try:
+            if not id_str or not isinstance(id_str, str) or len(id_str) != 24:
+                raise ValueError("invalid id")
+            object_ids.append(ObjectId(id_str))
+        except Exception:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid application ID at index {i}: '{id_str}'",
+            )
+    return object_ids
+
+
+def _fill_questionnaire_template(
+    template: str,
+    *,
+    candidate_name: str,
+    position_title: str,
+    questionnaire_link: str,
+    sender_first_name: str,
+) -> str:
+    parts = (candidate_name or "there").strip().split()
+    first_name = parts[0] if parts else "there"
+    full_name = candidate_name.strip() or first_name
+    replacements = {
+        "[[candidate_first_name]]": first_name,
+        "[[candidate_full_name]]": full_name,
+        "[[questionnaire_link]]": questionnaire_link,
+        "[[company_user_first_name]]": sender_first_name or "Recruiting",
+        "[[position_title]]": position_title or "the role",
+    }
+    result = template
+    for key, value in replacements.items():
+        result = result.replace(key, value)
+    return result
+
+
+@router.put("/applications/bulk-tags")
+async def bulk_update_application_tags(
+    payload: ApplicationBulkTagsUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Add and/or remove tags on selected applications."""
+    add_tags = _normalize_tag_list(payload.add)
+    remove_tags = {tag.lower() for tag in _normalize_tag_list(payload.remove)}
+    if not add_tags and not remove_tags:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one tag to add or remove",
+        )
+
+    db = get_database()
+    object_ids = _parse_application_object_ids(payload.ids)
+    applications = await db.applications.find({"_id": {"$in": object_ids}}).to_list(
+        length=len(object_ids)
+    )
+    if not applications:
+        raise HTTPException(status_code=404, detail="No applications found")
+
+    now = datetime.utcnow()
+    updated = 0
+    for application in applications:
+        _assert_application_visible(application, current_user)
+        current = _normalize_tag_list(application.get("tags"))
+        next_tags = [tag for tag in current if tag.lower() not in remove_tags]
+        existing_keys = {tag.lower() for tag in next_tags}
+        for tag in add_tags:
+            if tag.lower() not in existing_keys:
+                next_tags.append(tag)
+                existing_keys.add(tag.lower())
+        if next_tags == current:
+            continue
+        await db.applications.update_one(
+            {"_id": application["_id"]},
+            {"$set": {"tags": next_tags, "updatedAt": now}},
+        )
+        updated += 1
+
+    await log_bulk_operation(
+        db,
+        current_user,
+        action="updated",
+        resource_type="application_tags",
+        count=updated,
+        detail=f"add={len(add_tags)} remove={len(remove_tags)}",
+    )
+    return {
+        "message": f"Updated tags on {updated} candidate(s)",
+        "updated_count": updated,
+        "matched_count": len(applications),
+    }
+
+
+@router.post("/applications/merge")
+async def merge_applications(
+    payload: ApplicationMergeRequest,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Merge source applications into a primary application, then delete sources."""
+    primary_id = payload.primaryId.strip()
+    source_ids = [sid.strip() for sid in payload.sourceIds if sid and sid.strip()]
+    source_ids = [sid for sid in source_ids if sid != primary_id]
+    if not source_ids:
+        raise HTTPException(
+            status_code=400,
+            detail="Select at least one other candidate to merge into the primary",
+        )
+
+    db = get_database()
+    primary = await _get_application_or_404(db, primary_id)
+    _assert_application_visible(primary, current_user)
+
+    source_oids = _parse_application_object_ids(source_ids)
+    sources = await db.applications.find({"_id": {"$in": source_oids}}).to_list(
+        length=len(source_oids)
+    )
+    if len(sources) != len(source_oids):
+        raise HTTPException(status_code=404, detail="One or more source candidates were not found")
+
+    for source in sources:
+        _assert_application_visible(source, current_user)
+
+    fill_fields = (
+        "phoneNumber",
+        "location",
+        "salary",
+        "cvUrl",
+        "resumeUrl",
+        "experience",
+        "hearAbout",
+        "otherSource",
+        "email",
+        "name",
+        "fullName",
+    )
+    updates: Dict[str, Any] = {"updatedAt": datetime.utcnow()}
+    for field in fill_fields:
+        current = primary.get(field)
+        if current not in (None, "", []):
+            continue
+        for source in sources:
+            value = source.get(field)
+            if value not in (None, "", []):
+                updates[field] = value
+                break
+
+    tags = _normalize_tag_list(primary.get("tags"))
+    for source in sources:
+        tags = _normalize_tag_list([*tags, *(_normalize_tag_list(source.get("tags")))])
+    updates["tags"] = tags
+
+    assignee_map: Dict[str, Dict[str, Any]] = {}
+    for member in serialize_assignees(primary.get("assignedHiringTeam") or []):
+        assignee_map[str(member.get("id"))] = member
+    for source in sources:
+        for member in serialize_assignees(source.get("assignedHiringTeam") or []):
+            assignee_map[str(member.get("id"))] = member
+    if assignee_map:
+        updates["assignedHiringTeam"] = list(assignee_map.values())
+
+    followed: set[str] = {
+        str(uid) for uid in (primary.get("followedBy") or []) if uid is not None
+    }
+    for source in sources:
+        for uid in source.get("followedBy") or []:
+            if uid is not None:
+                followed.add(str(uid))
+    updates["followedBy"] = list(followed)
+
+    history = list(primary.get("statusHistory") or [])
+    for source in sources:
+        for entry in source.get("statusHistory") or []:
+            history.append(entry)
+    if history:
+        updates["statusHistory"] = history
+
+    await db.applications.update_one({"_id": primary["_id"]}, {"$set": updates})
+
+    for source_id in source_ids:
+        await db.application_comments.update_many(
+            {"applicationId": source_id},
+            {"$set": {"applicationId": primary_id}},
+        )
+        await db.application_emails.update_many(
+            {"applicationId": source_id},
+            {"$set": {"applicationId": primary_id}},
+        )
+        await db.application_tasks.update_many(
+            {"applicationId": source_id},
+            {"$set": {"applicationId": primary_id}},
+        )
+
+    delete_result = await db.applications.delete_many({"_id": {"$in": source_oids}})
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="merged",
+        resource_type="application",
+        detail=f"merged {delete_result.deleted_count} into {primary_id}",
+        resource_title=applicant_display_name(primary),
+        resource_id=primary_id,
+    )
+
+    return {
+        "message": f"Merged {delete_result.deleted_count} candidate(s) into primary",
+        "primaryId": primary_id,
+        "merged_count": delete_result.deleted_count,
+        "deleted_ids": source_ids,
+    }
+
+
+@router.post("/applications/send-questionnaire")
+async def send_application_questionnaire(
+    payload: ApplicationSendQuestionnaireRequest,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Email a position questionnaire to selected candidates."""
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured. Set it up in Admin → Settings → Email delivery.",
+        )
+
+    db = get_database()
+    try:
+        job = await db.jobpostings.find_one({"_id": ObjectId(payload.jobId)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+    if not job:
+        raise HTTPException(status_code=404, detail="Job posting not found")
+
+    questionnaires = job.get("questionnaires") or []
+    if not isinstance(questionnaires, list):
+        questionnaires = []
+    questionnaire = next(
+        (
+            item
+            for item in questionnaires
+            if isinstance(item, dict)
+            and str(item.get("id") or "") == payload.questionnaireId
+        ),
+        None,
+    )
+    if not questionnaire:
+        raise HTTPException(
+            status_code=404,
+            detail="Questionnaire not found on this position",
+        )
+
+    title = str(questionnaire.get("title") or "Questionnaire").strip() or "Questionnaire"
+    template = str(
+        questionnaire.get("emailTemplate")
+        or (
+            "Hi [[candidate_first_name]],\n\n"
+            "Please complete this questionnaire for [[position_title]]:\n\n"
+            "[[questionnaire_link]]\n\n"
+            "Thank you,\n[[company_user_first_name]]"
+        )
+    )
+    position_title = str(job.get("title") or "the role")
+    frontend = get_frontend_url().rstrip("/")
+    questionnaire_link = (
+        f"{frontend}/dashboard/apply/{payload.jobId}"
+        f"?questionnaire={payload.questionnaireId}"
+    )
+    sender_name = author_display_name(current_user)
+    sender_first = (sender_name or "Recruiting").split()[0]
+    author_id = _current_user_id(current_user)
+    now = datetime.utcnow()
+
+    object_ids = _parse_application_object_ids(payload.ids)
+    applications = await db.applications.find({"_id": {"$in": object_ids}}).to_list(
+        length=len(object_ids)
+    )
+    if not applications:
+        raise HTTPException(status_code=404, detail="No applications found")
+
+    sent = 0
+    failed: list[str] = []
+    skipped: list[str] = []
+
+    for application in applications:
+        _assert_application_visible(application, current_user)
+        application_id = str(application["_id"])
+        recipient = resolve_application_email(application)
+        if not recipient or not is_valid_email_address(recipient):
+            skipped.append(application_id)
+            continue
+
+        body = _fill_questionnaire_template(
+            template,
+            candidate_name=applicant_display_name(application),
+            position_title=position_title,
+            questionnaire_link=questionnaire_link,
+            sender_first_name=sender_first,
+        )
+        subject = f"Please complete: {title} — {position_title}"
+        html_body = plain_text_to_email_html(body, subject=subject)
+        ok = await asyncio.to_thread(
+            send_generic_email,
+            recipient,
+            subject,
+            html_body,
+            skip_log=True,
+        )
+        doc = {
+            "applicationId": application_id,
+            "jobId": payload.jobId,
+            "channel": "email",
+            "to": recipient.lower(),
+            "subject": subject,
+            "body": body,
+            "status": "sent" if ok else "failed",
+            "error": None if ok else "Email delivery failed",
+            "sentById": author_id,
+            "sentByName": sender_name,
+            "sentByEmail": str(current_user.get("email") or ""),
+            "sentAt": now,
+            "kind": "questionnaire",
+            "questionnaireId": payload.questionnaireId,
+        }
+        await db.application_emails.insert_one(doc)
+        if ok:
+            sent += 1
+        else:
+            failed.append(application_id)
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="sent",
+        resource_type="application_questionnaire",
+        detail=f"sent={sent} failed={len(failed)} skipped={len(skipped)}",
+        resource_title=title,
+        resource_id=payload.jobId,
+    )
+
+    if sent == 0 and failed:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send questionnaire emails. Check email delivery settings.",
+        )
+    if sent == 0 and skipped and not failed:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected candidates have no valid email addresses",
+        )
+
+    return {
+        "message": f"Sent questionnaire to {sent} candidate(s)",
+        "sent_count": sent,
+        "failed_ids": failed,
+        "skipped_ids": skipped,
+        "questionnaireId": payload.questionnaireId,
+        "jobId": payload.jobId,
+    }
+
+
 @router.get("/applications/{application_id}")
 async def get_admin_application(
     application_id: str,
@@ -2855,6 +3805,8 @@ async def get_admin_application(
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
 
+        _assert_application_visible(application, current_user)
+
         # Convert ObjectIds
         application["id"] = str(application.pop("_id"))
         if "userId" in application:
@@ -2864,6 +3816,24 @@ async def get_admin_application(
                 application["jobId"] = str(application["jobId"])
             except Exception:
                 pass
+        if "assignedHiringTeam" in application:
+            application["assignedHiringTeam"] = serialize_assignees(
+                application.get("assignedHiringTeam")
+            )
+        if application.get("privateOwnerId") is not None:
+            application["privateOwnerId"] = str(application["privateOwnerId"])
+
+        followed_by = [
+            str(uid)
+            for uid in (application.get("followedBy") or [])
+            if uid is not None
+        ]
+        application["followedBy"] = followed_by
+        application["isFollowed"] = _current_user_id(current_user) in followed_by
+
+        application["statusHistory"] = await resolve_status_history_changed_by(
+            db, application.get("statusHistory")
+        )
 
         return application
     except HTTPException:
@@ -2871,6 +3841,1480 @@ async def get_admin_application(
     except Exception as e:
         logger.error(f"Error in get_admin_application: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/applications/{application_id}/extract-contact")
+async def extract_application_contact_from_cv(
+    application_id: str,
+    payload: Optional[Dict[str, Any]] = Body(default=None),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Extract contact + experience from the CV and fill empty application fields."""
+    from app.lib.cv_contact_extract import sync_application_contact_from_cv
+
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    force = bool((payload or {}).get("force"))
+    try:
+        sync_result = await sync_application_contact_from_cv(
+            db, application, force=force
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("CV contact extract failed for %s: %s", application_id, exc)
+        raise HTTPException(
+            status_code=500, detail="Failed to extract contact from CV"
+        ) from exc
+
+    updated = await db.applications.find_one({"_id": application["_id"]})
+    if not updated:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    updated["id"] = str(updated.pop("_id"))
+    if "userId" in updated and not isinstance(updated["userId"], str):
+        updated["userId"] = str(updated["userId"])
+    if "jobId" in updated and not isinstance(updated["jobId"], str):
+        try:
+            updated["jobId"] = str(updated["jobId"])
+        except Exception:
+            pass
+    if "assignedHiringTeam" in updated:
+        updated["assignedHiringTeam"] = serialize_assignees(
+            updated.get("assignedHiringTeam")
+        )
+
+    return {
+        "updated": sync_result.get("updated", False),
+        "skipped": sync_result.get("skipped"),
+        "filled": sync_result.get("filled") or {},
+        "extracted": sync_result.get("extracted") or {},
+        "experience": sync_result.get("experience") or {},
+        "application": updated,
+    }
+
+async def _get_application_or_404(db, application_id: str) -> dict:
+    try:
+        application = await db.applications.find_one({"_id": ObjectId(application_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid application ID format")
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return application
+
+
+@router.get("/applications/{application_id}/comments")
+async def list_application_comments(
+    application_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List team discussion comments for an application."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    cursor = db.application_comments.find({"applicationId": application_id}).sort(
+        "createdAt", 1
+    )
+    comments = [format_comment_document(doc) async for doc in cursor]
+    return {"comments": comments}
+
+
+@router.post("/applications/{application_id}/comments")
+async def create_application_comment(
+    application_id: str,
+    payload: ApplicationCommentCreate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Post a team discussion comment on an application."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+
+    parent_id: str | None = None
+    if payload.parentId:
+        try:
+            parent_oid = parse_object_id(payload.parentId, field_name="parentId")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid parent comment ID")
+        parent = await db.application_comments.find_one(
+            {"_id": parent_oid, "applicationId": application_id}
+        )
+        if not parent:
+            raise HTTPException(status_code=404, detail="Parent comment not found")
+        parent_id = str(parent_oid)
+
+    job_id = str(application.get("jobId") or "")
+    author_id = str(current_user.get("_id", current_user.get("id", "")))
+    now = datetime.utcnow()
+    mentions = serialize_mentions(payload.mentions)
+
+    doc = {
+        "applicationId": application_id,
+        "jobId": job_id or None,
+        "body": body,
+        "parentId": parent_id,
+        "authorId": author_id,
+        "authorName": author_display_name(current_user),
+        "authorEmail": str(current_user.get("email") or ""),
+        "mentions": mentions,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+
+    result = await db.application_comments.insert_one(doc)
+    doc["_id"] = result.inserted_id
+
+    if mentions:
+        job_title = str(application.get("jobTitle") or application.get("position") or "")
+        if not job_title and job_id:
+            try:
+                job = await db.jobs.find_one({"_id": ObjectId(job_id)})
+                if job:
+                    job_title = str(job.get("title") or "")
+            except Exception:
+                job_title = ""
+
+        await notify_mentioned_users(
+            db,
+            mentions=mentions,
+            author=current_user,
+            application=application,
+            job_id=job_id,
+            application_id=application_id,
+            comment_body=body,
+            job_title=job_title,
+        )
+
+    return format_comment_document(doc)
+
+
+@router.post("/applications/{application_id}/comments/summarize")
+async def summarize_application_comments(
+    application_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """AI-summarize the team discussion thread for an application."""
+    from app.lib.nvidia_ai import nvidia_chat_completion
+
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+
+    cursor = db.application_comments.find({"applicationId": application_id}).sort(
+        "createdAt", 1
+    )
+    comments = [format_comment_document(doc) async for doc in cursor]
+    if not comments:
+        return {
+            "summary": "There are no discussion messages to summarize yet.",
+            "commentCount": 0,
+        }
+
+    candidate_name = (
+        application.get("fullName")
+        or application.get("name")
+        or application.get("email")
+        or "the candidate"
+    )
+    job_title = str(
+        application.get("jobTitle") or application.get("position") or ""
+    ).strip()
+
+    thread_lines: list[str] = []
+    for comment in comments:
+        author = str(comment.get("authorName") or "Team member")
+        created = str(comment.get("createdAt") or "")
+        body = str(comment.get("body") or "").strip()
+        thread_lines.append(f"[{created}] {author}: {body}")
+
+    thread_text = "\n".join(thread_lines)
+    if len(thread_text) > 12000:
+        thread_text = thread_text[-12000:]
+
+    role_context = f" for the role '{job_title}'" if job_title else ""
+    system_prompt = (
+        "You are an assistant helping a hiring team. Summarize the team discussion "
+        "about a candidate in 3–6 concise bullet points. Capture decisions, concerns, "
+        "follow-ups, and overall sentiment. Do not invent facts. Keep names when useful."
+    )
+    user_prompt = (
+        f"Candidate: {candidate_name}{role_context}.\n\n"
+        f"Discussion thread:\n{thread_text}"
+    )
+
+    try:
+        summary = await nvidia_chat_completion(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            max_tokens=500,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        logger.exception("Discussion summarize failed for %s", application_id)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to summarize discussion: {error}",
+        ) from error
+
+    return {"summary": summary, "commentCount": len(comments)}
+
+
+@router.patch("/applications/{application_id}/comments/{comment_id}")
+async def update_application_comment(
+    application_id: str,
+    comment_id: str,
+    payload: ApplicationCommentUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Edit your own team discussion comment."""
+    db = get_database()
+    await _get_application_or_404(db, application_id)
+
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+
+    try:
+        comment_oid = parse_object_id(comment_id, field_name="commentId")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid comment ID")
+
+    existing = await db.application_comments.find_one(
+        {"_id": comment_oid, "applicationId": application_id}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    author_id = str(current_user.get("_id", current_user.get("id", "")))
+    if str(existing.get("authorId")) != author_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own comments")
+
+    mentions = serialize_mentions(payload.mentions)
+    now = datetime.utcnow()
+
+    await db.application_comments.update_one(
+        {"_id": comment_oid},
+        {"$set": {"body": body, "mentions": mentions, "updatedAt": now}},
+    )
+
+    updated = await db.application_comments.find_one({"_id": comment_oid})
+    return format_comment_document(updated)
+
+
+@router.delete("/applications/{application_id}/comments/{comment_id}")
+async def delete_application_comment(
+    application_id: str,
+    comment_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Delete your own team discussion comment and its replies."""
+    db = get_database()
+    await _get_application_or_404(db, application_id)
+
+    try:
+        comment_oid = parse_object_id(comment_id, field_name="commentId")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid comment ID")
+
+    existing = await db.application_comments.find_one(
+        {"_id": comment_oid, "applicationId": application_id}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+    author_id = str(current_user.get("_id", current_user.get("id", "")))
+    if str(existing.get("authorId")) != author_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own comments")
+
+    comment_id_str = str(comment_oid)
+    ids_to_delete = {comment_id_str}
+    queue = [comment_id_str]
+    while queue:
+        parent_id = queue.pop()
+        child_cursor = db.application_comments.find(
+            {"applicationId": application_id, "parentId": parent_id},
+            {"_id": 1},
+        )
+        async for child in child_cursor:
+            child_id = str(child["_id"])
+            if child_id not in ids_to_delete:
+                ids_to_delete.add(child_id)
+                queue.append(child_id)
+
+    object_ids = [ObjectId(value) for value in ids_to_delete]
+    await db.application_comments.delete_many(
+        {"applicationId": application_id, "_id": {"$in": object_ids}}
+    )
+
+    return {"message": "Comment deleted"}
+
+
+@router.get("/applications/{application_id}/emails")
+async def list_application_emails(
+    application_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List emails (and future SMS) sent to a candidate from their profile."""
+    db = get_database()
+    await _get_application_or_404(db, application_id)
+
+    cursor = db.application_emails.find({"applicationId": application_id}).sort(
+        "sentAt", -1
+    )
+    messages = [format_email_document(doc) async for doc in cursor]
+    return {"messages": messages}
+
+
+@router.post("/applications/{application_id}/emails")
+async def send_application_email(
+    application_id: str,
+    payload: ApplicationEmailCreate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Send an email to the candidate and store it on their Email / SMS thread."""
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured. Set it up in Admin → Settings → Email delivery.",
+        )
+
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+
+    subject = payload.subject.strip()
+    body = payload.body.strip()
+    if not subject or not body:
+        raise HTTPException(status_code=400, detail="Subject and body are required")
+
+    recipient = (payload.to or "").strip() or resolve_application_email(application)
+    if not recipient:
+        raise HTTPException(
+            status_code=400,
+            detail="This candidate has no email address on file",
+        )
+    if not is_valid_email_address(recipient):
+        raise HTTPException(status_code=400, detail="Invalid recipient email address")
+
+    html_body = plain_text_to_email_html(body, subject=subject)
+    ok = await asyncio.to_thread(
+        send_generic_email,
+        recipient,
+        subject,
+        html_body,
+        skip_log=True,
+    )
+
+    job_id = str(application.get("jobId") or "")
+    author_id = str(current_user.get("_id", current_user.get("id", "")))
+    now = datetime.utcnow()
+    status_value = "sent" if ok else "failed"
+    error_message = None if ok else "Email delivery failed"
+
+    doc = {
+        "applicationId": application_id,
+        "jobId": job_id or None,
+        "channel": "email",
+        "to": recipient.lower(),
+        "subject": subject,
+        "body": body,
+        "status": status_value,
+        "error": error_message,
+        "sentById": author_id,
+        "sentByName": author_display_name(current_user),
+        "sentByEmail": str(current_user.get("email") or ""),
+        "sentAt": now,
+    }
+
+    result = await db.application_emails.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    formatted = format_email_document(doc)
+
+    if ok:
+        await log_custom_action(
+            db,
+            current_user,
+            action="sent",
+            resource_type="application_email",
+            detail=f"to {recipient} — {subject[:80]}",
+            resource_title=subject,
+            resource_id=application_id,
+        )
+        return formatted
+
+    raise HTTPException(
+        status_code=502,
+        detail="Failed to send email. Check email delivery settings and try again.",
+    )
+
+
+@router.get("/inbox/conversations")
+async def list_inbox_conversations(
+    limit: int = Query(50, ge=1, le=200),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Aggregate application emails into inbox conversations by candidate."""
+    db = get_database()
+    user_id = _current_user_id(current_user)
+
+    pipeline: List[Dict[str, Any]] = [
+        {"$sort": {"sentAt": -1}},
+        {
+            "$group": {
+                "_id": "$applicationId",
+                "lastMessage": {"$first": "$$ROOT"},
+                "messageCount": {"$sum": 1},
+            }
+        },
+        {"$sort": {"lastMessage.sentAt": -1}},
+        {"$limit": limit},
+    ]
+
+    groups = await db.application_emails.aggregate(pipeline).to_list(length=limit)
+    if not groups:
+        return {"conversations": []}
+
+    application_oids: List[ObjectId] = []
+    for group in groups:
+        app_id = str(group.get("_id") or "")
+        if app_id and ObjectId.is_valid(app_id):
+            application_oids.append(ObjectId(app_id))
+
+    apps_by_id: Dict[str, dict] = {}
+    if application_oids:
+        async for app in db.applications.find(
+            {
+                "$and": [
+                    {"_id": {"$in": application_oids}},
+                    _private_visibility_filter(user_id),
+                ]
+            },
+            {
+                "fullName": 1,
+                "name": 1,
+                "email": 1,
+                "Email": 1,
+                "applicantEmail": 1,
+                "answers": 1,
+                "jobId": 1,
+                "position": 1,
+                "status": 1,
+            },
+        ):
+            apps_by_id[str(app["_id"])] = app
+
+    job_oids: List[ObjectId] = []
+    for app in apps_by_id.values():
+        raw_job = app.get("jobId")
+        job_id = str(raw_job) if raw_job else ""
+        if job_id and ObjectId.is_valid(job_id):
+            job_oids.append(ObjectId(job_id))
+
+    job_titles: Dict[str, str] = {}
+    if job_oids:
+        async for job in db.jobs.find(
+            {"_id": {"$in": list(set(job_oids))}},
+            {"title": 1},
+        ):
+            title = str(job.get("title") or "").strip()
+            if title:
+                job_titles[str(job["_id"])] = title
+
+    conversations: List[Dict[str, Any]] = []
+    for group in groups:
+        application_id = str(group.get("_id") or "")
+        application = apps_by_id.get(application_id)
+        if not application:
+            continue
+
+        last_doc = group.get("lastMessage") or {}
+        last_message = format_email_document(last_doc)
+        job_id = str(application.get("jobId") or last_message.get("jobId") or "") or None
+        position = (
+            job_titles.get(job_id or "")
+            or str(application.get("position") or "").strip()
+            or None
+        )
+        candidate_email = (
+            resolve_application_email(application)
+            or str(last_message.get("to") or "")
+        )
+
+        conversations.append(
+            {
+                "applicationId": application_id,
+                "jobId": job_id,
+                "candidateName": applicant_display_name(application),
+                "candidateEmail": candidate_email,
+                "position": position,
+                "status": str(application.get("status") or ""),
+                "messageCount": int(group.get("messageCount") or 0),
+                "lastMessage": last_message,
+            }
+        )
+
+    return {"conversations": conversations}
+
+
+@router.get("/applications/{application_id}/tasks")
+async def list_application_tasks(
+    application_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List tasks tied to an application."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    cursor = db.application_tasks.find({"applicationId": application_id}).sort(
+        "createdAt", -1
+    )
+    tasks = [format_task_document(doc) async for doc in cursor]
+    return {"tasks": tasks}
+
+
+@router.post("/applications/{application_id}/tasks")
+async def create_application_task(
+    application_id: str,
+    payload: ApplicationTaskCreate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Create a task tied to an application."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Task title is required")
+
+    now = datetime.utcnow()
+    doc = {
+        "applicationId": application_id,
+        "jobId": str(application.get("jobId") or "") or None,
+        "title": title,
+        "dueAt": payload.dueAt,
+        "completed": False,
+        "createdById": _current_user_id(current_user),
+        "createdByName": author_display_name(current_user),
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    result = await db.application_tasks.insert_one(doc)
+    doc["_id"] = result.inserted_id
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="created",
+        resource_type="application_task",
+        detail=title[:120],
+        resource_title=title,
+        resource_id=application_id,
+    )
+    return format_task_document(doc)
+
+
+@router.patch("/applications/{application_id}/tasks/{task_id}")
+async def update_application_task(
+    application_id: str,
+    task_id: str,
+    payload: ApplicationTaskUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Update a task tied to an application."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    try:
+        task_oid = ObjectId(task_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid task ID format")
+
+    updates: Dict[str, Any] = {"updatedAt": datetime.utcnow()}
+    if payload.title is not None:
+        title = payload.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Task title is required")
+        updates["title"] = title
+    if payload.dueAt is not None:
+        updates["dueAt"] = payload.dueAt
+    if payload.completed is not None:
+        updates["completed"] = payload.completed
+
+    result = await db.application_tasks.find_one_and_update(
+        {"_id": task_oid, "applicationId": application_id},
+        {"$set": updates},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return format_task_document(result)
+
+
+@router.get("/my-tasks")
+async def list_my_incomplete_tasks(
+    limit: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List incomplete application tasks created by the current admin."""
+    db = get_database()
+    user_id = _current_user_id(current_user)
+    if not user_id:
+        return {"tasks": []}
+
+    cursor = (
+        db.application_tasks.find(
+            {"createdById": user_id, "completed": {"$ne": True}}
+        )
+        .sort([("dueAt", 1), ("createdAt", -1)])
+        .limit(limit)
+    )
+    docs = [doc async for doc in cursor]
+    application_ids: list[ObjectId] = []
+    for doc in docs:
+        app_id = str(doc.get("applicationId") or "")
+        if app_id and ObjectId.is_valid(app_id):
+            application_ids.append(ObjectId(app_id))
+
+    apps_by_id: Dict[str, dict] = {}
+    if application_ids:
+        async for app in db.applications.find(
+            {"_id": {"$in": application_ids}},
+            {"fullName": 1, "name": 1, "email": 1, "jobId": 1},
+        ):
+            apps_by_id[str(app["_id"])] = app
+
+    tasks = []
+    for doc in docs:
+        app_id = str(doc.get("applicationId") or "")
+        application = apps_by_id.get(app_id)
+        job_id = None
+        candidate_name = None
+        if application:
+            candidate_name = applicant_display_name(application)
+            raw_job = application.get("jobId")
+            job_id = str(raw_job) if raw_job else None
+        elif doc.get("jobId"):
+            job_id = str(doc.get("jobId"))
+        tasks.append(
+            format_task_document(
+                doc, candidate_name=candidate_name, job_id=job_id
+            )
+        )
+    return {"tasks": tasks}
+
+
+@router.get("/tasks")
+async def list_admin_tasks(
+    filter: str = Query("mine", regex="^(mine|team|completed)$"),
+    limit: int = Query(100, ge=1, le=200),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List workspace admin tasks filtered by mine / team / completed."""
+    db = get_database()
+    user_id = _current_user_id(current_user)
+    query = build_admin_tasks_filter(filter_key=filter, user_id=user_id)
+    cursor = (
+        db.admin_tasks.find(query)
+        .sort([("dueDate", 1), ("createdAt", -1)])
+        .limit(limit)
+    )
+    tasks = [format_admin_task_document(doc) async for doc in cursor]
+    return {"tasks": tasks, "filter": filter}
+
+
+@router.post("/tasks")
+async def create_admin_task(
+    payload: AdminTaskCreate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Create a workspace admin task."""
+    db = get_database()
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Task title is required")
+
+    description = (payload.description or "").strip()
+    if len(description) > 2000:
+        raise HTTPException(
+            status_code=400, detail="Description must be 2000 characters or fewer"
+        )
+
+    assignee_id, assignee_name = resolve_assignee_name(
+        assignee_id=payload.assigneeId,
+        assignee_name=payload.assigneeName,
+        current_user=current_user,
+    )
+
+    if assignee_id and not assignee_name:
+        try:
+            user_doc = await db.users.find_one(
+                {"_id": ObjectId(assignee_id)},
+                {"name": 1, "firstName": 1, "lastName": 1, "email": 1},
+            )
+        except Exception:
+            user_doc = None
+        if user_doc:
+            assignee_name = author_display_name(user_doc)
+
+    now = datetime.utcnow()
+    doc = {
+        "title": title,
+        "description": description,
+        "assigneeId": assignee_id,
+        "assigneeName": assignee_name,
+        "dueDate": payload.dueDate,
+        "status": "open",
+        "positionId": (payload.positionId or "").strip() or None,
+        "createdById": _current_user_id(current_user),
+        "createdByName": author_display_name(current_user),
+        "createdAt": now,
+        "updatedAt": now,
+        "completedAt": None,
+    }
+    result = await db.admin_tasks.insert_one(doc)
+    doc["_id"] = result.inserted_id
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="created",
+        resource_type="admin_task",
+        detail=title[:120],
+        resource_title=title,
+        resource_id=str(result.inserted_id),
+    )
+    return format_admin_task_document(doc)
+
+
+@router.patch("/tasks/{task_id}")
+async def update_admin_task(
+    task_id: str,
+    payload: AdminTaskUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Update a workspace admin task (complete, reassign, edit)."""
+    db = get_database()
+    try:
+        task_oid = ObjectId(task_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid task ID format")
+
+    updates: Dict[str, Any] = {"updatedAt": datetime.utcnow()}
+    if payload.title is not None:
+        title = payload.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Task title is required")
+        updates["title"] = title
+    if payload.description is not None:
+        description = payload.description.strip()
+        if len(description) > 2000:
+            raise HTTPException(
+                status_code=400,
+                detail="Description must be 2000 characters or fewer",
+            )
+        updates["description"] = description
+    if payload.assigneeId is not None or payload.assigneeName is not None:
+        assignee_id, assignee_name = resolve_assignee_name(
+            assignee_id=payload.assigneeId,
+            assignee_name=payload.assigneeName,
+            current_user=current_user,
+        )
+        if assignee_id and not assignee_name:
+            try:
+                user_doc = await db.users.find_one(
+                    {"_id": ObjectId(assignee_id)},
+                    {"name": 1, "firstName": 1, "lastName": 1, "email": 1},
+                )
+            except Exception:
+                user_doc = None
+            if user_doc:
+                assignee_name = author_display_name(user_doc)
+        updates["assigneeId"] = assignee_id
+        updates["assigneeName"] = assignee_name
+    if payload.dueDate is not None:
+        updates["dueDate"] = payload.dueDate
+    if payload.positionId is not None:
+        updates["positionId"] = payload.positionId.strip() or None
+    if payload.status is not None:
+        updates["status"] = payload.status
+        if payload.status == "completed":
+            updates["completedAt"] = datetime.utcnow()
+        else:
+            updates["completedAt"] = None
+
+    result = await db.admin_tasks.find_one_and_update(
+        {"_id": task_oid},
+        {"$set": updates},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return format_admin_task_document(result)
+
+
+@router.delete("/tasks/{task_id}")
+async def delete_admin_task(
+    task_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Delete a workspace admin task."""
+    db = get_database()
+    try:
+        task_oid = ObjectId(task_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid task ID format")
+
+    existing = await db.admin_tasks.find_one({"_id": task_oid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    await db.admin_tasks.delete_one({"_id": task_oid})
+    await log_custom_action(
+        db,
+        current_user,
+        action="deleted",
+        resource_type="admin_task",
+        detail=str(existing.get("title") or "")[:120],
+        resource_title=str(existing.get("title") or "Task"),
+        resource_id=task_id,
+    )
+    return {"success": True, "id": task_id}
+
+
+def _require_content_module(current_user: dict) -> None:
+    if not has_admin_module(current_user, "content"):
+        raise HTTPException(
+            status_code=403,
+            detail="Content module access required",
+        )
+
+
+@router.get("/documents")
+async def list_company_documents(
+    category: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """List company documents with optional category and search filters."""
+    _require_content_module(current_user)
+    db = get_database()
+    query = build_documents_query(category=category, search=search)
+    cursor = (
+        db.company_documents.find(query)
+        .sort([("updatedAt", -1), ("createdAt", -1)])
+        .limit(limit)
+    )
+    documents = [format_company_document(doc) async for doc in cursor]
+    return {"documents": documents}
+
+
+@router.post("/documents")
+async def create_company_document(
+    payload: CompanyDocumentCreate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Persist metadata for a document already uploaded to storage."""
+    _require_content_module(current_user)
+    db = get_database()
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Document title is required")
+
+    description = (payload.description or "").strip()
+    file_url = payload.fileUrl.strip()
+    file_name = payload.fileName.strip()
+    if not file_url or not file_name:
+        raise HTTPException(status_code=400, detail="File URL and name are required")
+
+    detected = detect_document_format(file_name)
+    fmt = payload.format.upper()
+    if detected and detected != fmt:
+        fmt = detected
+    if fmt not in ("PDF", "DOC", "XLS"):
+        raise HTTPException(
+            status_code=400,
+            detail="Format must be PDF, DOC, or XLS",
+        )
+
+    now = datetime.utcnow()
+    doc = {
+        "title": title,
+        "description": description,
+        "category": payload.category,
+        "format": fmt,
+        "fileUrl": file_url,
+        "fileName": file_name,
+        "fileSize": int(payload.fileSize or 0),
+        "authorId": _current_user_id(current_user),
+        "authorName": author_display_name(current_user),
+        "createdAt": now,
+        "updatedAt": now,
+        "lastAccessedAt": None,
+    }
+    result = await db.company_documents.insert_one(doc)
+    doc["_id"] = result.inserted_id
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="created",
+        resource_type="company_document",
+        detail=title[:120],
+        resource_title=title,
+        resource_id=str(result.inserted_id),
+    )
+    return format_company_document(doc)
+
+
+@router.patch("/documents/{document_id}")
+async def update_company_document(
+    document_id: str,
+    payload: CompanyDocumentUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Update document metadata."""
+    _require_content_module(current_user)
+    db = get_database()
+    try:
+        doc_oid = parse_document_object_id(document_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid document ID format")
+
+    updates: Dict[str, Any] = {"updatedAt": datetime.utcnow()}
+    if payload.title is not None:
+        title = payload.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Document title is required")
+        updates["title"] = title
+    if payload.description is not None:
+        updates["description"] = payload.description.strip()
+    if payload.category is not None:
+        updates["category"] = payload.category
+
+    if len(updates) == 1:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    result = await db.company_documents.find_one_and_update(
+        {"_id": doc_oid},
+        {"$set": updates},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return format_company_document(result)
+
+
+@router.post("/documents/{document_id}/access")
+async def mark_company_document_accessed(
+    document_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Record that an admin opened a document (Recently Accessed)."""
+    _require_content_module(current_user)
+    db = get_database()
+    try:
+        doc_oid = parse_document_object_id(document_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid document ID format")
+
+    now = datetime.utcnow()
+    result = await db.company_documents.find_one_and_update(
+        {"_id": doc_oid},
+        {"$set": {"lastAccessedAt": now}},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return format_company_document(result)
+
+
+@router.delete("/documents/{document_id}")
+async def delete_company_document(
+    document_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Delete a company document record."""
+    _require_content_module(current_user)
+    db = get_database()
+    try:
+        doc_oid = parse_document_object_id(document_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid document ID format")
+
+    existing = await db.company_documents.find_one({"_id": doc_oid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    await db.company_documents.delete_one({"_id": doc_oid})
+    await log_custom_action(
+        db,
+        current_user,
+        action="deleted",
+        resource_type="company_document",
+        detail=str(existing.get("title") or "")[:120],
+        resource_title=str(existing.get("title") or "Document"),
+        resource_id=document_id,
+    )
+    return {"success": True, "id": document_id}
+
+
+@router.get("/my-agenda")
+async def list_my_agenda(
+    limit: int = Query(15, ge=1, le=50),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Upcoming interviews, assessments, and reminders for the current admin."""
+    db = get_database()
+    user_id = _current_user_id(current_user)
+    now = datetime.utcnow()
+    visibility = _private_visibility_filter(user_id)
+
+    def parse_agenda_date(value: Any) -> Optional[datetime]:
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=None) if value.tzinfo else value
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+            except ValueError:
+                return None
+        return None
+
+    query = {
+        "$and": [
+            visibility,
+            {"isArchived": {"$ne": True}},
+            {
+                "$or": [
+                    {"interviewDate": {"$exists": True, "$ne": None}},
+                    {"assessmentDate": {"$exists": True, "$ne": None}},
+                    {
+                        "reminderAt": {"$exists": True, "$ne": None},
+                        "reminderCreatedById": user_id,
+                    },
+                ]
+            },
+        ]
+    }
+
+    projection = {
+        "fullName": 1,
+        "name": 1,
+        "email": 1,
+        "jobId": 1,
+        "jobTitle": 1,
+        "position": 1,
+        "interviewer": 1,
+        "interviewDate": 1,
+        "assessmentDate": 1,
+        "reminderAt": 1,
+        "reminderNote": 1,
+        "reminderCreatedById": 1,
+        "assignedHiringTeam": 1,
+        "status": 1,
+    }
+
+    items: list[dict[str, Any]] = []
+    async for application in db.applications.find(query, projection).limit(300):
+        application_id = str(application["_id"])
+        job_id = str(application.get("jobId") or "") or None
+        candidate = applicant_display_name(application)
+        position = (
+            str(application.get("jobTitle") or application.get("position") or "").strip()
+            or "Position"
+        )
+        href = candidate_profile_href(application_id, job_id)
+        on_team = user_on_hiring_team(application, user_id)
+        is_interviewer = interviewer_matches_user(
+            application.get("interviewer"), current_user
+        )
+        owns_reminder = str(application.get("reminderCreatedById") or "") == user_id
+
+        interview_date = parse_agenda_date(application.get("interviewDate"))
+        if interview_date and interview_date >= now and (is_interviewer or on_team):
+            items.append(
+                {
+                    "id": f"{application_id}-interview",
+                    "type": "interview",
+                    "title": f"Interview · {candidate}",
+                    "subtitle": position,
+                    "startsAt": interview_date.isoformat(),
+                    "applicationId": application_id,
+                    "jobId": job_id,
+                    "href": href,
+                }
+            )
+
+        assessment_date = parse_agenda_date(application.get("assessmentDate"))
+        if assessment_date and assessment_date >= now and (is_interviewer or on_team):
+            items.append(
+                {
+                    "id": f"{application_id}-assessment",
+                    "type": "assessment",
+                    "title": f"Assessment · {candidate}",
+                    "subtitle": position,
+                    "startsAt": assessment_date.isoformat(),
+                    "applicationId": application_id,
+                    "jobId": job_id,
+                    "href": href,
+                }
+            )
+
+        reminder_at = parse_agenda_date(application.get("reminderAt"))
+        if reminder_at and reminder_at >= now and owns_reminder:
+            note = str(application.get("reminderNote") or "").strip()
+            items.append(
+                {
+                    "id": f"{application_id}-reminder",
+                    "type": "reminder",
+                    "title": f"Reminder · {candidate}",
+                    "subtitle": note or position,
+                    "startsAt": reminder_at.isoformat(),
+                    "applicationId": application_id,
+                    "jobId": job_id,
+                    "href": href,
+                }
+            )
+
+    items.sort(key=lambda item: item.get("startsAt") or "")
+    trimmed = items[:limit]
+
+    job_ids = [
+        ObjectId(item["jobId"])
+        for item in trimmed
+        if item.get("jobId") and ObjectId.is_valid(str(item["jobId"]))
+    ]
+    titles_by_job: Dict[str, str] = {}
+    if job_ids:
+        async for job in db.jobs.find(
+            {"_id": {"$in": job_ids}}, {"title": 1}
+        ):
+            title = str(job.get("title") or "").strip()
+            if title:
+                titles_by_job[str(job["_id"])] = title
+
+    for item in trimmed:
+        job_id = item.get("jobId")
+        if job_id and item.get("subtitle") in ("Position", "", None):
+            looked_up = titles_by_job.get(str(job_id))
+            if looked_up:
+                item["subtitle"] = looked_up
+
+    return {"items": trimmed}
+
+
+@router.post("/applications/{application_id}/request-application")
+async def request_application_update(
+    application_id: str,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Email the candidate asking them to complete or update their application."""
+    if not is_email_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Email delivery is not configured. Set it up in Admin → Settings → Email delivery.",
+        )
+
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    recipient = resolve_application_email(application)
+    if not recipient or not is_valid_email_address(recipient):
+        raise HTTPException(
+            status_code=400,
+            detail="This candidate has no email address on file",
+        )
+
+    applicant = applicant_display_name(application)
+    position = application.get("position") or "the role"
+    job_id = str(application.get("jobId") or "")
+    frontend = get_frontend_url().rstrip("/")
+    apply_url = (
+        f"{frontend}/dashboard/apply/{job_id}"
+        if job_id
+        else f"{frontend}/careers/jobs"
+    )
+
+    subject = f"Please complete your application for {position}"
+    body = (
+        f"Hi {applicant},\n\n"
+        f"Our recruiting team needs you to complete or update your application "
+        f"for {position}.\n\n"
+        f"Please use this link to continue:\n{apply_url}\n\n"
+        f"Thank you,\nBQI Tech Recruiting"
+    )
+    html_body = plain_text_to_email_html(body, subject=subject)
+    ok = await asyncio.to_thread(
+        send_generic_email,
+        recipient,
+        subject,
+        html_body,
+        skip_log=True,
+    )
+
+    now = datetime.utcnow()
+    author_id = _current_user_id(current_user)
+    doc = {
+        "applicationId": application_id,
+        "jobId": job_id or None,
+        "channel": "email",
+        "to": recipient.lower(),
+        "subject": subject,
+        "body": body,
+        "status": "sent" if ok else "failed",
+        "error": None if ok else "Email delivery failed",
+        "sentById": author_id,
+        "sentByName": author_display_name(current_user),
+        "sentByEmail": str(current_user.get("email") or ""),
+        "sentAt": now,
+        "kind": "request_application",
+    }
+    result = await db.application_emails.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    formatted = format_email_document(doc)
+
+    if not ok:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to send email. Check email delivery settings and try again.",
+        )
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="sent",
+        resource_type="application_request",
+        detail=f"to {recipient}",
+        resource_title=subject,
+        resource_id=application_id,
+    )
+    return formatted
+
+
+@router.post("/applications/{application_id}/reminders")
+async def create_application_reminder(
+    application_id: str,
+    payload: ApplicationReminderCreate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Set a follow-up reminder on an application and notify the current admin."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    due_at = payload.dueAt
+    if due_at.tzinfo is not None:
+        due_at = due_at.replace(tzinfo=None)
+
+    note = (payload.note or "").strip()
+    applicant = applicant_display_name(application)
+    user_id = _current_user_id(current_user)
+    now = datetime.utcnow()
+
+    await db.applications.update_one(
+        {"_id": application["_id"]},
+        {
+            "$set": {
+                "reminderAt": due_at,
+                "reminderNote": note or None,
+                "reminderCreatedById": user_id,
+                "reminderCreatedAt": now,
+                "updatedAt": now,
+            }
+        },
+    )
+
+    due_label = due_at.strftime("%b %d, %Y %H:%M")
+    message = f"Follow up on {applicant} by {due_label}"
+    if note:
+        message = f"{message}. {note}"
+
+    notification_doc = {
+        "title": f"Reminder: {applicant}",
+        "message": message,
+        "type": "info",
+        "userId": user_id,
+        "isRead": False,
+        "read": False,
+        "readBy": [],
+        "createdAt": now,
+        "updatedAt": now,
+        "priority": "normal",
+        "category": "reminder",
+        "link": application_admin_link(application_id),
+        "metadata": {
+            "applicationId": application_id,
+            "reminderAt": due_at.isoformat(),
+            "category": "reminder",
+        },
+    }
+    await db.notifications.insert_one(notification_doc)
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="created",
+        resource_type="application_reminder",
+        detail=due_label,
+        resource_title=applicant,
+        resource_id=application_id,
+    )
+
+    return {
+        "reminderAt": due_at.isoformat(),
+        "reminderNote": note or None,
+        "message": "Reminder set",
+    }
+
+
+@router.put("/applications/{application_id}/privacy")
+async def update_application_privacy(
+    application_id: str,
+    payload: ApplicationPrivacyUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Mark an application private (owner-only) or make it visible again."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    user_id = _current_user_id(current_user)
+    now = datetime.utcnow()
+    if payload.isPrivate:
+        updates = {
+            "isPrivate": True,
+            "privateOwnerId": user_id,
+            "privateAt": now,
+            "updatedAt": now,
+        }
+    else:
+        updates = {
+            "isPrivate": False,
+            "privateOwnerId": None,
+            "privateAt": None,
+            "updatedAt": now,
+        }
+
+    await db.applications.update_one({"_id": application["_id"]}, {"$set": updates})
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="updated",
+        resource_type="application_privacy",
+        detail="private" if payload.isPrivate else "public",
+        resource_title=applicant_display_name(application),
+        resource_id=application_id,
+    )
+
+    return {
+        "isPrivate": payload.isPrivate,
+        "privateOwnerId": user_id if payload.isPrivate else None,
+    }
+
+
+@router.put("/applications/{application_id}/assignees")
+async def update_application_assignees(
+    application_id: str,
+    payload: ApplicationAssigneesUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Assign hiring-team reviewers to an application."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    assignees = serialize_assignees([item.model_dump() for item in payload.assignees])
+    now = datetime.utcnow()
+    await db.applications.update_one(
+        {"_id": application["_id"]},
+        {"$set": {"assignedHiringTeam": assignees, "updatedAt": now}},
+    )
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="updated",
+        resource_type="application_assignees",
+        detail=f"{len(assignees)} assignee(s)",
+        resource_title=applicant_display_name(application),
+        resource_id=application_id,
+    )
+
+    return {"assignedHiringTeam": assignees}
+
+
+@router.put("/applications/{application_id}/follow")
+async def update_application_follow(
+    application_id: str,
+    payload: ApplicationFollowUpdate,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Follow or unfollow a candidate application for the current admin."""
+    db = get_database()
+    application = await _get_application_or_404(db, application_id)
+    _assert_application_visible(application, current_user)
+
+    user_id = _current_user_id(current_user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unable to resolve admin user")
+
+    now = datetime.utcnow()
+    if payload.followed:
+        await db.applications.update_one(
+            {"_id": application["_id"]},
+            {
+                "$addToSet": {"followedBy": user_id},
+                "$set": {"updatedAt": now},
+            },
+        )
+    else:
+        await db.applications.update_one(
+            {"_id": application["_id"]},
+            {
+                "$pull": {"followedBy": user_id},
+                "$set": {"updatedAt": now},
+            },
+        )
+
+    refreshed = await db.applications.find_one(
+        {"_id": application["_id"]},
+        {"followedBy": 1},
+    )
+    followed_by = [
+        str(uid)
+        for uid in ((refreshed or {}).get("followedBy") or [])
+        if uid is not None
+    ]
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="updated",
+        resource_type="application_follow",
+        detail="followed" if payload.followed else "unfollowed",
+        resource_title=applicant_display_name(application),
+        resource_id=application_id,
+    )
+
+    return {
+        "isFollowed": user_id in followed_by,
+        "followedBy": followed_by,
+    }
+
 
 # Move bulk-status endpoint before parameterized route to fix route conflict
 @router.put("/applications/bulk-status")
@@ -2898,7 +5342,7 @@ async def bulk_update_application_status(
             raise HTTPException(status_code=400, detail="Missing 'status' field")
         
         ids = data["ids"]
-        status = data["status"]
+        status = normalize_application_status(data["status"])
         logger.info(f"IDs: {ids}, Status: {status}")
         
         # Validate IDs array
@@ -2914,9 +5358,8 @@ async def bulk_update_application_status(
             raise HTTPException(status_code=400, detail="Status must be a non-empty string")
             
         # Validate status against allowed values
-        valid_statuses = ["New", "Shortlisted", "Technical Assessment", "Interviewing", "Hired", "Rejected", "Disqualified"]
-        if status not in valid_statuses:
-            raise HTTPException(status_code=400, detail=f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}")
+        if status not in CANONICAL_APPLICATION_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Invalid status '{status}'. Must be one of: {', '.join(CANONICAL_APPLICATION_STATUSES)}")
             
         # Get database connection
         db = get_database()
@@ -2939,35 +5382,26 @@ async def bulk_update_application_status(
                 logger.error(f"❌ Failed to convert ID at index {i}: '{id_str}' - {str(e)}")
                 raise HTTPException(status_code=400, detail=f"Invalid ObjectId at index {i}: '{id_str}' - {str(e)}")
         
-        # Update application status in database
-        update_data = {
-            "status": status,
-            "updatedAt": datetime.utcnow()
-        }
-        
-        # Set specific date fields based on status
+        # Update application status in database (per-document for status history)
         current_time = datetime.utcnow()
-        if status == "Shortlisted":
-            update_data["shortlistedDate"] = current_time
-        elif status == "Interviewing":
-            update_data["interviewDate"] = current_time
-        elif status == "Hired":
-            update_data["hiredDate"] = current_time
-        elif status == "Rejected":
-            update_data["rejectedDate"] = current_time
-        elif status == "Disqualified":
-            update_data["disqualifiedDate"] = current_time
-        
-        logger.info(f"Updating {len(object_ids)} applications with status '{status}'")
-        result = await db.applications.update_many(
-            {"_id": {"$in": object_ids}}, 
-            {"$set": update_data}
-        )
-        
-        logger.info(f"Database update result: matched={result.matched_count}, modified={result.modified_count}")
-        
-        if result.matched_count == 0:
+        changed_by = current_user.get("email") or current_user.get("name") or "Admin"
+        updated_apps = await db.applications.find({"_id": {"$in": object_ids}}).to_list(length=len(object_ids))
+
+        if not updated_apps:
             raise HTTPException(status_code=404, detail="No applications found to update")
+
+        modified_count = 0
+        for app in updated_apps:
+            update_data = build_admin_status_update(
+                app,
+                status,
+                changed_by=changed_by,
+                reason=f"Bulk status update to {status}",
+            )
+            result = await db.applications.update_one({"_id": app["_id"]}, {"$set": update_data})
+            modified_count += result.modified_count
+
+        logger.info(f"Updated {modified_count} applications with status '{status}'")
 
         id_strings = [str(oid) for oid in object_ids]
         await db.cv_vault.update_many(
@@ -2975,8 +5409,6 @@ async def bulk_update_application_status(
             {"$set": {"applicationStatus": status, "updatedAt": current_time}},
         )
 
-        changed_by = current_user.get("email") or current_user.get("name") or "Admin"
-        updated_apps = await db.applications.find({"_id": {"$in": object_ids}}).to_list(length=len(object_ids))
         for app in updated_apps:
             applicant = applicant_display_name(app)
             position = app.get("position") or "a role"
@@ -3001,14 +5433,14 @@ async def bulk_update_application_status(
             current_user,
             action="updated",
             resource_type="application",
-            count=result.modified_count,
-            detail=f"{result.modified_count} applications set to status '{status}'",
+            count=modified_count,
+            detail=f"{modified_count} applications set to status '{status}'",
         )
             
         return {
-            "message": f"Successfully updated {result.modified_count} applications to status '{status}'",
-            "updated_count": result.modified_count,
-            "matched_count": result.matched_count,
+            "message": f"Successfully updated {modified_count} applications to status '{status}'",
+            "updated_count": modified_count,
+            "matched_count": len(updated_apps),
             "status": status
         }
         
@@ -3133,6 +5565,140 @@ async def ai_rank_applications(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/applications/extract-contact-preview")
+async def extract_contact_preview_from_cv(
+    request: Request,
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Extract name/email/phone/location from a CV without creating an application.
+
+    Accepts JSON ``{ "cvUrl": "..." }`` or multipart ``file`` (optional ``cvUrl`` form field).
+    """
+    from app.lib.cv_contact_extract import preview_contact_from_cv
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    cv_url = ""
+    cv_bytes: Optional[bytes] = None
+    filename = ""
+
+    try:
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            cv_url = str(form.get("cvUrl") or "").strip()
+            upload = form.get("file")
+            if upload is not None and hasattr(upload, "read"):
+                cv_bytes = await upload.read()
+                filename = str(getattr(upload, "filename", "") or "")
+        else:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise HTTPException(status_code=400, detail="Invalid request body")
+            cv_url = str(body.get("cvUrl") or "").strip()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("extract-contact-preview parse failed: %s", exc)
+        raise HTTPException(status_code=400, detail="Invalid request body") from exc
+
+    if not cv_bytes and not cv_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide a resume file or cvUrl to extract contact fields",
+        )
+
+    try:
+        preview = await preview_contact_from_cv(
+            cv_url=cv_url or None,
+            cv_bytes=cv_bytes,
+            filename=filename,
+        )
+    except Exception as exc:
+        logger.error("extract-contact-preview failed: %s", exc)
+        raise HTTPException(
+            status_code=500, detail="Failed to extract contact from resume"
+        ) from exc
+
+    return {
+        "cvUrl": cv_url or None,
+        **preview,
+    }
+
+
+@router.post("/applications/manual")
+async def create_manual_application(
+    request: Request,
+    body: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Create an application manually from the admin pipeline."""
+    from app.lib.cors import resolve_frontend_url
+    from app.lib.cv_vault import create_manual_application_for_job
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    job_id = str(body.get("jobId") or "").strip()
+    email = str(body.get("email") or "").strip()
+    name = str(body.get("name") or "").strip()
+    status = str(body.get("status") or "New").strip()
+    cv_url = str(body.get("cvUrl") or "").strip() or None
+    phone_number = str(body.get("phoneNumber") or "").strip() or None
+    location = str(body.get("location") or "").strip() or None
+
+    if not job_id:
+        raise HTTPException(status_code=400, detail="jobId is required")
+    if not email:
+        raise HTTPException(status_code=400, detail="email is required")
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    try:
+        result = await create_manual_application_for_job(
+            db,
+            job_id,
+            email=email,
+            name=name,
+            status=status,
+            cv_url=cv_url,
+            phone_number=phone_number,
+            location=location,
+            created_by=admin_actor_label(current_user),
+            frontend_url=resolve_frontend_url(request.headers.get("origin")),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Manual application create failed: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to create application")
+
+    try:
+        application = result.get("application") or {}
+        applicant = applicant_display_name(application)
+        position = application.get("position") or "a role"
+        app_id = result.get("applicationId") or application.get("id")
+        await create_system_admin_notification(
+            db,
+            title="Candidate added manually",
+            message=f"{applicant} was added to {position}",
+            notification_type="application",
+            category="new_application",
+            link=application_admin_link(str(app_id)) if app_id else "/admin/applications",
+            priority="high",
+            metadata={
+                "applicationId": app_id,
+                "jobId": job_id,
+                "status": status,
+                "category": "new_application",
+                "source": "admin_manual",
+            },
+        )
+    except Exception as notify_err:
+        logger.error("Failed to create admin notification for manual application: %s", notify_err)
+
+    return result
+
+
 @router.put("/applications/{application_id}")
 async def update_admin_application(
     application_id: str,
@@ -3152,26 +5718,50 @@ async def update_admin_application(
             raise HTTPException(status_code=404, detail="Application not found")
 
         update_data = dict(update_data or {})
-        previous_status = existing.get("status")
-        current_time = datetime.utcnow()
-        update_data["updatedAt"] = current_time
+        for blocked_key in _APPLICATION_UPDATE_BLOCKLIST:
+            update_data.pop(blocked_key, None)
 
-        new_status = update_data.get("status")
-        if new_status and new_status != previous_status:
-            if new_status == "Shortlisted":
-                update_data["shortlistedDate"] = current_time
-            elif new_status == "Interviewing":
-                update_data["interviewDate"] = current_time
-            elif new_status == "Hired":
-                update_data["hiredDate"] = current_time
-            elif new_status == "Rejected":
-                update_data["rejectedDate"] = current_time
-            elif new_status == "Disqualified":
-                update_data["disqualifiedDate"] = current_time
+        previous_status = normalize_application_status(existing.get("status"), "New")
+        current_time = datetime.utcnow()
+        changed_by = current_user.get("email") or current_user.get("name") or "Admin"
+
+        raw_new_status = update_data.get("status")
+        if raw_new_status is not None:
+            new_status = normalize_application_status(raw_new_status)
+            update_data["status"] = new_status
+            status_fields = build_admin_status_update(
+                existing,
+                new_status,
+                changed_by=changed_by,
+                reason="Application updated from admin",
+            )
+            update_data.update(status_fields)
+        else:
+            new_status = None
+            update_data["updatedAt"] = current_time
 
         result = await db.applications.update_one({"_id": obj_id}, {"$set": update_data})
         if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Application not found")
+
+        # When CV URL changes (or is set), re-extract contact into empty fields
+        new_cv = update_data.get("cvUrl") or update_data.get("resumeUrl")
+        old_cv = existing.get("cvUrl") or existing.get("resumeUrl") or ""
+        if isinstance(new_cv, str) and new_cv.strip() and new_cv.strip() != (old_cv or "").strip():
+            try:
+                from app.lib.cv_contact_extract import sync_application_contact_from_cv
+
+                refreshed = await db.applications.find_one({"_id": obj_id})
+                if refreshed:
+                    await sync_application_contact_from_cv(
+                        db, refreshed, force=True
+                    )
+            except Exception as sync_err:
+                logger.debug(
+                    "CV contact sync after resume update failed for %s: %s",
+                    application_id,
+                    sync_err,
+                )
 
         if new_status and new_status != previous_status:
             applicant = applicant_display_name(existing)
@@ -3280,12 +5870,14 @@ async def get_application_trends(
     start_date = end_date - timedelta(days=days)
     
     # Build job filter
-    job_filter = {}
+    job_filter: Dict[str, Any] = {}
     if job_id:
         try:
-            job_filter["jobId"] = ObjectId(job_id)
-        except Exception:
+            ObjectId(job_id)
+        except InvalidId:
             raise HTTPException(status_code=400, detail="Invalid job ID format")
+        job_title = await _resolve_job_posting_title(db, job_id)
+        job_filter = _application_job_filter(job_id, job_title)
     
     # Get daily application counts
     pipeline = [
@@ -3348,9 +5940,15 @@ async def get_applications_by_job(
         match_query = _archived_application_filter() if archived else _active_application_filter()
         if job_id:
             try:
-                match_query["jobId"] = ObjectId(job_id)
-            except Exception:
+                ObjectId(job_id)
+            except InvalidId:
                 raise HTTPException(status_code=400, detail="Invalid job ID format")
+            job_title = await _resolve_job_posting_title(db, job_id)
+            match_query = _apply_application_job_filter(match_query, job_id, job_title)
+
+        match_query = _with_private_visibility(
+            match_query, _current_user_id(current_user)
+        )
 
         pipeline = [
             {"$match": match_query},
@@ -3869,7 +6467,15 @@ async def get_admin_settings(
                     "allowReapply": True,
                     "reapplyWaitDays": 90,
                     "maxActiveApplications": 5
-                }
+                },
+                "bqiIntelligence": {
+                    "applicantInsights": True,
+                    "activitySummary": True,
+                    "resumeAudit": True,
+                    "helpMeWrite": False,
+                    "candidateSourcing": False,
+                },
+                "admin_2fa_policy": "require_one",
             }
             try:
                 result = await db.settings.insert_one(settings)
@@ -4962,7 +7568,7 @@ async def search_users(
     q: str = "",
     current_user: dict = Depends(get_current_admin_user)
 ):
-    """Search users by name, email, or username"""
+    """Search users by name, email, username, or role"""
     try:
         if not q.strip():
             return {"users": []}
@@ -4971,19 +7577,29 @@ async def search_users(
         if db is None:
             raise HTTPException(status_code=503, detail="Database not available")
         
+        search_term = q.strip()
         # Create case-insensitive regex for search
-        search_regex = {"$regex": q.strip(), "$options": "i"}
+        search_regex = {"$regex": search_term, "$options": "i"}
         
-        # Search in multiple fields
-        query = {
-            "$or": [
-                {"name": search_regex},
-                {"email": search_regex},
-                {"firstName": search_regex},
-                {"lastName": search_regex},
-                {"username": search_regex}
-            ]
-        }
+        # Search in multiple fields (including role for partial matches like "adm")
+        or_clauses = [
+            {"name": search_regex},
+            {"email": search_regex},
+            {"firstName": search_regex},
+            {"lastName": search_regex},
+            {"username": search_regex},
+            {"role": search_regex},
+        ]
+
+        # Map UI labels (e.g. "Administrator", "Super Admin") to stored roles
+        role_matches = roles_matching_search_query(search_term)
+        if role_matches:
+            role_pattern = "|".join(re.escape(role) for role in role_matches)
+            or_clauses.append(
+                {"role": {"$regex": f"^({role_pattern})$", "$options": "i"}}
+            )
+
+        query = {"$or": or_clauses}
         
         # Find users (limit to 50 results)
         users_cursor = db.users.find(
@@ -5134,6 +7750,108 @@ Generate an email based on this prompt:"""
     except Exception as e:
         logger.error(f"Error in AI email generation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/job-postings/ai/generate-description")
+async def ai_generate_job_description(
+    payload: Dict[str, Any] = Body(...),
+    current_admin: dict = Depends(get_current_admin_user),
+):
+    """Generate or refine an HTML job description from hiring notes.
+
+    Request: {
+      prompt: str (20–500 chars),
+      title?: str,
+      department?: str,
+      location?: str,
+      employmentType?: str,
+      existingDescription?: str,
+      mode?: "generate" | "adjust"
+    }
+    Response: { description: str }  # HTML suitable for the TipTap editor
+    """
+    import re
+
+    from app.lib.nvidia_ai import nvidia_chat_completion
+
+    prompt = (payload.get("prompt") or "").strip()
+    if len(prompt) < 20:
+        raise HTTPException(
+            status_code=400, detail="Prompt must be at least 20 characters"
+        )
+    if len(prompt) > 500:
+        raise HTTPException(
+            status_code=400, detail="Prompt must be at most 500 characters"
+        )
+
+    title = (payload.get("title") or "").strip() or "this role"
+    department = (payload.get("department") or "").strip()
+    location = (payload.get("location") or "").strip()
+    employment_type = (payload.get("employmentType") or "").strip()
+    existing = (payload.get("existingDescription") or "").strip()
+    mode = (payload.get("mode") or "generate").strip().lower()
+    if mode not in {"generate", "adjust"}:
+        mode = "generate"
+
+    context_bits = [
+        f"Position title: {title}",
+        f"Department: {department}" if department else None,
+        f"Location: {location}" if location else None,
+        f"Employment type: {employment_type}" if employment_type else None,
+    ]
+    context = "\n".join(bit for bit in context_bits if bit)
+
+    if mode == "adjust" and existing:
+        system = (
+            "You revise job descriptions for a professional careers site. "
+            "Return ONLY HTML using <h2>, <p>, and <ul>/<li>. "
+            "No markdown fences, no commentary, no <html> or <body> wrappers."
+        )
+        user_msg = (
+            f"Revise the job description below using these notes.\n\n"
+            f"{context}\n\n"
+            f"Notes:\n{prompt}\n\n"
+            f"Current HTML:\n{existing}"
+        )
+    else:
+        system = (
+            "You write clear, candidate-facing job descriptions. "
+            "Return ONLY HTML with sections: About the role, Responsibilities, Requirements. "
+            "Use <h2>, <p>, and <ul>/<li>. No markdown fences, no commentary."
+        )
+        user_msg = (
+            f"Write a job description for this position.\n\n"
+            f"{context}\n\n"
+            f"Hiring notes:\n{prompt}"
+        )
+
+    try:
+        content = await nvidia_chat_completion(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.55,
+            max_tokens=2200,
+            timeout=60.0,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        logger.error(f"Error generating job description: {error}")
+        raise HTTPException(
+            status_code=502, detail=f"AI generation failed: {error}"
+        ) from error
+
+    cleaned = content.strip()
+    fence = re.search(r"```(?:html)?\s*([\s\S]*?)\s*```", cleaned, re.IGNORECASE)
+    if fence:
+        cleaned = fence.group(1).strip()
+
+    if not cleaned:
+        raise HTTPException(status_code=502, detail="AI returned an empty description")
+
+    return {"description": cleaned}
 
 
 @router.get("/cv-vault/filters")

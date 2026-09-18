@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +8,25 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Loader2, Zap } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { FieldError } from "react-hook-form";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
+import { PortalAuthCard } from "@/components/auth/PortalAuthCard";
+import { PortalBrandPanel } from "@/components/auth/PortalBrandPanel";
+import {
+  criticallyDampedSpring,
+  portalAuthAutofillCss,
+  portalAuthButtonClass,
+  portalAuthInputClass,
+  portalAuthLabelClass,
+  portalAuthLinkClass,
+} from "@/components/auth/portal-auth-styles";
+import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "@/lib/config";
+
+const VALIDATE_TOKEN_TIMEOUT_MS = 12_000;
 
 const formSchema = z
   .object({
@@ -24,11 +38,35 @@ const formSchema = z
     path: ["confirmPassword"],
   });
 
+const DEFAULT_POST_RESET_REDIRECT = "/login?passwordReset=1";
+const EMPLOYEE_DASHBOARD_PATH = "/employee";
+
+type ResetPasswordResponse = {
+  message?: string;
+  isEmployee?: boolean;
+  redirectTo?: string;
+  access_token?: string;
+  refresh_token?: string;
+  user?: {
+    id?: string;
+    _id?: string;
+    email: string;
+    name: string;
+    role: string;
+    avatar?: string;
+    adminModules?: string[];
+    isEmailVerified?: boolean;
+  };
+};
+
 export default function ResetPasswordPage() {
   const [isValidToken, setIsValidToken] = useState(false);
+  const [isEmployeeInvite, setIsEmployeeInvite] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
+  const reduceMotion = useReducedMotion();
 
   const {
     register,
@@ -39,41 +77,69 @@ export default function ResetPasswordPage() {
   });
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(
+      () => controller.abort(),
+      VALIDATE_TOKEN_TIMEOUT_MS
+    );
+
     const validateToken = async () => {
+      if (!token) {
+        if (!cancelled) {
+          setIsValidToken(false);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       try {
         const response = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000"
-          }/api/auth/validate-reset-token?token=${token}`
+          `${BACKEND_URL}/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`,
+          { signal: controller.signal }
         );
         if (!response.ok) throw new Error("Invalid or expired token");
+        const payload = await response.json();
+        if (cancelled) return;
         setIsValidToken(true);
+        setIsEmployeeInvite(Boolean(payload?.isEmployee));
       } catch (error) {
-        toast.error(error.message);
+        if (cancelled) return;
+        setIsValidToken(false);
+        const isAbort =
+          error instanceof Error && error.name === "AbortError";
+        const message = isAbort
+          ? "Could not verify reset link. Please try again."
+          : error instanceof Error
+            ? error.message
+            : "Invalid or expired token";
+        toast.error(message);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
-    if (token) validateToken();
+    void validateToken();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
   }, [token]);
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true);
     try {
-      const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:9000"
-        }/api/auth/reset-password`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, password: data.password }),
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password: data.password }),
+      });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        const detail = errorData.detail;
+        const errorData = await response.json().catch(() => ({}));
+        const detail = errorData?.detail;
         const message =
           typeof detail === "string"
             ? detail
@@ -81,157 +147,191 @@ export default function ResetPasswordPage() {
         throw new Error(message);
       }
 
-      toast.success(
-        "Password updated successfully! You can now sign in with your new password."
-      );
-      // Redirect to login after 2 seconds
-      setTimeout(() => (window.location.href = "/login?passwordReset=1"), 2000);
+      const result = (await response.json()) as ResetPasswordResponse;
+      const isEmployee = Boolean(result.isEmployee);
+      const destination =
+        result.redirectTo ||
+        (isEmployee ? EMPLOYEE_DASHBOARD_PATH : DEFAULT_POST_RESET_REDIRECT);
+
+      if (
+        isEmployee &&
+        result.access_token &&
+        result.refresh_token &&
+        result.user
+      ) {
+        authService.setSession({
+          user: {
+            ...result.user,
+            id: result.user.id || result.user._id || "",
+            isEmailVerified: Boolean(result.user.isEmailVerified),
+          },
+          token: result.access_token,
+          refreshToken: result.refresh_token,
+        });
+        toast.success("Password set. Opening your employee dashboard…");
+      } else {
+        toast.success(
+          "Password updated successfully! You can now sign in with your new password."
+        );
+      }
+
+      setTimeout(() => {
+        window.location.href = destination;
+      }, 2000);
     } catch (error) {
-      toast.error(error.message || "Failed to reset password");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to reset password"
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const fadeUp = (delay: number) =>
+    reduceMotion
+      ? {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          transition: { duration: 0.28, delay },
+        }
+      : {
+          initial: { opacity: 0, y: 14 },
+          animate: { opacity: 1, y: 0 },
+          transition: { ...criticallyDampedSpring, delay },
+        };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen grid lg:grid-cols-2">
-        <div className="hidden lg:block relative bg-gradient-to-br from-[#31CDFF] to-blue-600">
-          <div className="absolute inset-0 pattern-dots pattern-blue-500 pattern-bg-transparent pattern-opacity-20 pattern-size-4" />
-          <div className="relative h-full flex flex-col justify-between p-12 text-white">
-            <Zap className="w-12 h-12" />
-            <div className="space-y-4">
-              <h2 className="text-4xl font-bold">BQI Tech Portal</h2>
-              <p className="text-lg opacity-90">
-                Secure account recovery process
-              </p>
-            </div>
-            <div className="flex gap-4 opacity-75">
-              <span className="text-sm">v2.4.0</span>
-              <span className="text-sm">•</span>
-              <span className="text-sm">Enterprise Security</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-center p-8 bg-background">
-          <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="min-h-[100dvh] grid lg:grid-cols-2">
+        <PortalBrandPanel
+          subtitle={
+            isEmployeeInvite
+              ? "Create a password to access your employee portal."
+              : "Choose a new password for your BQI HR account."
+          }
+          footerLabel="Secure Login"
+        />
+        <div className="relative flex min-h-[100dvh] items-center justify-center bg-[#f7f7f9]">
+          <Loader2 className="h-8 w-8 animate-spin text-[#272156]" />
         </div>
       </div>
     );
   }
 
-  const RightPanelWrapper = ({ children }: { children: React.ReactNode }) => (
-    <div className="flex items-center justify-center p-8 bg-background">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 bg-background p-8 rounded-lg shadow-2xl w-full max-w-md"
-      >
-        <Link
-          href="/login"
-          className="flex items-center text-sm text-[#31CDFF] hover:text-[#31CDFF]/90 mb-8"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to login
-        </Link>
-        {children}
-      </motion.div>
-    </div>
-  );
+  const backHref = isEmployeeInvite ? "/employee/login" : "/login";
+  const title = isEmployeeInvite ? "Create your password" : "Reset Password";
+  const subtitle = isEmployeeInvite
+    ? "Set a password for your employee account"
+    : "Enter your new password";
+  const submitLabel = isEmployeeInvite ? "Create password" : "Reset Password";
+  const submittingLabel = isEmployeeInvite ? "Saving..." : "Resetting...";
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left Panel - Gradient Background */}
-      <div className="hidden lg:block relative bg-gradient-to-br from-[#31CDFF] to-blue-600">
-        <div className="absolute inset-0 pattern-dots pattern-blue-500 pattern-bg-transparent pattern-opacity-20 pattern-size-4" />
-        <div className="relative h-full flex flex-col justify-between p-12 text-white">
-          <Zap className="w-12 h-12" />
-          <div className="space-y-4">
-            <h2 className="text-4xl font-bold">BQI Tech Portal</h2>
-            <p className="text-lg opacity-90">
-              Secure account recovery process
-            </p>
-          </div>
-          <div className="flex gap-4 opacity-75">
-            <span className="text-sm">v2.4.0</span>
-            <span className="text-sm">•</span>
-            <span className="text-sm">Enterprise Security</span>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-[100dvh] grid lg:grid-cols-2">
+      <PortalBrandPanel
+        subtitle={
+          isEmployeeInvite
+            ? "Create a password to access your employee portal."
+            : "Choose a new password for your BQI HR account."
+        }
+        footerLabel="Secure Login"
+      />
 
-      {/* Right Panel - Reset Form or Invalid Token Message */}
-      <RightPanelWrapper>
+      <PortalAuthCard backHref={backHref} backLabel="Back to login">
         {isValidToken ? (
-          <>
-            <div className="text-center space-y-2 mb-8">
-              <motion.h1
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-3xl font-bold"
-              >
-                Reset Password
-              </motion.h1>
-              <p className="text-muted-foreground">Enter your new password</p>
-            </div>
+          <div className="space-y-7">
+            <motion.div {...fadeUp(0.05)} className="space-y-2 text-center">
+              <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.025em] text-[#1d1d1f] sm:text-[2rem]">
+                {title}
+              </h1>
+              <p className="text-[15px] leading-relaxed text-[#6e6e73]">
+                {subtitle}
+              </p>
+            </motion.div>
 
-            <motion.form
+            <style>{portalAuthAutofillCss}</style>
+
+            <form
               onSubmit={handleSubmit(onSubmit)}
-              className="space-y-6"
+              className="portal-auth-form space-y-4"
             >
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password">New Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    {...register("password")}
-                    className="h-12 focus:ring-2 focus:ring-[#31CDFF]"
-                  />
-                  {errors.password && (
-                    <p className="text-sm text-red-500">
-                      {(errors.password as FieldError).message}
-                    </p>
-                  )}
-                </div>
+              <motion.div {...fadeUp(0.1)} className="space-y-2">
+                <Label htmlFor="password" className={portalAuthLabelClass}>
+                  New Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
+                  {...register("password")}
+                  className={portalAuthInputClass}
+                />
+                {errors.password && (
+                  <p className="text-sm text-red-500">
+                    {(errors.password as FieldError).message}
+                  </p>
+                )}
+              </motion.div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    {...register("confirmPassword")}
-                    className="h-12 focus:ring-2 focus:ring-[#31CDFF]"
-                  />
-                  {errors.confirmPassword && (
-                    <p className="text-sm text-red-500">
-                      {(errors.confirmPassword as FieldError).message}
-                    </p>
-                  )}
-                </div>
+              <motion.div {...fadeUp(0.14)} className="space-y-2">
+                <Label
+                  htmlFor="confirmPassword"
+                  className={portalAuthLabelClass}
+                >
+                  Confirm Password
+                </Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
+                  {...register("confirmPassword")}
+                  className={portalAuthInputClass}
+                />
+                {errors.confirmPassword && (
+                  <p className="text-sm text-red-500">
+                    {(errors.confirmPassword as FieldError).message}
+                  </p>
+                )}
+              </motion.div>
 
+              <motion.div {...fadeUp(0.2)}>
                 <Button
                   type="submit"
-                  className="w-full h-12 text-base bg-gradient-to-r from-[#31CDFF] to-blue-500 hover:from-[#31CDFF]/90 hover:to-blue-500/90"
+                  className={portalAuthButtonClass}
+                  disabled={isSubmitting}
                 >
-                  Reset Password
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      {submittingLabel}
+                    </>
+                  ) : (
+                    submitLabel
+                  )}
                 </Button>
-              </div>
-            </motion.form>
-          </>
+              </motion.div>
+            </form>
+          </div>
         ) : (
-          <div className="text-center space-y-4">
-            <h1 className="text-2xl font-bold">Invalid Token</h1>
-            <p className="text-muted-foreground">
-              The password reset link is invalid or has expired
-            </p>
-            <Link
-              href="/forgot-password"
-              className="text-[#31CDFF] hover:underline"
-            >
-              Request new reset link
-            </Link>
+          <div className="space-y-4 text-center">
+            <motion.div {...fadeUp(0.05)} className="space-y-2">
+              <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.025em] text-[#1d1d1f] sm:text-[2rem]">
+                Invalid Token
+              </h1>
+              <p className="text-[15px] leading-relaxed text-[#6e6e73]">
+                The password reset link is invalid or has expired
+              </p>
+            </motion.div>
+            <motion.div {...fadeUp(0.12)}>
+              <Link href="/forgot-password" className={portalAuthLinkClass}>
+                Request new reset link
+              </Link>
+            </motion.div>
           </div>
         )}
-      </RightPanelWrapper>
+      </PortalAuthCard>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FailedStatusState } from "@/components/ui/failed-status-state";
+import { ChartSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
 import { adminApi } from "@/lib/api-backend";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
@@ -39,7 +40,22 @@ export default function SurveyAnalyticsPage() {
     })();
   }, [surveyId]);
 
-  if (loading) return <div className="p-6">Loading analytics...</div>;
+  if (loading) {
+    return (
+      <ProtectedRoute requireAdmin>
+        <AdminPageLayout title="Survey Analytics" showSearch={false}>
+          <div className="space-y-6 p-6">
+            <StatsSkeleton count={4} />
+            <ChartSkeleton />
+            <div className="grid gap-4 md:grid-cols-2">
+              <ChartSkeleton />
+              <ChartSkeleton />
+            </div>
+          </div>
+        </AdminPageLayout>
+      </ProtectedRoute>
+    );
+  }
   if (!data) return <FailedStatusState message="Failed to load analytics." className="p-6" />;
 
   const s = data.survey || {};

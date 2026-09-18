@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { formatAdminNotificationTime } from "@/lib/admin-notification-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import { toast } from "react-hot-toast";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { NotificationListSkeleton, Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -174,8 +177,9 @@ export default function NotificationsPage() {
   if (authLoading || isLoadingNotifications) {
     return (
       <AdminPageLayout title="Notifications" showSearch={false}>
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-32 w-32 border-4 border-primary border-t-transparent"></div>
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <NotificationListSkeleton rows={6} />
         </div>
       </AdminPageLayout>
     );
@@ -186,37 +190,40 @@ export default function NotificationsPage() {
   }
 
   return (
-    <AdminPageLayout title="Notifications" showSearch={false}>
+    <AdminPageLayout title="Notifications" showSearch={false} tourId="notifications" guideInBanner>
+      <TourPageHelper tourId="notifications" />
       <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Notifications
-              </h1>
-              <p className="text-muted-foreground mt-2">
-                {unreadCount 
-                  ? `You have ${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
-                  : 'All caught up!'
-                }
-              </p>
-            </div>
-
-            {/* Desktop Actions and Filters */}
-            <div className="hidden sm:flex items-center gap-3">
-              {unreadCount > 0 && (
+        <div className="mb-6">
+          <AdminPageWelcomeBanner tourId="notifications"
+            bannerKey="notifications"
+            subtitle={
+              unreadCount
+                ? `${unreadCount} unread notification${unreadCount === 1 ? "" : "s"}`
+                : "No unread notifications"
+            }
+            actions={
+              unreadCount > 0 ? (
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => markAllAsReadMutation.mutate()}
                   disabled={markAllAsReadMutation.isPending}
-                  className="flex items-center gap-2"
+                  className="gap-2 bg-white text-[#272055] hover:bg-white/90"
                 >
                   <Check className="h-4 w-4" />
                   Mark All Read
                 </Button>
-              )}
-
+              ) : null
+            }
+          />
+        </div>
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4">
+            {/* Desktop Actions and Filters */}
+            <div
+              className="hidden sm:flex items-center gap-3"
+              data-tour="notifications-filters"
+            >
               <Select value={statusFilter} onValueChange={(value: FilterType) => setStatusFilter(value)}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="Filter by status" />
@@ -361,6 +368,7 @@ export default function NotificationsPage() {
           )}
         </div>
 
+        <div data-tour="notifications-list">
         <AnimatePresence mode="popLayout">
           {filteredNotifications.length === 0 ? (
             <motion.div
@@ -470,6 +478,7 @@ export default function NotificationsPage() {
             </div>
           )}
         </AnimatePresence>
+        </div>
       </div>
     </AdminPageLayout>
   );

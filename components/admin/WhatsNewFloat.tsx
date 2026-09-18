@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  WHATS_NEW_FLOAT_ENABLED,
   WHATS_NEW_FLOAT_FEATURES,
   WHATS_NEW_STORAGE_KEY,
 } from "@/lib/admin-whats-new";
@@ -14,6 +15,7 @@ export function WhatsNewFloat() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    if (!WHATS_NEW_FLOAT_ENABLED) return;
     try {
       const dismissed = localStorage.getItem(WHATS_NEW_STORAGE_KEY);
       if (!dismissed) {
@@ -24,6 +26,8 @@ export function WhatsNewFloat() {
       setOpen(true);
     }
   }, []);
+
+  if (!WHATS_NEW_FLOAT_ENABLED) return null;
 
   const dismiss = () => {
     setOpen(false);
@@ -96,7 +100,7 @@ export function WhatsNewFloat() {
                     transition={{ delay: 0.15 }}
                     className="rounded-xl bg-white/10 p-3 backdrop-blur-sm"
                   >
-                    <p className="text-[10px] uppercase tracking-wide text-white/70">AI Score</p>
+                    <p className="text-[10px] uppercase tracking-wide text-white/70">BQI Intelligence</p>
                     <p className="mt-1 text-2xl font-bold">92<span className="text-sm font-medium text-white/70">/100</span></p>
                     <p className="mt-1 text-xs text-emerald-200">Strong Fit</p>
                   </motion.div>
@@ -149,7 +153,7 @@ export function WhatsNewFloat() {
                 </Button>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" asChild>
-                    <Link href="/admin/applications" onClick={dismiss}>
+                    <Link href="/admin/candidates" onClick={dismiss}>
                       Try it
                       <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Link>

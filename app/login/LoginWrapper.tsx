@@ -1,64 +1,38 @@
-"use client"
+"use client";
 
-import { ChevronLeft, Zap } from "lucide-react"
-import { LoginForm } from "@/components/LoginForm"
-import { useAuth } from "@/contexts/AuthContext"
-import { getLoginToastFromError } from "@/lib/auth-backend"
-import { toast } from "sonner"
-import Link from "next/link"
+import { LoginForm } from "@/components/LoginForm";
+import { PortalAuthCard } from "@/components/auth/PortalAuthCard";
+import { PortalBrandPanel } from "@/components/auth/PortalBrandPanel";
+import { useAuth } from "@/contexts/AuthContext";
+import { getLoginToastFromError } from "@/lib/auth-backend";
+import { toast } from "sonner";
 
 export default function LoginWrapper() {
-  const { login } = useAuth()
+  const { login } = useAuth();
 
   const handleLogin = async (email: string, password: string) => {
     try {
-      await login(email, password)
-    } catch (error: any) {
-      throw error
+      await login(email, password);
+    } catch (error: unknown) {
+      throw error;
     }
-  }
+  };
 
   const handleError = (error: unknown) => {
-    const { title, description } = getLoginToastFromError(error)
-    toast.error(title, { description })
-  }
+    const { title, description } = getLoginToastFromError(error);
+    toast.error(title, { description });
+  };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left Panel - Gradient Background */}
-      <div className="hidden lg:block relative bg-gradient-to-br from-[#31CDFF] to-blue-600">
-        <div className="absolute inset-0 pattern-dots pattern-blue-500 pattern-bg-transparent pattern-opacity-20 pattern-size-4" />
-        <div className="relative h-full flex flex-col justify-between p-12 text-white">
-          <Zap className="w-12 h-12" />
-          <div className="space-y-4">
-            <h2 className="text-4xl font-bold">BQI Tech Portal</h2>
-            <p className="text-lg opacity-90">
-              Empowering innovation through secure access
-            </p>
-          </div>
-          <div className="flex gap-4 opacity-75">
-            <span className="text-sm">v2.4.0</span>
-            <span className="text-sm">•</span>
-            <span className="text-sm">Secure Login</span>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-[100dvh] grid lg:grid-cols-2">
+      <PortalBrandPanel
+        subtitle="Sign in to view your applications, manage your profile, and access your BQI Tech account."
+        footerLabel="Secure Login"
+      />
 
-      {/* Right Panel - Login Form */}
-      <div className="flex items-center justify-center p-8 bg-background">
-        <div className="relative z-10 bg-background p-8 rounded-lg shadow-2xl w-full max-w-md">
-          <div className="mb-4">
-            <Link
-              href="/"
-              className="flex items-center text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-            >
-              <ChevronLeft className="h-4 w-4 mr-1" />
-              Back to Home
-            </Link>
-          </div>
-          <LoginForm onLogin={handleLogin} onError={handleError} />
-        </div>
-      </div>
+      <PortalAuthCard>
+        <LoginForm onLogin={handleLogin} onError={handleError} />
+      </PortalAuthCard>
     </div>
-  )
+  );
 }

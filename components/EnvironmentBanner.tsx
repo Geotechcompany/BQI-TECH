@@ -10,14 +10,19 @@ const DISMISS_STORAGE_PREFIX = "env-banner-dismissed:";
 const ENV_STYLES = {
   development: {
     icon: FlaskConical,
-    pill: "bg-sky-600/75 border-sky-400/30 text-white shadow-sky-900/20",
+    iconClass: "text-[#31CDFF]/90",
+    pill:
+      "border-[#31CDFF]/35 bg-[#272156]/55 text-white shadow-[0_8px_28px_-10px_rgba(39,33,86,0.65)] ring-1 ring-inset ring-white/15",
   },
   staging: {
     icon: Layers,
-    pill: "bg-amber-500/75 border-amber-300/30 text-white shadow-amber-900/20",
+    iconClass: "text-amber-200",
+    pill:
+      "border-amber-300/40 bg-amber-950/50 text-white shadow-[0_8px_28px_-10px_rgba(120,53,15,0.55)] ring-1 ring-inset ring-white/15",
   },
   production: {
     icon: Database,
+    iconClass: "opacity-90",
     pill: "",
   },
 } as const;
@@ -72,22 +77,25 @@ export function EnvironmentBanner() {
     >
       <div
         className={cn(
-          "pointer-events-auto flex max-w-xl items-center gap-2 rounded-full border px-4 py-2 shadow-lg backdrop-blur-md transition-all duration-300",
-          "animate-in fade-in slide-in-from-top-2",
+          "pointer-events-auto flex max-w-xl items-center gap-2 rounded-full border px-4 py-2.5 backdrop-blur-xl transition-[opacity,transform] duration-300 ease-out",
+          "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-reduce:animate-none motion-reduce:opacity-100",
           styles.pill
         )}
       >
-        <Icon className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-        <p className="text-center text-xs font-medium leading-snug sm:text-sm">
+        <Icon className={cn("h-4 w-4 shrink-0 opacity-95", styles.iconClass)} aria-hidden />
+        <p className="text-center text-xs font-medium leading-snug tracking-wide sm:text-sm">
           {data.label} environment
           <span className="hidden sm:inline">
             {" "}
             ·{" "}
-            <span className="font-semibold">{data.databaseName}</span>
+            <span className="font-semibold text-white">{data.databaseName}</span>
           </span>
-          <span className="sm:hidden font-semibold"> · {data.databaseName}</span>
+          <span className="sm:hidden font-semibold text-white">
+            {" "}
+            · {data.databaseName}
+          </span>
           {!data.databaseConnected && (
-            <span className="ml-2 rounded-full bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+            <span className="ml-2 rounded-full bg-black/25 px-2 py-0.5 text-[10px] uppercase tracking-wide ring-1 ring-inset ring-white/10">
               DB offline
             </span>
           )}
@@ -95,7 +103,7 @@ export function EnvironmentBanner() {
         <button
           type="button"
           onClick={handleDismiss}
-          className="ml-1 shrink-0 rounded-full p-1 text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+          className="ml-1 shrink-0 rounded-full p-1 text-white/80 transition-colors hover:bg-white/15 hover:text-white active:scale-[0.97]"
           aria-label="Dismiss environment notice for this session"
         >
           <X className="h-3.5 w-3.5" />

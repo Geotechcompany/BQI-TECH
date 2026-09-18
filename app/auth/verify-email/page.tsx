@@ -4,41 +4,43 @@ import { Suspense } from "react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { BACKEND_URL } from "@/lib/config";
 import { useSearchParams } from "next/navigation";
-import { motion } from "framer-motion";
-import { Loader2, CheckCircle2, XCircle, Zap } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
 import OtpInput from "react-otp-input";
+import { PortalAuthCard } from "@/components/auth/PortalAuthCard";
+import { PortalBrandPanel } from "@/components/auth/PortalBrandPanel";
+import {
+  criticallyDampedSpring,
+  portalAuthButtonClass,
+  portalAuthLinkClass,
+} from "@/components/auth/portal-auth-styles";
 import { Controller } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/auth-backend";
 import { resolveEmailVerified } from "@/lib/resolve-email-verified";
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.3 } },
-};
-
-const childVariants = {
-  hidden: { y: 20, opacity: 0 },
-  visible: { y: 0, opacity: 1 },
-};
+import { cn } from "@/lib/utils";
 
 const otpSchema = z.object({
   code: z.string().length(6, "Code must be 6 digits"),
 });
 
-const initialState = "idle";
+const otpInputClass = cn(
+  "!w-10 h-12 sm:!w-12 sm:h-14 text-center rounded-2xl",
+  "border border-black/[0.08] bg-[#F5F5F7]",
+  "text-lg sm:text-xl text-[#1d1d1f] caret-[#272156]",
+  "shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]",
+  "transition-[border-color,box-shadow,background-color] duration-200 ease-out",
+  "focus:outline-none focus:border-[#272156]/35 focus:bg-white",
+  "focus:ring-2 focus:ring-[#272156]/22",
+  "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+  "disabled:cursor-not-allowed disabled:opacity-55"
+);
 
 // Utility function to safely access localStorage
 const safeLocalStorage = {
@@ -65,10 +67,10 @@ export default function EmailVerificationPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex min-h-[100dvh] items-center justify-center bg-[#f7f7f9]">
           <div className="text-center">
-            <Loader2 className="mx-auto h-12 w-12 animate-spin text-blue-500" />
-            <p className="mt-4 text-lg text-muted-foreground">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#272156]" />
+            <p className="mt-4 text-[15px] text-[#6e6e73]">
               Loading verification page...
             </p>
           </div>
@@ -83,8 +85,22 @@ export default function EmailVerificationPage() {
 function EmailVerificationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const { updateEmailVerificationStatus, authLoading, user, isAuthenticated, isAdmin } =
     useAuth();
+
+  const fadeUp = (delay: number) =>
+    reduceMotion
+      ? {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          transition: { duration: 0.28, delay },
+        }
+      : {
+          initial: { opacity: 0, y: 14 },
+          animate: { opacity: 1, y: 0 },
+          transition: { ...criticallyDampedSpring, delay },
+        };
 
   // Robust email retrieval with multiple fallback mechanisms
   const getEmailFromSources = useCallback(() => {
@@ -470,10 +486,10 @@ function EmailVerificationContent() {
   // Prevent rendering if authentication is loading or no email
   if (authLoading || !email) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#f7f7f9]">
         <div className="text-center">
-          <Loader2 className="mx-auto h-12 w-12 animate-spin text-blue-500" />
-          <p className="mt-4 text-lg text-muted-foreground">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#272156]" />
+          <p className="mt-4 text-[15px] text-[#6e6e73]">
             {authLoading
               ? "Checking authentication status..."
               : "Redirecting..."}
@@ -539,127 +555,112 @@ function EmailVerificationContent() {
   };
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left Panel - Gradient Background (Same as Login) */}
-      <div className="hidden lg:block relative bg-gradient-to-br from-[#31CDFF] to-blue-600">
-        <div className="absolute inset-0 pattern-dots pattern-blue-500 pattern-bg-transparent pattern-opacity-20 pattern-size-4" />
-        <div className="relative h-full flex flex-col justify-between p-12 text-white">
-          <Zap className="w-12 h-12" />
-          <div className="space-y-4">
-            <h2 className="text-4xl font-bold">BQI Tech Portal</h2>
-            <p className="text-lg opacity-90">
-              Empowering innovation through secure access
-            </p>
-          </div>
-          <div className="flex gap-4 opacity-75">
-            <span className="text-sm">v2.4.0</span>
-            <span className="text-sm">•</span>
-            <span className="text-sm">Secure Verification</span>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-[100dvh] grid lg:grid-cols-2">
+      <PortalBrandPanel
+        subtitle="Confirm your email to unlock BQI HR applications and secure account access."
+        footerLabel="Secure Login"
+      />
 
-      {/* Right Panel - Adjusted for mobile */}
-      <div className="flex items-center justify-center p-8 bg-background sm:px-4">
-        <div className="relative z-10 bg-background p-8 rounded-lg shadow-2xl w-full max-w-[90%] sm:max-w-md">
-          <Card className="w-full">
-            <CardHeader className="text-center space-y-2">
-              <h1 className="text-3xl sm:text-2xl font-bold">
-                Verify Your Email
-              </h1>
-              <p className="text-muted-foreground text-sm sm:text-base">
-                Enter the 6-digit code sent to <br className="sm:hidden" />
+      <PortalAuthCard backHref="/login" backLabel="Back to login">
+        <div className="space-y-7">
+          <motion.div {...fadeUp(0.05)} className="space-y-2 text-center">
+            <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.025em] text-[#1d1d1f] sm:text-[2rem]">
+              Verify Your Email
+            </h1>
+            <p className="text-[15px] leading-relaxed text-[#6e6e73]">
+              Enter the 6-digit code sent to{" "}
+              <span className="font-medium text-[#1d1d1f]">
                 {email || "your email"}
-              </p>
-            </CardHeader>
+              </span>
+            </p>
+          </motion.div>
 
-            <CardContent>
-              <motion.form
-                onSubmit={handleSubmit(onSubmit)}
-                variants={childVariants}
-                className="space-y-6"
-              >
-                <div className="space-y-2">
-                  <Controller
-                    name="code"
-                    control={control}
-                    render={({ field: { ref, ...field } }) => (
-                      <OtpInput
-                        {...field}
-                        value={otp}
-                        onChange={(value) => {
-                          field.onChange(value);
-                          handleInputChange(value);
-                        }}
-                        numInputs={6}
-                        renderInput={(props) => (
-                          <input
-                            {...props}
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            className="!w-10 h-12 sm:!w-12 sm:h-14 text-center border border-gray-300 rounded-lg
-                                     bg-white text-gray-900 shadow-sm
-                                     focus:ring-2 focus:ring-[#31CDFF] focus:border-[#31CDFF] text-lg sm:text-xl
-                                     [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            disabled={status === "loading"}
-                          />
-                        )}
-                        containerStyle="flex justify-center gap-2 sm:gap-4"
-                        inputType="tel"
-                        shouldAutoFocus
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="portal-auth-form space-y-4"
+          >
+            <motion.div {...fadeUp(0.1)} className="space-y-2">
+              <Controller
+                name="code"
+                control={control}
+                render={({ field: { ref, ...field } }) => (
+                  <OtpInput
+                    {...field}
+                    value={otp}
+                    onChange={(value) => {
+                      field.onChange(value);
+                      handleInputChange(value);
+                    }}
+                    numInputs={6}
+                    renderInput={(props) => (
+                      <input
+                        {...props}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        className={otpInputClass}
+                        disabled={status === "loading"}
                       />
                     )}
+                    containerStyle="flex justify-center gap-2 sm:gap-3"
+                    inputType="tel"
+                    shouldAutoFocus
                   />
-                  {errors.code && (
-                    <p className="text-sm text-destructive text-center">
-                      {errors.code.message}
-                    </p>
-                  )}
-                </div>
+                )}
+              />
+              {errors.code && (
+                <p className="text-center text-sm text-red-500">
+                  {errors.code.message}
+                </p>
+              )}
+            </motion.div>
 
-                <Button
-                  type="submit"
-                  className="w-full h-12 text-sm sm:text-base"
-                  disabled={status === "loading" || otp.length !== 6}
-                >
-                  {status === "loading" ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : status === "success" ? (
-                    <>
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Verified
-                    </>
-                  ) : status === "error" ? (
-                    <>
-                      <XCircle className="mr-2 h-4 w-4" />
-                      Try Again
-                    </>
-                  ) : (
-                    "Verify Email"
-                  )}
-                </Button>
-              </motion.form>
-            </CardContent>
+            <motion.div {...fadeUp(0.16)}>
+              <Button
+                type="submit"
+                className={portalAuthButtonClass}
+                disabled={status === "loading" || otp.length !== 6}
+              >
+                {status === "loading" ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : status === "success" ? (
+                  <>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Verified
+                  </>
+                ) : status === "error" ? (
+                  <>
+                    <XCircle className="mr-2 h-4 w-4" />
+                    Try Again
+                  </>
+                ) : (
+                  "Verify Email"
+                )}
+              </Button>
+            </motion.div>
+          </form>
 
-            <CardFooter className="flex justify-center">
-              <p className="text-sm text-muted-foreground text-center">
-                Didn't receive the code?{" "}
-                <Button
-                  variant="link"
-                  className="h-auto p-0 text-blue-600 whitespace-nowrap"
-                  onClick={handleResendCode}
-                  disabled={status === "loading"}
-                >
-                  {status === "loading" ? "Sending..." : "Resend code"}
-                </Button>
-              </p>
-            </CardFooter>
-          </Card>
+          <motion.div
+            {...fadeUp(0.22)}
+            className="text-center text-sm text-[#6e6e73]"
+          >
+            Didn&apos;t receive the code?{" "}
+            <button
+              type="button"
+              className={cn(
+                portalAuthLinkClass,
+                "disabled:pointer-events-none disabled:opacity-50"
+              )}
+              onClick={handleResendCode}
+              disabled={status === "loading"}
+            >
+              {status === "loading" ? "Sending..." : "Resend code"}
+            </button>
+          </motion.div>
         </div>
-      </div>
+      </PortalAuthCard>
     </div>
   );
 }

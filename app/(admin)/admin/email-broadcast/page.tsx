@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import {
   Card,
   CardContent,
@@ -14,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Mail,
   AlertCircle,
   CheckCircle,
   Loader2,
@@ -222,42 +223,32 @@ export default function EmailBroadcastPage() {
   };
 
   return (
-    <AdminPageLayout title="Email Broadcast" showSearch={false}>
+    <AdminPageLayout title="Email Broadcast" showSearch={false} tourId="email-broadcast" guideInBanner>
+      <TourPageHelper tourId="email-broadcast" />
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 mb-6">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Mail className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <CardTitle className="text-2xl text-blue-900">
-                    Email Broadcast
-                  </CardTitle>
-                  <CardDescription className="text-blue-700">
-                    Send emails to all users or specific recipients
-                  </CardDescription>
-                </div>
-              </div>
+        <div className="mb-6">
+          <AdminPageWelcomeBanner tourId="email-broadcast"
+            bannerKey="email-broadcast"
+            actions={
               <Button
-                variant="outline"
+                variant="secondary"
                 onClick={() => setShowEmailHistory(true)}
-                className="flex items-center gap-2"
+                className="gap-2 bg-white text-[#272055] hover:bg-white/90"
+                data-tour="email-broadcast-history"
               >
                 <History className="h-4 w-4" />
                 View History
               </Button>
-            </div>
-          </CardHeader>
-        </Card>
+            }
+          />
+        </div>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Left Column - Main Content */}
           <div className="xl:col-span-2 space-y-6">
             {/* Recipient Selection */}
+            <div data-tour="email-broadcast-recipients">
             <RecipientSelection
               mode={mode}
               setMode={setMode}
@@ -270,8 +261,10 @@ export default function EmailBroadcastPage() {
               selectedBroadcastList={selectedBroadcastList}
               setSelectedBroadcastList={setSelectedBroadcastList}
             />
+            </div>
 
             {/* Email Content */}
+            <div data-tour="email-broadcast-content">
             <EmailContent
               subject={subject}
               setSubject={setSubject}
@@ -289,6 +282,7 @@ export default function EmailBroadcastPage() {
               onAIGenerate={() => setShowAIModal(true)}
               aiGenerating={aiGenerating}
             />
+            </div>
 
             {/* Results */}
             {result && (
@@ -485,7 +479,7 @@ export default function EmailBroadcastPage() {
                       setBody(previewContent.body);
                       setShowPreview(false);
                     }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   >
                     Use This Email
                   </Button>
@@ -555,7 +549,7 @@ export default function EmailBroadcastPage() {
                       setShowTemplatePreview(false);
                       toast.success("Template applied to email");
                     }}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
                   >
                     Use This Template
                   </Button>

@@ -17,6 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 
 interface JobWithApplicationStatus extends JobPosting {
   hasApplied: boolean;
@@ -209,6 +210,7 @@ export default function JobListingsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-100/20 dark:from-gray-900 dark:via-blue-950/30 dark:to-indigo-950/20 relative overflow-hidden">
+      <TourPageHelper tourId="user-jobs" />
       {/* Background Decorations - Reduced for mobile */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
@@ -235,6 +237,7 @@ export default function JobListingsPage() {
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
+          data-tour="user-jobs-header"
           className="text-center mb-6 sm:mb-8 lg:mb-12"
         >
           <div className="inline-flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
@@ -261,6 +264,7 @@ export default function JobListingsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
+          data-tour="user-jobs-search"
           className="max-w-md mx-auto mb-6 sm:mb-8 lg:mb-12"
         >
           <div className="relative">
@@ -281,6 +285,7 @@ export default function JobListingsPage() {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
+              data-tour="user-jobs-list"
               className="text-center py-8 sm:py-12 lg:py-16"
             >
               <div className="relative mb-4 sm:mb-6">
@@ -315,7 +320,10 @@ export default function JobListingsPage() {
               )}
             </motion.div>
           ) : (
-            <div className="grid gap-4 sm:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            <div
+              className="grid gap-4 sm:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+              data-tour="user-jobs-list"
+            >
               {filteredJobs.map((job, index) => (
                 <motion.div
                   key={job.id}

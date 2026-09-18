@@ -242,7 +242,7 @@ export function EditApplicationModal({
               </Button>
               <Button 
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-700 shadow-sm"
+                className="shadow-sm"
               >
                 Save Changes
               </Button>

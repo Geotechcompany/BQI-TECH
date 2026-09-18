@@ -57,8 +57,6 @@ const AnimatedText = ({ text }: { text: string }) => {
 
 export function Hero() {
   const [currentImage, setCurrentImage] = useState(0);
-  const [nextImage, setNextImage] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [imagesLoaded, setImagesLoaded] = useState(false);
 
   // Preload all images
@@ -89,45 +87,34 @@ export function Hero() {
     if (!imagesLoaded) return;
 
     const interval = setInterval(() => {
-      setNextImage((currentImage + 1) % heroContent.images.length);
-      setIsTransitioning(true);
-      
-      setTimeout(() => {
-        setCurrentImage(nextImage);
-        setIsTransitioning(false);
-      }, 1000);
+      setCurrentImage((prev) => (prev + 1) % heroContent.images.length);
     }, 8000);
 
     return () => clearInterval(interval);
-  }, [currentImage, nextImage, imagesLoaded]);
+  }, [imagesLoaded]);
 
   return (
     <section className="relative h-screen w-full overflow-hidden -mt-[80px]">
       {/* Image Background with Cross-fade Transitions */}
       <AnimatePresence mode="wait">
-        {heroContent.images.map((image, index) => (
-          <motion.div
-            key={index}
-            initial={{ opacity: 0 }}
-            animate={{ 
-              opacity: index === currentImage ? 1 : 0,
-              transition: { duration: 1.5, ease: "easeInOut" }
-            }}
-            exit={{ opacity: 0 }}
-            className={`absolute inset-0 ${index === currentImage ? 'z-10' : 'z-0'}`}
-          >
-            <div className="absolute inset-0 w-full h-full overflow-hidden">
-              <img
-                src={image.src}
-                alt={`Hero background image ${index + 1}`}
-                className="object-cover scale-105 transition-transform duration-[8000ms] ease-out w-full h-full"
-                style={{ position: 'absolute', inset: 0 }}
-                loading={index === 0 ? "eager" : "lazy"}
-              />
-            </div>
-            <div className={`absolute inset-0 ${image.overlay} transition-opacity duration-1000`} />
-          </motion.div>
-        ))}
+        <motion.div
+          key={currentImage}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { duration: 1.5, ease: "easeInOut" } }}
+          exit={{ opacity: 0, transition: { duration: 1.5, ease: "easeInOut" } }}
+          className="absolute inset-0 z-10"
+        >
+          <div className="absolute inset-0 w-full h-full overflow-hidden">
+            <img
+              src={heroContent.images[currentImage].src}
+              alt={`Hero background image ${currentImage + 1}`}
+              className="object-cover scale-105 transition-transform duration-8000 ease-out w-full h-full"
+              style={{ position: 'absolute', inset: 0 }}
+              loading={currentImage === 0 ? "eager" : "lazy"}
+            />
+          </div>
+          <div className={`absolute inset-0 ${heroContent.images[currentImage].overlay} transition-opacity duration-1000`} />
+        </motion.div>
       </AnimatePresence>
 
       {/* Loading fallback for first image */}

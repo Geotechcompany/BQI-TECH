@@ -31,7 +31,7 @@ export default function ClientHomePage({ userId }: ClientHomePageProps) {
       <Features />
       {/* <RecentProjects /> */}
       {/* <BlogPreview /> */}
-      <CallToAction /> 
+      <CallToAction />
     </motion.div>
   );
 }

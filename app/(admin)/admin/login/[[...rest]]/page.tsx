@@ -1,7 +1,11 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { getLoginToastFromError } from "@/lib/auth-backend";
+import {
+  fetchAdminLoginDirectory,
+  getLoginToastFromError,
+  type AdminLoginDirectoryAccount,
+} from "@/lib/auth-backend";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Loader2,
@@ -11,19 +15,33 @@ import {
   EyeOff,
   ArrowRight,
   ShieldCheck,
-  BarChart3,
-  Users2,
   Activity,
   Database,
+  ChevronsUpDown,
 } from "lucide-react";
 import { AdminLoginBrand } from "@/components/admin/AdminLoginBrand";
+import { PremiumDashboardLoader } from "@/components/admin/PremiumDashboardLoader";
+import { PortalAudienceSwitcher } from "@/components/auth/PortalAudienceSwitcher";
+import { PortalBrandPanel } from "@/components/auth/PortalBrandPanel";
+import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { markPostLoginLoader } from "@/lib/post-login-loader";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { flushSync } from "react-dom";
 
 const BRAND_PANEL_BACKGROUND =
   "linear-gradient(160deg, hsl(222 47% 11%) 0%, hsl(222 84% 6%) 100%)";
@@ -31,6 +49,22 @@ const BRAND_PANEL_GLOW =
   "radial-gradient(110% 90% at 0% 0%, hsl(var(--primary) / 0.55), transparent 55%), radial-gradient(95% 95% at 100% 100%, hsl(217 91% 60% / 0.22), transparent 55%)";
 const FORM_MESH =
   "radial-gradient(60% 45% at 50% 0%, hsl(var(--primary) / 0.07), transparent 70%), radial-gradient(45% 40% at 100% 100%, hsl(var(--primary) / 0.05), transparent 70%)";
+
+const OTHER_ACCOUNT_VALUE = "__other__";
+
+type LoginFormValues = {
+  email: string;
+  password: string;
+};
+
+function accountInitials(name: string, email: string): string {
+  const source = (name || email || "?").trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return source.slice(0, 2).toUpperCase();
+}
 
 const TechLoadingScreen = ({ message = "Loading..." }) => {
   const reduce = useReducedMotion();
@@ -210,12 +244,26 @@ export default function AdminLoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { isSubmitting },
-  } = useForm();
+  } = useForm<LoginFormValues>({
+    defaultValues: { email: "", password: "" },
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showPostLoginLoader, setShowPostLoginLoader] = useState(false);
+  const [directoryLoading, setDirectoryLoading] = useState(true);
+  const [directoryEnabled, setDirectoryEnabled] = useState(false);
+  const [adminAccounts, setAdminAccounts] = useState<
+    AdminLoginDirectoryAccount[]
+  >([]);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [useManualEmail, setUseManualEmail] = useState(false);
   const reduce = useReducedMotion();
+  const emailValue = watch("email");
+  const emailField = register("email", { required: true });
 
   useEffect(() => {
     console.log("Auth State Debug:", {
@@ -229,53 +277,99 @@ export default function AdminLoginPage() {
   }, [authLoading, isAuthenticated, isAdmin, user, hasCheckedAuth]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadDirectory = async () => {
+      setDirectoryLoading(true);
+      const directory = await fetchAdminLoginDirectory();
+      if (cancelled) return;
+
+      setDirectoryEnabled(directory.enabled);
+      setAdminAccounts(directory.accounts);
+      setDirectoryLoading(false);
+
+      if (directory.enabled && directory.accounts.length === 1) {
+        const only = directory.accounts[0];
+        setSelectedAccountId(only.id);
+        setUseManualEmail(false);
+        setValue("email", only.email, { shouldValidate: true });
+      }
+    };
+
+    void loadDirectory();
+    return () => {
+      cancelled = true;
+    };
+  }, [setValue]);
+
+  const goToDashboardWithLoader = () => {
+    // Paint the premium loader before navigating — hard href skips React paint.
+    flushSync(() => {
+      markPostLoginLoader();
+      setShowPostLoginLoader(true);
+    });
+    router.replace("/admin/overview");
+  };
+
+  useEffect(() => {
     if (!authLoading && !hasCheckedAuth) {
       setHasCheckedAuth(true);
 
       if (isAuthenticated && isAdmin) {
-        console.log("Already authenticated admin user, redirecting to overview");
         toast.success("Already logged in!", {
           description: "Redirecting to dashboard...",
         });
-
-        setTimeout(() => {
-          window.location.href = "/admin/overview";
-        }, 1000);
+        goToDashboardWithLoader();
       }
     }
   }, [authLoading, isAuthenticated, isAdmin, hasCheckedAuth]);
 
-  const onSubmit = async (data) => {
+  const onAccountSelect = (value: string) => {
+    if (value === OTHER_ACCOUNT_VALUE) {
+      setSelectedAccountId(OTHER_ACCOUNT_VALUE);
+      setUseManualEmail(true);
+      setValue("email", "", { shouldValidate: false });
+      return;
+    }
+
+    const account = adminAccounts.find((entry) => entry.id === value);
+    if (!account) return;
+
+    setSelectedAccountId(account.id);
+    setUseManualEmail(false);
+    setValue("email", account.email, { shouldValidate: true });
+  };
+
+  const onSubmit = async (formValues: LoginFormValues) => {
+    const email = formValues.email.trim();
+    if (!email) {
+      toast.error("Select an account", {
+        description: useManualEmail
+          ? "Enter the admin email address to continue."
+          : "Choose an admin account from the list.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      console.log("Attempting login...");
-      await login(data.email, data.password);
-
-      console.log("Login successful, redirecting...");
+      await login(email, formValues.password);
 
       toast.success("Welcome back!", {
         description: "Redirecting to dashboard...",
       });
 
-      setTimeout(() => {
-        console.log("Performing post-login redirect...");
-        window.location.href = "/admin/overview";
-      }, 500);
+      goToDashboardWithLoader();
     } catch (error) {
       console.error("Login error:", error);
       const { title, description } = getLoginToastFromError(error);
       toast.error(title, { description });
-    } finally {
       setIsLoading(false);
     }
   };
 
-  if (authLoading) {
-    return <TechLoadingScreen message="Initializing System..." />;
-  }
-
-  if (isAuthenticated && isAdmin) {
-    return <TechLoadingScreen message="Already logged in! Redirecting..." />;
+  if (showPostLoginLoader || authLoading || (isAuthenticated && isAdmin)) {
+    return <PremiumDashboardLoader />;
   }
 
   if (isAuthenticated && !isAdmin) {
@@ -304,68 +398,18 @@ export default function AdminLoginPage() {
   }
 
   const isBusy = isLoading || isSubmitting;
+  const showAccountPicker = directoryEnabled && !directoryLoading;
+  const selectedAccount = adminAccounts.find(
+    (account) => account.id === selectedAccountId
+  );
+  const showEmailTextField = !showAccountPicker || useManualEmail;
 
   return (
     <div className="grid min-h-[100dvh] lg:grid-cols-[1.05fr_1fr]">
-      {/* Brand panel - desktop only */}
-      <div className="relative hidden overflow-hidden bg-[hsl(222_84%_6%)] p-12 text-white lg:flex lg:flex-col xl:p-16">
-        <img
-          src="/images/admin-login-cover.png"
-          alt="Modern BQI workspace with desk, monitor, and wall art"
-          loading="eager"
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/40" />
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(90% 80% at 0% 0%, hsl(var(--primary) / 0.35), transparent 60%)",
-          }}
-        />
+      <PortalBrandPanel variant="admin" />
 
-        <motion.div
-          initial={reduce ? false : { opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 flex h-full flex-col justify-between gap-12"
-        >
-          <AdminLoginBrand
-            variant="dark"
-            size="lg"
-            showBadge={false}
-            showCard={false}
-          />
-
-          <div className="space-y-5">
-            <h1 className="max-w-md text-3xl font-semibold leading-tight tracking-tight xl:text-4xl">
-              Your organization, under one secure console.
-            </h1>
-            <p className="max-w-md text-base leading-relaxed text-white/70">
-              Sign in to manage teams, hiring, and operations from one admin
-              workspace.
-            </p>
-          </div>
-
-          <ul className="space-y-4">
-            {[
-              { icon: ShieldCheck, text: "Role-based, secure admin access" },
-              { icon: BarChart3, text: "Live hiring and team insights" },
-              { icon: Users2, text: "Built for the whole BQI organization" },
-            ].map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 ring-1 ring-inset ring-white/15">
-                  <Icon className="h-4 w-4 text-white" />
-                </span>
-                <span className="text-sm text-white/80">{text}</span>
-              </li>
-            ))}
-          </ul>
-        </motion.div>
-      </div>
-
-      {/* Form panel */}
-      <div className="relative flex items-center justify-center overflow-y-auto bg-background px-6 py-10 sm:px-10">
+      {/* Form panel — min-h matches PortalAuthCard so the card centers in the viewport */}
+      <div className="relative flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-background px-6 py-10 sm:px-10">
         <div
           className="pointer-events-none absolute inset-0"
           style={{ background: FORM_MESH }}
@@ -375,13 +419,14 @@ export default function AdminLoginPage() {
           initial={reduce ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="relative z-10 w-full max-w-md"
+          className="relative z-10 my-auto w-full max-w-md"
         >
           <div className="rounded-3xl border border-border/60 bg-card/80 p-8 shadow-[0_24px_70px_-30px_hsl(222_47%_30%/0.35)] backdrop-blur-sm sm:p-10">
             <div className="mb-8 flex flex-col gap-4">
               <div className="lg:hidden">
                 <AdminLoginBrand size="md" showBadge={false} showCard={false} />
               </div>
+              <PortalAudienceSwitcher active="admin" />
               <div className="space-y-1.5">
                 <h2 className="text-2xl font-semibold tracking-tight text-foreground">
                   Admin login
@@ -406,18 +451,134 @@ export default function AdminLoginPage() {
             `}</style>
             <form onSubmit={handleSubmit(onSubmit)} className="auth-form space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
-                <div className="relative">
-                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="email"
-                    type="email"
-                    {...register("email", { required: true })}
-                    placeholder="you@bqitech.com"
-                    autoComplete="email"
-                    className="h-12 rounded-xl border-border bg-background pl-11 text-foreground placeholder:text-muted-foreground"
+                <Label htmlFor={showEmailTextField ? "email" : "admin-account"}>
+                  {showAccountPicker ? "Admin account" : "Email address"}
+                </Label>
+
+                {directoryLoading ? (
+                  <div className="flex h-12 items-center gap-2 rounded-xl border border-border bg-background px-3.5 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading admin accounts…
+                  </div>
+                ) : null}
+
+                {showAccountPicker ? (
+                  <Select
+                    value={selectedAccountId || undefined}
+                    onValueChange={onAccountSelect}
+                    disabled={isBusy}
+                  >
+                    <SelectTrigger
+                      id="admin-account"
+                      className="h-12 rounded-xl border-border bg-background px-3 text-left text-foreground [&>span]:line-clamp-none [&>span]:flex [&>span]:w-full [&>span]:items-center"
+                    >
+                      <SelectValue placeholder="Select an admin account">
+                        {selectedAccount ? (
+                          <span className="flex min-w-0 items-center gap-3">
+                            <Avatar className="h-8 w-8 shrink-0">
+                              {selectedAccount.avatarUrl ? (
+                                <AvatarImage
+                                  src={selectedAccount.avatarUrl}
+                                  alt=""
+                                />
+                              ) : null}
+                              <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
+                                {accountInitials(
+                                  selectedAccount.name,
+                                  selectedAccount.email
+                                )}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-foreground">
+                                {selectedAccount.name}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {selectedAccount.email}
+                              </span>
+                            </span>
+                          </span>
+                        ) : useManualEmail ? (
+                          <span className="flex items-center gap-2 text-sm text-foreground">
+                            <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
+                            Other email…
+                          </span>
+                        ) : null}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      {adminAccounts.length === 0 ? (
+                        <div className="px-3 py-4 text-sm text-muted-foreground">
+                          No admin accounts found in this environment.
+                        </div>
+                      ) : (
+                        adminAccounts.map((account) => (
+                          <SelectItem
+                            key={account.id}
+                            value={account.id}
+                            className="rounded-lg py-2.5"
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              <Avatar className="h-8 w-8 shrink-0">
+                                {account.avatarUrl ? (
+                                  <AvatarImage src={account.avatarUrl} alt="" />
+                                ) : null}
+                                <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
+                                  {accountInitials(account.name, account.email)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-medium">
+                                  {account.name}
+                                </span>
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {account.email}
+                                </span>
+                              </span>
+                            </span>
+                          </SelectItem>
+                        ))
+                      )}
+                      <SelectSeparator />
+                      <SelectItem
+                        value={OTHER_ACCOUNT_VALUE}
+                        className="rounded-lg py-2.5"
+                      >
+                        Other email…
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : null}
+
+                {showEmailTextField && !directoryLoading ? (
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      name={emailField.name}
+                      ref={emailField.ref}
+                      onBlur={emailField.onBlur}
+                      value={emailValue}
+                      onChange={(event) =>
+                        setValue("email", event.target.value, {
+                          shouldValidate: true,
+                        })
+                      }
+                      placeholder="you@bqitech.com"
+                      autoComplete="email"
+                      className="h-12 rounded-xl border-border bg-background pl-11 text-foreground placeholder:text-muted-foreground"
+                    />
+                  </div>
+                ) : (
+                  <input
+                    type="hidden"
+                    name={emailField.name}
+                    ref={emailField.ref}
+                    value={emailValue}
+                    readOnly
                   />
-                </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -470,6 +631,9 @@ export default function AdminLoginPage() {
           <p className="mt-6 text-center text-xs text-muted-foreground">
             Protected admin access for BQI staff only.
           </p>
+          <div className="mx-auto mt-4 max-w-xs">
+            <InstallPwaButton tone="brand" />
+          </div>
         </motion.div>
       </div>
     </div>

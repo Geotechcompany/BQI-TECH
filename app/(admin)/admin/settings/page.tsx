@@ -2,6 +2,8 @@
 
 import { motion } from "framer-motion";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import {
   Layout,
   Bell,
@@ -16,11 +18,18 @@ import {
   AlertCircle,
   Palette,
   Bot,
+  Sparkles,
   Plus,
   Trash2,
   Star,
+  Plug,
+  ChevronDown,
+  HardDrive,
+  ScrollText,
+  Users,
   type LucideIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,11 +60,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAiStatus } from "@/contexts/AiStatusContext";
+import { useBqiIntelligence } from "@/contexts/BqiIntelligenceContext";
 import { adminApi, backendApi } from "@/lib/api-backend";
+import { canAccessAdminPath } from "@/lib/admin-permissions";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { FormSkeleton } from "@/components/ui/skeleton";
 import { authService } from "@/lib/auth-backend";
@@ -63,6 +74,20 @@ import { useTheme } from "next-themes";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useAdminTheme, type AdminTheme } from "@/contexts/AdminThemeContext";
 import { cn } from "@/lib/utils";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  BQI_INTELLIGENCE_FEATURES,
+  DEFAULT_BQI_INTELLIGENCE,
+  normalizeBqiIntelligence,
+  type BqiIntelligenceSettings,
+} from "@/lib/bqi-intelligence";
+import { MicrosoftIntegrationCard } from "@/components/admin/settings/MicrosoftIntegrationCard";
+import { DocuSignIntegrationCard } from "@/components/admin/settings/DocuSignIntegrationCard";
+import { LinearIntegrationCard } from "@/components/admin/settings/LinearIntegrationCard";
 
 interface AdminSettings {
   emailNotifications: boolean;
@@ -100,7 +125,9 @@ type SettingsSection =
   | "security"
   | "contact"
   | "email"
+  | "integrations"
   | "ai"
+  | "intelligence"
   | "system";
 
 const NAV_ITEMS: {
@@ -140,10 +167,22 @@ const NAV_ITEMS: {
     icon: Mail,
   },
   {
+    id: "integrations",
+    label: "Integrations",
+    description: "Microsoft, DocuSign & more",
+    icon: Plug,
+  },
+  {
     id: "ai",
     label: "AI providers",
     description: "Models & API keys",
     icon: Bot,
+  },
+  {
+    id: "intelligence",
+    label: "BQI Intelligence",
+    description: "Feature toggles",
+    icon: Sparkles,
   },
   {
     id: "system",
@@ -180,11 +219,13 @@ function SettingsToggleRow({
   description,
   checked,
   onCheckedChange,
+  disabled,
 }: {
   label: string;
   description: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-muted/30 px-4 py-3.5 transition-colors hover:bg-muted/50">
@@ -192,7 +233,11 @@ function SettingsToggleRow({
         <p className="text-sm font-medium leading-none">{label}</p>
         <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+      />
     </div>
   );
 }
@@ -339,12 +384,60 @@ function SettingsPageContent() {
   const [settings, setSettings] = useState<AdminSettings>(defaultSettings);
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
 
-  useEffect(() => {
-    const section = searchParams?.get("section");
-    if (section && NAV_ITEMS.some((item) => item.id === section)) {
-      setActiveSection(section as SettingsSection);
+  const relatedSettingsLinks = useMemo(() => {
+    const links: {
+      href: string;
+      label: string;
+      description: string;
+      icon: LucideIcon;
+    }[] = [];
+    if (
+      canAccessAdminPath(
+        "/admin/user-management",
+        user?.role,
+        user?.adminModules
+      )
+    ) {
+      links.push({
+        href: "/admin/user-management",
+        label: "User Management",
+        description: "Invite admins and manage roles",
+        icon: Users,
+      });
     }
-  }, [searchParams]);
+    if (
+      canAccessAdminPath(
+        "/admin/email-broadcast",
+        user?.role,
+        user?.adminModules
+      )
+    ) {
+      links.push({
+        href: "/admin/email-broadcast",
+        label: "Email Broadcast",
+        description: "Send announcements to recipients",
+        icon: Mail,
+      });
+    }
+    if (canAccessAdminPath("/admin/audit-logs", user?.role, user?.adminModules)) {
+      links.push({
+        href: "/admin/audit-logs",
+        label: "Admin Activity",
+        description: "Review admin actions and audit history",
+        icon: ScrollText,
+      });
+    }
+    if (canAccessAdminPath("/admin/backup", user?.role, user?.adminModules)) {
+      links.push({
+        href: "/admin/backup",
+        label: "Backup",
+        description: "Schedules, runs, and off-site exports",
+        icon: HardDrive,
+      });
+    }
+    return links;
+  }, [user?.role, user?.adminModules]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncingDatabases, setIsSyncingDatabases] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -374,10 +467,26 @@ function SettingsPageContent() {
   const [testingAiProviderId, setTestingAiProviderId] = useState<string | null>(
     null
   );
+  const [expandedAiProviderIds, setExpandedAiProviderIds] = useState<
+    Set<string>
+  >(() => new Set());
   const { setTheme } = useTheme();
   const { updateTheme, updateSettings } = useSettings();
   const { setTheme: setAdminTheme } = useAdminTheme();
   const { refresh: refreshAiStatus } = useAiStatus();
+  const {
+    setFeatures: setBqiIntelligenceFeatures,
+    refresh: refreshBqiIntelligence,
+  } = useBqiIntelligence();
+  const [bqiIntelligence, setBqiIntelligence] =
+    useState<BqiIntelligenceSettings>(DEFAULT_BQI_INTELLIGENCE);
+  const [isSavingIntelligence, setIsSavingIntelligence] = useState(false);
+  const [microsoftOAuthNotice, setMicrosoftOAuthNotice] = useState<
+    "connected" | "error" | null
+  >(null);
+  const [microsoftOAuthError, setMicrosoftOAuthError] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     loadSettings();
@@ -386,6 +495,20 @@ function SettingsPageContent() {
     loadEmailTransportSettings();
     loadAiProviderSettings();
   }, []);
+
+  useEffect(() => {
+    const section = searchParams?.get("section");
+    if (section && NAV_ITEMS.some((item) => item.id === section)) {
+      setActiveSection(section as SettingsSection);
+    }
+    const microsoft = searchParams?.get("microsoft");
+    if (microsoft === "connected") {
+      setMicrosoftOAuthNotice("connected");
+    } else if (microsoft === "error") {
+      setMicrosoftOAuthNotice("error");
+      setMicrosoftOAuthError(searchParams?.get("microsoft_error"));
+    }
+  }, [searchParams]);
 
   const loadSettings = async () => {
     try {
@@ -401,6 +524,9 @@ function SettingsPageContent() {
             ...(payload?.contactProtection ?? {}),
           },
         });
+        setBqiIntelligence(
+          normalizeBqiIntelligence(payload?.bqiIntelligence)
+        );
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -641,6 +767,7 @@ function SettingsPageContent() {
       }
       return next;
     });
+    setExpandedAiProviderIds((current) => new Set(current).add(created.id));
   };
 
   const handleRemoveAiProvider = (id: string) => {
@@ -649,6 +776,21 @@ function SettingsPageContent() {
       if (aiActiveProviderId === id) {
         setAiActiveProviderId(next[0]?.id ?? "");
       }
+      return next;
+    });
+    setExpandedAiProviderIds((current) => {
+      if (!current.has(id)) return current;
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleAiProviderExpanded = (id: string, open: boolean) => {
+    setExpandedAiProviderIds((current) => {
+      const next = new Set(current);
+      if (open) next.add(id);
+      else next.delete(id);
       return next;
     });
   };
@@ -730,6 +872,27 @@ function SettingsPageContent() {
       toast.error(error?.message || "Provider test failed");
     } finally {
       setTestingAiProviderId(null);
+    }
+  };
+
+  const handleBqiIntelligenceToggle = async (
+    key: keyof BqiIntelligenceSettings,
+    checked: boolean
+  ) => {
+    const previous = bqiIntelligence;
+    const next = { ...previous, [key]: checked };
+    setBqiIntelligence(next);
+    setBqiIntelligenceFeatures(next);
+    setIsSavingIntelligence(true);
+    try {
+      await adminApi.updateSettings({ bqiIntelligence: next });
+      await refreshBqiIntelligence();
+    } catch (error: any) {
+      setBqiIntelligence(previous);
+      setBqiIntelligenceFeatures(previous);
+      toast.error(error?.message || "Failed to update BQI Intelligence");
+    } finally {
+      setIsSavingIntelligence(false);
     }
   };
 
@@ -957,7 +1120,7 @@ function SettingsPageContent() {
 
             <SettingsToggleRow
               label="Compact sidebar"
-              description="Collapse the navigation sidebar to maximize workspace"
+              description="Hide the navigation labels panel to maximize workspace (icon rail stays visible)"
               checked={settings.sidebarCollapsed}
               onCheckedChange={async (checked) => {
                 updateSetting("sidebarCollapsed", checked);
@@ -1504,11 +1667,38 @@ function SettingsPageContent() {
           </SettingsPanel>
         );
 
+      case "integrations":
+        return (
+          <SettingsPanel
+            title="Integrations"
+            description="Connect external accounts used across the admin workspace"
+          >
+            <div className="grid gap-4">
+              <MicrosoftIntegrationCard
+                oauthNotice={microsoftOAuthNotice}
+                oauthError={microsoftOAuthError}
+                onOAuthNoticeHandled={() => {
+                  setMicrosoftOAuthNotice(null);
+                  setMicrosoftOAuthError(null);
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("microsoft");
+                    url.searchParams.delete("microsoft_error");
+                    window.history.replaceState({}, "", url.toString());
+                  }
+                }}
+              />
+              <DocuSignIntegrationCard />
+              <LinearIntegrationCard />
+            </div>
+          </SettingsPanel>
+        );
+
       case "ai":
         return (
           <SettingsPanel
             title="AI providers"
-            description="Configure OpenAI-compatible AI providers, models and API keys. The active provider powers AI ranking, survey and email generation."
+            description="Configure OpenAI-compatible providers, models and API keys. The active provider powers BQI Intelligence ranking, survey and email generation."
             badge={
               aiProviders.some((provider) => provider.hasApiKey) ? (
                 <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
@@ -1528,160 +1718,214 @@ function SettingsPageContent() {
                 No AI providers configured yet. Add one to get started.
               </div>
             ) : (
-              <div className="space-y-5">
+              <div className="space-y-3">
                 {aiProviders.map((provider) => {
                   const isActive = aiActiveProviderId === provider.id;
                   const isTesting = testingAiProviderId === provider.id;
+                  const isExpanded = expandedAiProviderIds.has(provider.id);
+                  const providerTypeLabel =
+                    AI_PROVIDER_PRESETS.find(
+                      (preset) => preset.value === provider.providerType
+                    )?.label ?? provider.providerType;
+
                   return (
-                    <div
+                    <Collapsible
                       key={provider.id}
+                      open={isExpanded}
+                      onOpenChange={(open) =>
+                        toggleAiProviderExpanded(provider.id, open)
+                      }
                       className={cn(
-                        "rounded-xl border p-5 transition-colors",
+                        "rounded-xl border transition-colors",
                         isActive
                           ? "border-primary/40 bg-primary/[0.04]"
                           : "border-border/60 bg-muted/20"
                       )}
                     >
-                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAiActiveProviderId(provider.id);
+                          }}
+                          className={cn(
+                            "flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                            isActive
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-border/60 text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <Star
+                            className={cn(
+                              "h-3.5 w-3.5",
+                              isActive && "fill-current"
+                            )}
+                          />
+                          {isActive ? "Active" : "Set active"}
+                        </button>
+
+                        <CollapsibleTrigger asChild>
                           <button
                             type="button"
-                            onClick={() => setAiActiveProviderId(provider.id)}
-                            className={cn(
-                              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
-                              isActive
-                                ? "border-primary/40 bg-primary/10 text-primary"
-                                : "border-border/60 text-muted-foreground hover:text-foreground"
-                            )}
+                            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-muted/40"
+                            aria-label={
+                              isExpanded
+                                ? `Collapse ${provider.label || "provider"}`
+                                : `Expand ${provider.label || "provider"}`
+                            }
                           >
-                            <Star
+                            <span className="min-w-0 truncate text-sm font-medium text-foreground">
+                              {provider.label?.trim() || "Untitled provider"}
+                            </span>
+                            <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
+                              {providerTypeLabel}
+                            </span>
+                            {provider.model ? (
+                              <span className="hidden min-w-0 truncate text-xs text-muted-foreground md:inline">
+                                · {provider.model}
+                              </span>
+                            ) : null}
+                            <ChevronDown
                               className={cn(
-                                "h-3.5 w-3.5",
-                                isActive && "fill-current"
+                                "ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                                isExpanded && "rotate-180"
                               )}
                             />
-                            {isActive ? "Active" : "Set active"}
                           </button>
+                        </CollapsibleTrigger>
+                      </div>
+
+                      <CollapsibleContent>
+                        <div className="space-y-4 border-t border-border/50 px-4 pb-4 pt-4">
+                          <div className="flex justify-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() =>
+                                handleRemoveAiProvider(provider.id)
+                              }
+                            >
+                              <Trash2 className="mr-1.5 h-4 w-4" />
+                              Remove
+                            </Button>
+                          </div>
+
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <SettingsField label="Display name">
+                              <Input
+                                value={provider.label}
+                                onChange={(e) =>
+                                  updateAiProvider(provider.id, {
+                                    label: e.target.value,
+                                  })
+                                }
+                                placeholder="e.g. NVIDIA production"
+                              />
+                            </SettingsField>
+
+                            <SettingsField label="Provider type">
+                              <Select
+                                value={provider.providerType}
+                                onValueChange={(value) =>
+                                  handleAiProviderTypeChange(
+                                    provider.id,
+                                    value
+                                  )
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {AI_PROVIDER_PRESETS.map((preset) => (
+                                    <SelectItem
+                                      key={preset.value}
+                                      value={preset.value}
+                                    >
+                                      {preset.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </SettingsField>
+
+                            <SettingsField
+                              label="Base URL"
+                              hint="OpenAI-compatible endpoint (without /chat/completions)"
+                              className="sm:col-span-2"
+                            >
+                              <Input
+                                value={provider.baseUrl}
+                                onChange={(e) =>
+                                  updateAiProvider(provider.id, {
+                                    baseUrl: e.target.value,
+                                  })
+                                }
+                                placeholder="https://api.openai.com/v1"
+                              />
+                            </SettingsField>
+
+                            <SettingsField label="Model">
+                              <Input
+                                value={provider.model}
+                                onChange={(e) =>
+                                  updateAiProvider(provider.id, {
+                                    model: e.target.value,
+                                  })
+                                }
+                                placeholder="gpt-4o-mini"
+                              />
+                            </SettingsField>
+
+                            <SettingsField
+                              label="API key"
+                              hint={
+                                provider.hasApiKey
+                                  ? "Key is saved. Enter a new value only to replace it."
+                                  : "Bearer token for this provider"
+                              }
+                            >
+                              <Input
+                                type="password"
+                                autoComplete="new-password"
+                                value={provider.apiKey}
+                                onChange={(e) =>
+                                  updateAiProvider(provider.id, {
+                                    apiKey: e.target.value,
+                                  })
+                                }
+                                placeholder={
+                                  provider.hasApiKey
+                                    ? provider.apiKeyHint ||
+                                      "••••••••••••••••"
+                                    : "sk-..."
+                                }
+                              />
+                            </SettingsField>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTestAiProvider(provider)}
+                              disabled={isTesting}
+                            >
+                              {isTesting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Bot className="mr-2 h-4 w-4" />
+                              )}
+                              Test connection
+                            </Button>
+                          </div>
                         </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => handleRemoveAiProvider(provider.id)}
-                        >
-                          <Trash2 className="mr-1.5 h-4 w-4" />
-                          Remove
-                        </Button>
-                      </div>
-
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <SettingsField label="Display name">
-                          <Input
-                            value={provider.label}
-                            onChange={(e) =>
-                              updateAiProvider(provider.id, {
-                                label: e.target.value,
-                              })
-                            }
-                            placeholder="e.g. NVIDIA production"
-                          />
-                        </SettingsField>
-
-                        <SettingsField label="Provider type">
-                          <Select
-                            value={provider.providerType}
-                            onValueChange={(value) =>
-                              handleAiProviderTypeChange(provider.id, value)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {AI_PROVIDER_PRESETS.map((preset) => (
-                                <SelectItem
-                                  key={preset.value}
-                                  value={preset.value}
-                                >
-                                  {preset.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </SettingsField>
-
-                        <SettingsField
-                          label="Base URL"
-                          hint="OpenAI-compatible endpoint (without /chat/completions)"
-                          className="sm:col-span-2"
-                        >
-                          <Input
-                            value={provider.baseUrl}
-                            onChange={(e) =>
-                              updateAiProvider(provider.id, {
-                                baseUrl: e.target.value,
-                              })
-                            }
-                            placeholder="https://api.openai.com/v1"
-                          />
-                        </SettingsField>
-
-                        <SettingsField label="Model">
-                          <Input
-                            value={provider.model}
-                            onChange={(e) =>
-                              updateAiProvider(provider.id, {
-                                model: e.target.value,
-                              })
-                            }
-                            placeholder="gpt-4o-mini"
-                          />
-                        </SettingsField>
-
-                        <SettingsField
-                          label="API key"
-                          hint={
-                            provider.hasApiKey
-                              ? "Key is saved. Enter a new value only to replace it."
-                              : "Bearer token for this provider"
-                          }
-                        >
-                          <Input
-                            type="password"
-                            autoComplete="new-password"
-                            value={provider.apiKey}
-                            onChange={(e) =>
-                              updateAiProvider(provider.id, {
-                                apiKey: e.target.value,
-                              })
-                            }
-                            placeholder={
-                              provider.hasApiKey
-                                ? provider.apiKeyHint || "••••••••••••••••"
-                                : "sk-..."
-                            }
-                          />
-                        </SettingsField>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleTestAiProvider(provider)}
-                          disabled={isTesting}
-                        >
-                          {isTesting ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Bot className="mr-2 h-4 w-4" />
-                          )}
-                          Test connection
-                        </Button>
-                      </div>
-                    </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   );
                 })}
               </div>
@@ -1708,9 +1952,40 @@ function SettingsPageContent() {
               <p className="font-medium text-foreground">Shared across admins</p>
               <p className="mt-1">
                 AI providers are stored centrally, so a key saved by any admin
-                enables AI features for every admin. AI stays off until a
-                provider with an API key is saved here.
+                enables BQI Intelligence features for every admin. Ranking stays
+                off until a provider with an API key is saved here.
               </p>
+            </div>
+          </SettingsPanel>
+        );
+
+      case "intelligence":
+        return (
+          <SettingsPanel
+            title="BQI Intelligence"
+            description="Manage how your company uses features of BQI Intelligence."
+            badge={
+              isSavingIntelligence ? (
+                <Badge variant="outline" className="gap-1">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Saving
+                </Badge>
+              ) : null
+            }
+          >
+            <div className="space-y-3">
+              {BQI_INTELLIGENCE_FEATURES.map((feature) => (
+                <SettingsToggleRow
+                  key={feature.key}
+                  label={feature.label}
+                  description={feature.description}
+                  checked={bqiIntelligence[feature.key]}
+                  disabled={isSavingIntelligence}
+                  onCheckedChange={(checked) =>
+                    void handleBqiIntelligenceToggle(feature.key, checked)
+                  }
+                />
+              ))}
             </div>
           </SettingsPanel>
         );
@@ -1766,16 +2041,21 @@ function SettingsPageContent() {
 
   const showGlobalSave =
     activeSection !== "email" &&
+    activeSection !== "integrations" &&
     activeSection !== "ai" &&
+    activeSection !== "intelligence" &&
     activeSection !== "system";
 
   return (
-    <AdminPageLayout title="Settings" showSearch={false}>
+    <AdminPageLayout title="Settings" showSearch={false} tourId="settings" guideInBanner>
+      <TourPageHelper tourId="settings" />
       <div className="mx-auto max-w-6xl space-y-8">
+        <AdminPageWelcomeBanner bannerKey="settings" tourId="settings" />
         {/* Profile hero */}
         <motion.div
           initial={false}
           className="relative overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
+          data-tour="settings-profile"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.07] via-transparent to-primary/[0.03]" />
           <div className="relative flex flex-col items-center gap-6 p-6 md:flex-row md:p-8">
@@ -1829,7 +2109,7 @@ function SettingsPageContent() {
 
         {/* Main layout: sidebar + content */}
         <div className="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <nav className="lg:sticky lg:top-24 lg:self-start">
+          <nav className="lg:sticky lg:top-24 lg:self-start" data-tour="settings-nav">
             <p className="mb-3 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Sections
             </p>
@@ -1842,6 +2122,11 @@ function SettingsPageContent() {
                     key={item.id}
                     type="button"
                     onClick={() => setActiveSection(item.id)}
+                    data-tour={
+                      item.id === "intelligence"
+                        ? "settings-intelligence"
+                        : undefined
+                    }
                     className={cn(
                       "flex min-w-[200px] shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all lg:min-w-0 lg:w-full",
                       isActive
@@ -1869,6 +2154,35 @@ function SettingsPageContent() {
                 );
               })}
             </div>
+            {relatedSettingsLinks.length > 0 ? (
+              <div className="mt-6 space-y-2" data-tour="settings-related">
+                <p className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Related
+                </p>
+                {relatedSettingsLinks.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center gap-3 rounded-xl border border-transparent bg-muted/30 px-3.5 py-3 text-left text-muted-foreground transition-all hover:border-border/60 hover:bg-muted/50 hover:text-foreground"
+                    >
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-background">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium leading-none">
+                          {item.label}
+                        </p>
+                        <p className="mt-1 truncate text-xs opacity-80">
+                          {item.description}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
           </nav>
 
           <motion.div
@@ -1877,6 +2191,7 @@ function SettingsPageContent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
             className="min-w-0"
+            data-tour="settings-content"
           >
             {renderSectionContent()}
           </motion.div>

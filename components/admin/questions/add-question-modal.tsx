@@ -149,7 +149,7 @@ export function AddQuestionModal({
                           <Info className="h-4 w-4 text-muted-foreground" />
                         </HoverCardTrigger>
                         <HoverCardContent className="w-80">
-                          Select the job postings where this question should appear
+                          Select the positions where this question should appear
                         </HoverCardContent>
                       </HoverCard>
                     </CardTitle>

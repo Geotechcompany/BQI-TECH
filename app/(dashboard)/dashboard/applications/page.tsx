@@ -30,6 +30,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/auth-backend";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
+import { ApplicationsEmptyState } from "@/components/user/ApplicationsEmptyState";
 
 interface ApplicationResponse {
   applications: Application[];
@@ -299,6 +301,7 @@ export default function ApplicationsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-indigo-100/20 dark:from-gray-900 dark:via-blue-950/30 dark:to-indigo-950/20 relative overflow-hidden">
+      <TourPageHelper tourId="user-applications" />
       {/* Background Decorations */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
@@ -325,6 +328,7 @@ export default function ApplicationsPage() {
         <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
+          data-tour="user-applications-header"
           className="text-center mb-6 sm:mb-8 lg:mb-12"
         >
           <div className="inline-flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
@@ -351,6 +355,7 @@ export default function ApplicationsPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
+          data-tour="user-applications-search"
           className="max-w-md mx-auto mb-6 sm:mb-8 lg:mb-12"
         >
           <div className="relative">
@@ -368,44 +373,21 @@ export default function ApplicationsPage() {
         {/* Applications Grid */}
         <AnimatePresence mode="wait">
           {filteredApplications.length === 0 ? (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-center py-8 sm:py-12 lg:py-16"
+              data-tour="user-applications-list"
             >
-              <div className="relative mb-4 sm:mb-6">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 lg:w-24 lg:h-24 mx-auto bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-blue-200/50">
-                  <FileText className="h-8 w-8 sm:h-10 sm:w-10 lg:h-12 lg:w-12 text-blue-500" />
-                </div>
-                <motion.div
-                  className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 text-blue-400"
-                  variants={floatingVariants}
-                  animate="animate"
-                >
-                  <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6" />
-                </motion.div>
-              </div>
-              <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 sm:mb-3 px-2">
-                {searchTerm ? "No matching applications found" : "No applications yet"}
-              </h3>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-4 sm:mb-6 px-4 max-w-sm sm:max-w-md mx-auto">
-                {searchTerm 
-                  ? "Try adjusting your search terms." 
-                  : "Start by applying to some of our open positions."
-                }
-              </p>
-              {searchTerm && (
-                <Button 
-                  onClick={() => setSearchTerm("")}
-                  variant="outline"
-                  className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-white/20 hover:bg-white/90 dark:hover:bg-gray-800/90 transition-all duration-300 min-h-[44px] px-6"
-                >
-                  Clear Search
-                </Button>
-              )}
+              <ApplicationsEmptyState
+                hasSearch={Boolean(searchTerm)}
+                onClearSearch={() => setSearchTerm("")}
+              />
             </motion.div>
           ) : (
-            <div className="grid gap-4 sm:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+            <div
+              className="grid gap-4 sm:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"
+              data-tour="user-applications-list"
+            >
               {filteredApplications.map((app, index) => {
                 const status = app.status || 'New';
                 const config = statusConfig[status] || statusConfig['New'];

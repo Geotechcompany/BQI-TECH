@@ -1,46 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  ChevronRight,
-  X,
-  LogOut,
-  Folder,
-  Users,
-  FileText,
-  Settings,
-  LayoutDashboard,
-  BriefcaseBusiness,
-  ClipboardList,
-  BrainCircuit,
-  BadgeCheck,
-  Laptop2,
-  Handshake,
-  Ban,
-  Archive,
-  FileArchive,
-  BookText,
-  Rocket,
-  BarChart,
-  HelpCircle,
-  Bell,
-  ScrollText,
-  Mail as MailIcon,
-  HardDrive,
-} from "lucide-react";
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Transition,
+} from "framer-motion";
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useAdminTheme } from "@/contexts/AdminThemeContext";
 import { getSidebarSkin } from "@/lib/admin-sidebar-skin";
-import { AdminBrandTitle } from "@/components/admin/AdminBrandTitle";
-import { useState, useMemo } from "react";
+import { SidebarVersionLabel } from "@/components/admin/AdminBrandTitle";
+import { SidebarUserMenu } from "@/components/admin/SidebarUserMenu";
+import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { EMPLOYEE_DEFAULT_AVATAR_SRC } from "@/lib/employee-portal-avatar";
+import { filterAdminMenuSections } from "@/lib/admin-permissions";
 import {
-  filterAdminMenuSections,
-  hasAdminModule,
-} from "@/lib/admin-permissions";
+  AuthUserAvatarFileInput,
+  useAuthUserAvatarUpload,
+} from "@/hooks/use-auth-user-avatar-upload";
+import {
+  adminNavSections,
+  isNavGroupDefaultExpanded,
+  isNavGroupPathActive,
+  isNavLinkActive,
+  type AdminNavGroup,
+  type AdminNavLink,
+  type AdminNavSection,
+} from "@/lib/admin-nav";
 import { cn } from "@/lib/utils";
 import {
   Tooltip as UiTooltip,
@@ -48,69 +39,39 @@ import {
   TooltipContent,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-interface MenuSection {
-  title: string;
-  icon: any; // Using any for Lucide icons type
-  alwaysExpanded: boolean;
-  items: {
-    name: string;
-    href: string;
-    icon: any;
-    moduleKey?: import("@/lib/admin-permissions").AdminModuleKey;
-  }[];
+/** Re-export for AdminCommandSearch / mobile sidebar consumers. */
+export { adminNavSections, menuSections } from "@/lib/admin-nav";
+
+const ICON_STROKE = 1.75;
+
+/** Constant icon capsule width (px). Always visible on md+. */
+export const ADMIN_ICON_RAIL_WIDTH = 68;
+/** Secondary labeled panel width when expanded (px). */
+export const ADMIN_SECONDARY_PANEL_WIDTH = 188;
+
+export function adminShellOffset(collapsed: boolean) {
+  return (
+    ADMIN_ICON_RAIL_WIDTH + (collapsed ? 0 : ADMIN_SECONDARY_PANEL_WIDTH)
+  );
 }
 
-export const menuSections: MenuSection[] = [
-  {
-    title: "Candidates",
-    icon: Users,
-    alwaysExpanded: true,
-    items: [
-      { name: "Applications", href: "/admin/applications", icon: Folder, moduleKey: "candidates" },
-      { name: "Shortlisted", href: "/admin/shortlisted", icon: BadgeCheck, moduleKey: "candidates" },
-      { name: "Technical Screen", href: "/admin/technical-assessment", icon: Laptop2, moduleKey: "candidates" },
-      { name: "Interviews", href: "/admin/interviewing", icon: Handshake, moduleKey: "candidates" },
-      { name: "Hired", href: "/admin/hired", icon: Rocket, moduleKey: "candidates" },
-      { name: "Disqualified", href: "/admin/disqualified", icon: Ban, moduleKey: "candidates" },
-      { name: "Archive", href: "/admin/archived", icon: Archive, moduleKey: "candidates" },
-      { name: "CV Vault", href: "/admin/cv-vault", icon: FileArchive, moduleKey: "candidates" },
-    ],
-  },
-  {
-    title: "Recruitment",
-    icon: BriefcaseBusiness,
-    alwaysExpanded: true,
-    items: [
-      { name: "Job Postings", href: "/admin/job-postings", icon: ClipboardList, moduleKey: "recruitment" },
-      { name: "Questions Bank", href: "/admin/job-postings/questions", icon: BrainCircuit, moduleKey: "recruitment" },
-    ],
-  },
-  {
-    title: "Content",
-    icon: BookText,
-    alwaysExpanded: false,
-    items: [
-      { name: "Blog Management", href: "/admin/blog-management", icon: FileText, moduleKey: "content" },
-      { name: "Surveys", href: "/admin/surveys", icon: BarChart, moduleKey: "content" },
-      { name: "Feature Releases", href: "/admin/releases", icon: Rocket, moduleKey: "content" },
-      { name: "Changelog", href: "/admin/whats-new", icon: ScrollText, moduleKey: "content" },
-    ],
-  },
-  {
-    title: "Workspace",
-    icon: LayoutDashboard,
-    alwaysExpanded: false,
-    items: [
-      { name: "User Management", href: "/admin/user-management", icon: Users, moduleKey: "user_management" },
-      { name: "Notifications", href: "/admin/notifications", icon: Bell, moduleKey: "notifications" },
-      { name: "Email Broadcast", href: "/admin/email-broadcast", icon: MailIcon, moduleKey: "email_broadcast" },
-      { name: "Admin Activity", href: "/admin/audit-logs", icon: ScrollText, moduleKey: "audit_logs" },
-      { name: "Backup", href: "/admin/backup", icon: HardDrive, moduleKey: "backup" },
-      { name: "Settings", href: "/admin/settings", icon: Settings, moduleKey: "settings" },
-    ],
-  },
-];
+export function adminSidebarSpring(reducedMotion: boolean): Transition {
+  if (reducedMotion) {
+    return { duration: 0.18, ease: [0.32, 0.72, 0, 1] };
+  }
+  return { type: "spring", bounce: 0, duration: 0.38 };
+}
+
+const pressTap = { scale: 0.97 };
 
 interface DashboardSidebarProps {
   isOpen: boolean;
@@ -118,311 +79,644 @@ interface DashboardSidebarProps {
   className?: string;
 }
 
+type Skin = ReturnType<typeof getSidebarSkin>;
+
+function groupRailHref(group: AdminNavGroup) {
+  return group.children[0]?.href ?? "/admin/overview";
+}
+
 export default function DashboardSidebar({
-  isOpen,
-  onClose,
   className,
 }: DashboardSidebarProps) {
+  const pathname = usePathname();
+  const reducedMotion = useReducedMotion();
   const { sidebarCollapsed, updateSettings } = useSettings();
   const { theme } = useAdminTheme();
   const skin = useMemo(() => getSidebarSkin(theme), [theme]);
-  const { logout, user } = useAuth();
-  const pathname = usePathname();
-  const [expandedSection, setExpandedSection] = useState<string | null>(
-    "Workspace"
-  );
+  const { user } = useAuth();
+  const {
+    openPicker: openAvatarPicker,
+    isUploading: isAvatarUploading,
+    inputRef: avatarInputRef,
+    onFileChange: onAvatarFileChange,
+    accept: avatarAccept,
+  } = useAuthUserAvatarUpload();
+
+  const panelOpen = !sidebarCollapsed;
+  const shellWidth = adminShellOffset(sidebarCollapsed);
+  const spring = adminSidebarSpring(!!reducedMotion);
 
   const visibleSections = useMemo(
     () =>
       filterAdminMenuSections(
-        menuSections,
+        adminNavSections,
         user?.role,
         user?.adminModules
-      ),
+      ) as AdminNavSection[],
     [user?.role, user?.adminModules]
   );
 
-  const canViewOverview = hasAdminModule(
-    user?.role,
-    user?.adminModules,
-    "overview"
+  const mainSections = useMemo(
+    () => visibleSections.filter((section) => section.title !== "Settings"),
+    [visibleSections]
   );
-  const canViewHelp = hasAdminModule(user?.role, user?.adminModules, "help");
+  const settingsSection = useMemo(
+    () => visibleSections.find((section) => section.title === "Settings"),
+    [visibleSections]
+  );
+  const mainRailItems = useMemo(
+    () => mainSections.flatMap((section) => section.items),
+    [mainSections]
+  );
+  const settingsRailItems = useMemo(
+    () => settingsSection?.items ?? [],
+    [settingsSection]
+  );
+
+  const [expandedOverrides, setExpandedOverrides] = useState<
+    Record<string, boolean>
+  >({});
+
+  useEffect(() => {
+    setExpandedOverrides({});
+  }, [pathname]);
+
+  const isGroupExpanded = useCallback(
+    (group: AdminNavGroup) => {
+      if (expandedOverrides[group.id] !== undefined) {
+        return expandedOverrides[group.id];
+      }
+      return isNavGroupDefaultExpanded(group, pathname);
+    },
+    [expandedOverrides, pathname]
+  );
+
+  const toggleGroup = (group: AdminNavGroup) => {
+    setExpandedOverrides((prev) => ({
+      ...prev,
+      [group.id]: !isGroupExpanded(group),
+    }));
+  };
+
+  const expandGroup = (groupId: string) => {
+    setExpandedOverrides((prev) => ({ ...prev, [groupId]: true }));
+  };
+
+  const togglePanel = () => {
+    void updateSettings({ sidebarCollapsed: !sidebarCollapsed });
+  };
 
   if (pathname === "/admin/login") return null;
 
-  const toggleSection = (title: string) => {
-    const section = menuSections.find((s) => s.title === title);
-    if (section?.alwaysExpanded) return; // Don't toggle always expanded sections
-    setExpandedSection(expandedSection === title ? null : title);
-  };
-
-  const isExpanded = (section: MenuSection) => {
-    return section.alwaysExpanded || expandedSection === section.title;
+  const avatarMenuProps = {
+    onChangePhoto: openAvatarPicker,
+    changePhotoDisabled: isAvatarUploading,
   };
 
   return (
-    <aside
-      className={`
-        translate-x-0
-        ${sidebarCollapsed ? "w-20" : "w-64"}
-        ${skin.shell}
-        ${className || ""}
-      `}
+    <motion.aside
+      className={cn(
+        "fixed left-0 z-[9999] hidden h-[100dvh] md:flex",
+        className
+      )}
       style={{
         top: "var(--admin-banner-offset, 0px)",
-        height: "calc(100vh - var(--admin-banner-offset, 0px))",
+        height: "calc(100dvh - var(--admin-banner-offset, 0px))",
+        willChange: "width",
       }}
+      initial={false}
+      animate={{ width: shellWidth }}
+      transition={spring}
+      aria-label="Admin navigation"
     >
-      <TooltipProvider>
-        <div className="flex items-center justify-between mb-8 p-4">
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            className="flex items-center gap-2"
+      <AuthUserAvatarFileInput
+        inputRef={avatarInputRef}
+        accept={avatarAccept}
+        onFileChange={(event) => void onAvatarFileChange(event)}
+      />
+      <TooltipProvider delayDuration={200}>
+        <div className="flex h-full w-full overflow-hidden">
+          {/* Constant icon capsule rail */}
+          <div
+            className={cn(
+              "relative z-10 flex h-full shrink-0 flex-col items-center py-3",
+              skin.studio
+                ? "bg-gradient-to-b from-[#272156] via-[#2a265c] to-[#1f1c42] text-white"
+                : "bg-card text-foreground"
+            )}
+            style={{ width: ADMIN_ICON_RAIL_WIDTH }}
           >
-            <img
-              src={skin.logoSrc}
-              alt="Logo"
-              width={sidebarCollapsed ? 32 : 68}
-              height={sidebarCollapsed ? 32 : 48}
-              className="rounded-lg"
-            />
-            {!sidebarCollapsed && (
-              <AdminBrandTitle
-                badgeVariant={skin.brandBadge}
-                titleClassName={skin.brandTitleClass}
+            <div className="mb-1.5 flex h-11 w-11 items-center justify-center">
+              <motion.img
+                src={skin.logoSrc}
+                alt="BQI"
+                width={36}
+                height={36}
+                className="rounded-xl object-contain"
+                whileHover={reducedMotion ? undefined : { scale: 1.04 }}
+                whileTap={reducedMotion ? undefined : pressTap}
+                transition={spring}
               />
-            )}
-          </motion.div>
+            </div>
 
-          <div className="flex gap-2">
-            <UiTooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  onClick={() =>
-                    updateSettings({ sidebarCollapsed: !sidebarCollapsed })
-                  }
-                  className={cn("hidden md:block p-2 rounded-lg", skin.iconButton)}
-                >
-                  <img
-                    src={skin.collapseIconSrc}
-                    alt={sidebarCollapsed ? "Expand" : "Collapse"}
-                    width={20}
-                    height={20}
-                    className={skin.studio ? "block" : "block dark:hidden"}
-                  />
-                  {!skin.studio && (
-                    <img
-                      src={skin.collapseIconDarkSrc}
-                      alt={sidebarCollapsed ? "Expand" : "Collapse"}
-                      width={20}
-                      height={20}
-                      className="hidden dark:block"
-                    />
-                  )}
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-              </TooltipContent>
-            </UiTooltip>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={onClose}
-              className={cn("md:hidden p-2 rounded-lg", skin.iconButton)}
-            >
-              <X className={cn("w-6 h-6", skin.studio ? "text-white/70" : "text-muted-foreground")} />
-            </motion.button>
-          </div>
-        </div>
-
-        <nav className="space-y-2 px-4 pt-1.5 pb-20 overflow-y-auto overflow-x-hidden max-h-[calc(100vh-200px)]">
-          {/* Standalone Overview Link */}
-          {canViewOverview && (
-          <motion.div whileHover={{ scale: 1.01 }} className="space-y-2">
-            {sidebarCollapsed ? (
+            <div className="mb-3 flex flex-col items-center px-2">
               <UiTooltip>
                 <TooltipTrigger asChild>
-                  <Link
-                    href="/admin/overview"
-                    className={skin.navLinkCollapsed(pathname === "/admin/overview")}
-                  >
-                    <LayoutDashboard className="w-5 h-5" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right">Overview</TooltipContent>
-              </UiTooltip>
-            ) : (
-              <Link
-                href="/admin/overview"
-                className={cn(skin.navLink(pathname === "/admin/overview"), "p-3")}
-              >
-                <LayoutDashboard className={cn("w-5 h-5", skin.sectionIcon)} />
-                <span className="ml-3">Overview</span>
-              </Link>
-            )}
-          </motion.div>
-          )}
-
-          {/* Help Link */}
-          {canViewHelp && (
-          <motion.div whileHover={{ scale: 1.02 }}>
-            {sidebarCollapsed ? (
-              <UiTooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    href="/admin/help"
-                    className={skin.navLinkCollapsed(pathname === "/admin/help")}
-                  >
-                    <HelpCircle className="w-5 h-5" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right">Help</TooltipContent>
-              </UiTooltip>
-            ) : (
-              <Link
-                href="/admin/help"
-                className={cn(skin.navLink(pathname === "/admin/help"), "p-3")}
-              >
-                <HelpCircle className={cn("w-5 h-5", skin.sectionIcon)} />
-                <span className="ml-3">Help</span>
-              </Link>
-            )}
-          </motion.div>
-          )}
-
-          {visibleSections.map((section: MenuSection) => (
-            <div key={section.title} className="space-y-1">
-              {sidebarCollapsed ? (
-                // Collapsed sidebar - show section icon with dropdown on hover
-                <div className="relative group">
-                  <UiTooltip>
-                    <TooltipTrigger asChild>
-                      <motion.button
-                        className={skin.navLinkCollapsed(
-                          pathname.includes(section.items[0].href.split("/")[2])
-                        )}
-                        whileHover={{ scale: 1.02 }}
-                      >
-                        <section.icon className="w-5 h-5" />
-                      </motion.button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      {section.title}
-                    </TooltipContent>
-                  </UiTooltip>
-
-                  {/* Hover dropdown for collapsed sidebar */}
-                  <div
-                    className={cn(
-                      "absolute left-full top-1/2 -translate-y-1/2 ml-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 ease-in-out pointer-events-none group-hover:pointer-events-auto z-50 min-w-[200px] py-2",
-                      skin.flyout
-                    )}
-                  >
-                    <div className="p-2">
-                      <div className={skin.flyoutHeading}>
-                        {section.title}
-                      </div>
-                      {section.items.map((item) => (
-                        <Link
-                          key={item.name}
-                          href={item.href}
-                          className={skin.flyoutLink(pathname === item.href)}
-                        >
-                          <item.icon className="w-4 h-4 mr-3 shrink-0" />
-                          <span className="font-medium truncate">
-                            {item.name}
-                          </span>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                // Expanded sidebar
-                <>
                   <motion.button
-                    onClick={() => toggleSection(section.title)}
+                    type="button"
+                    onClick={togglePanel}
+                    aria-label={
+                      panelOpen
+                        ? "Collapse navigation panel"
+                        : "Expand navigation panel"
+                    }
+                    aria-expanded={panelOpen}
                     className={cn(
-                      skin.sectionButton,
-                      section.alwaysExpanded ? "cursor-default" : "cursor-pointer"
+                      railIconClass(skin, false),
+                      skin.studio
+                        ? "bg-white/[0.06] hover:bg-white/[0.1]"
+                        : "bg-[#272156]/[0.05] hover:bg-[#272156]/[0.09]"
                     )}
-                    whileHover={{ scale: section.alwaysExpanded ? 1 : 1.02 }}
+                    whileTap={reducedMotion ? undefined : pressTap}
+                    transition={{ duration: 0.1, ease: "easeOut" }}
+                    data-tour="admin-nav-panel-toggle"
                   >
-                    <section.icon className={cn("w-5 h-5", skin.sectionIcon)} />
-                    <span className="ml-3 text-sm font-medium">
-                      {section.title}
-                    </span>
-                    {!section.alwaysExpanded && (
-                      <ChevronRight
-                        className={`w-4 h-4 ml-auto transition-transform ${
-                          isExpanded(section) ? "rotate-90" : ""
-                        }`}
+                    {panelOpen ? (
+                      <PanelLeftClose
+                        className="h-[18px] w-[18px]"
+                        strokeWidth={ICON_STROKE}
+                      />
+                    ) : (
+                      <PanelLeftOpen
+                        className="h-[18px] w-[18px]"
+                        strokeWidth={ICON_STROKE}
                       />
                     )}
                   </motion.button>
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={10}>
+                  {panelOpen ? "Collapse panel" : "Expand panel"}
+                </TooltipContent>
+              </UiTooltip>
+            </div>
 
-                  <AnimatePresence initial={false}>
-                    {isExpanded(section) && (
+            <nav
+              className="flex flex-1 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden px-2"
+              aria-label="Primary"
+            >
+              {mainRailItems.map((item) => {
+                if (item.kind === "group") {
+                  return (
+                    <GroupRailIcon
+                      key={item.id}
+                      item={item}
+                      pathname={pathname}
+                      panelOpen={panelOpen}
+                      skin={skin}
+                      reducedMotion={!!reducedMotion}
+                      onExpandPanel={() => {
+                        if (!panelOpen) {
+                          void updateSettings({ sidebarCollapsed: false });
+                        }
+                        expandGroup(item.id);
+                      }}
+                    />
+                  );
+                }
+
+                const active = isNavLinkActive(item, pathname);
+                return (
+                  <UiTooltip key={item.id}>
+                    <TooltipTrigger asChild>
                       <motion.div
-                        initial={false}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="ml-8 space-y-1"
+                        whileTap={reducedMotion ? undefined : pressTap}
+                        transition={{ duration: 0.1, ease: "easeOut" }}
                       >
-                        {section.items.map((item) => (
-                          <div key={item.name}>
-                            <Link
-                              href={item.href}
-                              className={skin.subLink(pathname === item.href)}
-                            >
-                              <item.icon className="w-4 h-4" />
-                              <span className="ml-3">{item.name}</span>
-                            </Link>
-                          </div>
-                        ))}
+                        <Link
+                          href={item.href}
+                          aria-label={item.name}
+                          aria-current={active ? "page" : undefined}
+                          className={railIconClass(skin, active)}
+                          data-tour={item.tourAttr}
+                        >
+                          <item.icon
+                            className="h-[18px] w-[18px]"
+                            strokeWidth={ICON_STROKE}
+                          />
+                        </Link>
                       </motion.div>
-                    )}
-                  </AnimatePresence>
-                </>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={10}>
+                      {item.name}
+                    </TooltipContent>
+                  </UiTooltip>
+                );
+              })}
+            </nav>
+
+            <div className="mt-auto flex flex-col items-center gap-1.5 px-2 pb-1">
+              <InstallPwaButton
+                rail
+                tone={skin.studio ? "on-dark" : "subtle"}
+                className={railIconClass(skin, false)}
+              />
+
+              {settingsRailItems.length > 0 ? (
+                <div
+                  role="separator"
+                  aria-hidden
+                  className={cn(
+                    "my-0.5 h-px w-8",
+                    skin.studio ? "bg-white/15" : "bg-border"
+                  )}
+                />
+              ) : null}
+
+              {settingsRailItems.map((item) => {
+                if (item.kind === "group") {
+                  return (
+                    <GroupRailIcon
+                      key={item.id}
+                      item={item}
+                      pathname={pathname}
+                      panelOpen={panelOpen}
+                      skin={skin}
+                      reducedMotion={!!reducedMotion}
+                      onExpandPanel={() => {
+                        if (!panelOpen) {
+                          void updateSettings({ sidebarCollapsed: false });
+                        }
+                        expandGroup(item.id);
+                      }}
+                    />
+                  );
+                }
+
+                const active = isNavLinkActive(item, pathname);
+                return (
+                  <UiTooltip key={item.id}>
+                    <TooltipTrigger asChild>
+                      <motion.div
+                        whileTap={reducedMotion ? undefined : pressTap}
+                        transition={{ duration: 0.1, ease: "easeOut" }}
+                      >
+                        <Link
+                          href={item.href}
+                          aria-label={item.name}
+                          aria-current={active ? "page" : undefined}
+                          className={railIconClass(skin, active)}
+                          data-tour={item.tourAttr}
+                        >
+                          <item.icon
+                            className="h-[18px] w-[18px]"
+                            strokeWidth={ICON_STROKE}
+                          />
+                        </Link>
+                      </motion.div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" sideOffset={10}>
+                      {item.name}
+                    </TooltipContent>
+                  </UiTooltip>
+                );
+              })}
+
+              {!panelOpen && (
+                <div className="mt-1 w-full">
+                  <SidebarUserMenu
+                    collapsed
+                    studio={skin.studio}
+                    flyoutClassName={skin.flyout}
+                    enableLockScreen
+                    defaultAvatarSrc={EMPLOYEE_DEFAULT_AVATAR_SRC}
+                    {...avatarMenuProps}
+                  />
+                </div>
               )}
             </div>
-          ))}
-        </nav>
+          </div>
 
-        <motion.div
-          className={cn("absolute bottom-4 left-4 right-4", skin.logoutFooter)}
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
-        >
-          {sidebarCollapsed ? (
-            <UiTooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => logout()}
-                  className={cn(skin.logoutButton, "justify-center")}
-                >
-                  <span className={skin.logoutIconWrap || "inline-flex"}>
-                    <LogOut className="w-4 h-4" />
-                  </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Log Out</TooltipContent>
-            </UiTooltip>
-          ) : (
-            <button
-              onClick={() => logout()}
-              className={cn(skin.logoutButton, "gap-3")}
+          {/* Expandable secondary labeled panel */}
+          <motion.div
+            className={cn(
+              "relative flex h-full flex-col overflow-hidden border-l",
+              skin.studio
+                ? "border-white/[0.08] bg-[#272156]/95 text-white"
+                : "border-[#272156]/08 bg-card/95 text-foreground backdrop-blur-md"
+            )}
+            initial={false}
+            animate={{
+              width: panelOpen ? ADMIN_SECONDARY_PANEL_WIDTH : 0,
+              opacity: panelOpen ? 1 : 0,
+            }}
+            transition={spring}
+            aria-hidden={!panelOpen}
+          >
+            <div
+              className="flex h-full w-full flex-col"
+              style={{ width: ADMIN_SECONDARY_PANEL_WIDTH }}
             >
-              <span className={skin.logoutIconWrap || "inline-flex"}>
-                <LogOut className="w-4 h-4" />
-              </span>
-              <span className={skin.logoutLabel}>Log Out</span>
-            </button>
-          )}
-        </motion.div>
+              <div className="px-3.5 pb-2 pt-4">
+                <p
+                  className={cn(
+                    "text-[10px] font-medium uppercase tracking-[0.1em]",
+                    skin.studio ? "text-white/40" : "text-muted-foreground/80"
+                  )}
+                >
+                  Navigation
+                </p>
+              </div>
+
+              <nav className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-2.5 pb-4">
+                {visibleSections.map((section) => (
+                  <div key={section.title} className="space-y-0.5">
+                    <div className={skin.sectionLabel}>{section.title}</div>
+                    {section.items.map((item) => {
+                      if (item.kind === "group") {
+                        return (
+                          <ExpandedNavGroup
+                            key={item.id}
+                            group={item}
+                            pathname={pathname}
+                            skin={skin}
+                            expanded={isGroupExpanded(item)}
+                            onToggle={() => toggleGroup(item)}
+                            spring={spring}
+                            reducedMotion={!!reducedMotion}
+                          />
+                        );
+                      }
+
+                      return (
+                        <FlatNavLink
+                          key={item.id}
+                          item={item}
+                          pathname={pathname}
+                          skin={skin}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
+              </nav>
+
+              <div
+                className={cn(
+                  "mt-auto space-y-2 px-3 pb-4 pt-2",
+                  skin.profileFooter
+                )}
+              >
+                <SidebarVersionLabel studio={skin.studio} />
+                <SidebarUserMenu
+                  collapsed={false}
+                  studio={skin.studio}
+                  flyoutClassName={skin.flyout}
+                  enableLockScreen
+                  defaultAvatarSrc={EMPLOYEE_DEFAULT_AVATAR_SRC}
+                  {...avatarMenuProps}
+                />
+              </div>
+            </div>
+          </motion.div>
+        </div>
       </TooltipProvider>
-    </aside>
+    </motion.aside>
+  );
+}
+
+function railIconClass(skin: Skin, active: boolean) {
+  return cn(
+    "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
+    skin.studio
+      ? active
+        ? "bg-[#31CDFF]/18 text-[#31CDFF]"
+        : "text-white/65 hover:bg-white/[0.08] hover:text-white"
+      : active
+        ? "bg-[#272156]/12 text-[#272156]"
+        : "text-muted-foreground hover:bg-[#272156]/06 hover:text-[#272156]"
+  );
+}
+
+function FlatNavLink({
+  item,
+  pathname,
+  skin,
+  onNavigate,
+}: {
+  item: AdminNavLink;
+  pathname: string;
+  skin: Skin;
+  onNavigate?: () => void;
+}) {
+  const active = isNavLinkActive(item, pathname);
+  return (
+    <Link
+      href={item.href}
+      className={skin.navLink(active)}
+      data-tour={item.tourAttr}
+      aria-current={active ? "page" : undefined}
+      onClick={onNavigate}
+    >
+      <item.icon
+        className={cn(skin.navIcon, active ? undefined : skin.sectionIcon)}
+        strokeWidth={ICON_STROKE}
+      />
+      <span className="ml-2.5 truncate">{item.name}</span>
+    </Link>
+  );
+}
+
+function ExpandedNavGroup({
+  group,
+  pathname,
+  skin,
+  expanded,
+  onToggle,
+  onNavigate,
+  spring,
+  reducedMotion,
+}: {
+  group: AdminNavGroup;
+  pathname: string;
+  skin: Skin;
+  expanded: boolean;
+  onToggle: () => void;
+  onNavigate?: () => void;
+  spring: Transition;
+  reducedMotion: boolean;
+}) {
+  const parentActive = isNavGroupPathActive(group, pathname);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={skin.sectionButtonActive(parentActive)}
+        aria-expanded={expanded}
+      >
+        <group.icon
+          className={cn(
+            skin.navIcon,
+            parentActive ? undefined : skin.sectionIcon
+          )}
+          strokeWidth={ICON_STROKE}
+        />
+        <span className="ml-2.5 min-w-0 flex-1 truncate text-left">
+          {group.name}
+        </span>
+        <motion.span
+          animate={{ rotate: expanded ? 0 : -90 }}
+          transition={spring}
+          className="inline-flex"
+        >
+          <ChevronDown className={skin.chevron} strokeWidth={ICON_STROKE} />
+        </motion.span>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            key={`${group.id}-children`}
+            initial={
+              reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }
+            }
+            animate={
+              reducedMotion ? { opacity: 1 } : { height: "auto", opacity: 1 }
+            }
+            exit={
+              reducedMotion ? { opacity: 0 } : { height: 0, opacity: 0 }
+            }
+            transition={spring}
+            className="overflow-hidden"
+          >
+            <div
+              className={cn("mt-0.5", skin.childRail)}
+              role="group"
+              aria-label={`${group.name} sections`}
+            >
+              {group.children.map((child) => {
+                const active = isNavLinkActive(child, pathname);
+                return (
+                  <Link
+                    key={child.id}
+                    href={child.href}
+                    className={skin.subLink(active)}
+                    data-tour={child.tourAttr}
+                    aria-current={active ? "page" : undefined}
+                    onClick={onNavigate}
+                  >
+                    <span className={skin.childBullet} aria-hidden />
+                    <span className="truncate">{child.name}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Icon-rail group control: origin-aware flyout when panel collapsed. */
+function GroupRailIcon({
+  item,
+  pathname,
+  panelOpen,
+  skin,
+  reducedMotion,
+  onExpandPanel,
+}: {
+  item: AdminNavGroup;
+  pathname: string;
+  panelOpen: boolean;
+  skin: Skin;
+  reducedMotion: boolean;
+  onExpandPanel: () => void;
+}) {
+  const active = isNavGroupPathActive(item, pathname);
+
+  if (panelOpen) {
+    return (
+      <UiTooltip>
+        <TooltipTrigger asChild>
+          <motion.div
+            whileTap={reducedMotion ? undefined : pressTap}
+            transition={{ duration: 0.1, ease: "easeOut" }}
+          >
+            <Link
+              href={groupRailHref(item)}
+              aria-label={item.name}
+              aria-current={active ? "page" : undefined}
+              className={railIconClass(skin, active)}
+              onClick={onExpandPanel}
+            >
+              <item.icon
+                className="h-[18px] w-[18px]"
+                strokeWidth={ICON_STROKE}
+              />
+            </Link>
+          </motion.div>
+        </TooltipTrigger>
+        <TooltipContent side="right" sideOffset={10}>
+          {item.name}
+        </TooltipContent>
+      </UiTooltip>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <UiTooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <motion.button
+              type="button"
+              aria-label={item.name}
+              className={railIconClass(skin, active)}
+              whileTap={reducedMotion ? undefined : pressTap}
+              transition={{ duration: 0.1, ease: "easeOut" }}
+            >
+              <item.icon
+                className="h-[18px] w-[18px]"
+                strokeWidth={ICON_STROKE}
+              />
+            </motion.button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="right" sideOffset={10}>
+          {item.name}
+        </TooltipContent>
+      </UiTooltip>
+      <DropdownMenuContent
+        side="right"
+        align="start"
+        sideOffset={12}
+        className={cn("min-w-[11rem] origin-left p-1.5", skin.flyout)}
+        style={{ backgroundColor: skin.flyoutBg }}
+      >
+        <DropdownMenuLabel className={skin.flyoutHeading}>
+          {item.name}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator
+          className={skin.studio ? "bg-white/10" : "bg-border"}
+        />
+        {item.children.map((child) => {
+          const childActive = isNavLinkActive(child, pathname);
+          return (
+            <DropdownMenuItem key={child.id} asChild>
+              <Link
+                href={child.href}
+                className={skin.flyoutLink(childActive)}
+                data-tour={child.tourAttr}
+              >
+                {child.name}
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

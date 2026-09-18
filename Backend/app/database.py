@@ -30,9 +30,15 @@ _DEFAULT_SYNC_COLLECTIONS = [
 	"pending_registrations",
 	"email_campaigns",
 	"email_logs",
+	"application_emails",
 	"notifications",
 	"user_notifications",
 	"settings",
+	"leave_types",
+	"leave_policies",
+	"leave_requests",
+	"leave_balances",
+	"leave_calendar_events",
 ]
 
 
@@ -631,6 +637,25 @@ async def initialize_database_indexes():
 			name="cv_vault_contact_flags",
 		)
 
+		# Application team discussion comments
+		await ensure_index(
+			_database.application_comments,
+			["applicationId", "createdAt"],
+			name="application_comments_applicationId_createdAt",
+		)
+		await ensure_index(
+			_database.application_comments,
+			["parentId"],
+			name="application_comments_parentId",
+		)
+
+		# Candidate profile Email / SMS thread
+		await ensure_index(
+			_database.application_emails,
+			["applicationId", "sentAt"],
+			name="application_emails_applicationId_sentAt",
+		)
+
 		# Admin activity audit log
 		await ensure_index(
 			_database.admin_activities,
@@ -692,6 +717,12 @@ async def initialize_database_indexes():
 			name="email_logs_status"
 		)
 
+		await ensure_index(
+			_database.email_logs,
+			["email_type"],
+			name="email_logs_email_type"
+		)
+
 		# Text search index for applications
 		try:
 			# Create text index for search functionality
@@ -717,6 +748,18 @@ async def initialize_database_indexes():
 			name="jobpostings_status"
 		)
 
+		await ensure_index(
+			_database.jobpostings,
+			["autoOpenEnabled", "autoOpenAt"],
+			name="jobpostings_auto_open"
+		)
+
+		await ensure_index(
+			_database.jobpostings,
+			["autoCloseEnabled", "autoCloseAt"],
+			name="jobpostings_auto_close"
+		)
+
 		# Text search index for job postings
 		try:
 			await _database.jobpostings.create_index([
@@ -739,6 +782,43 @@ async def initialize_database_indexes():
 			["token"],
 			name="password_resets_token_unique",
 			unique=True
+		)
+
+		# Leave module
+		await ensure_index(
+			_database.leave_requests,
+			["status", "startDate"],
+			name="leave_requests_status_startDate",
+		)
+		await ensure_index(
+			_database.leave_requests,
+			["employeeId"],
+			name="leave_requests_employeeId",
+		)
+		await ensure_index(
+			_database.leave_balances,
+			["employeeId", "leaveTypeName"],
+			name="leave_balances_employee_type",
+		)
+		await ensure_index(
+			_database.leave_types,
+			["code"],
+			name="leave_types_code",
+		)
+		await ensure_index(
+			_database.leave_policies,
+			["region"],
+			name="leave_policies_region",
+		)
+		await ensure_index(
+			_database.leave_calendar_events,
+			["startDate", "endDate"],
+			name="leave_calendar_events_range",
+		)
+		await ensure_index(
+			_database.leave_calendar_events,
+			["requestId"],
+			name="leave_calendar_events_requestId",
 		)
 		
 		logger.info("Database indexes initialized successfully")

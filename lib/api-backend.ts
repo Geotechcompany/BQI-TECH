@@ -1,6 +1,12 @@
 import { authService } from "./auth-backend";
 import { BACKEND_URL } from "./config";
 import { normalizeAdminNotification } from "./admin-notification-utils";
+import { ResponseDecryption } from "./encryption-decoder";
+import { ResponseDecoder } from "./response-decoder";
+import type {
+  CommunicationEmail,
+  CommunicationEmailCounts,
+} from "@/types/communication-email";
 
 const API_FETCH_TIMEOUT_MS = 30_000;
 
@@ -65,6 +71,11 @@ function formatFastApiDetail(detail: unknown): string {
     const obj = detail as Record<string, unknown>;
     if (typeof obj.message === "string" && obj.message.trim()) {
       return obj.message;
+    }
+    if (Array.isArray(obj.missingFields) && obj.missingFields.length) {
+      return `Cannot activate position. Missing required fields: ${obj.missingFields
+        .map(String)
+        .join(", ")}`;
     }
     if (typeof obj.detail === "string" && obj.detail.trim()) {
       return obj.detail;
@@ -144,6 +155,24 @@ export class BackendApiClient {
     }`;
   }
 
+  private async decodeJsonBody(response: Response): Promise<any> {
+    const raw = await response.json();
+    const userId = authService.getSession()?.user?.id;
+    try {
+      const decrypted = await ResponseDecryption.decrypt(raw, userId);
+      if (
+        decrypted &&
+        typeof decrypted === "object" &&
+        (decrypted as { encrypted?: boolean }).encrypted === true
+      ) {
+        return raw;
+      }
+      return decrypted;
+    } catch {
+      return ResponseDecoder.decode(raw);
+    }
+  }
+
   // Make request
   async request<T = any>(
     endpoint: string,
@@ -205,14 +234,14 @@ export class BackendApiClient {
           throw new Error(await readApiErrorMessage(retryResponse));
         }
 
-        return retryResponse.json();
+        return this.decodeJsonBody(retryResponse);
       }
 
       if (!response.ok) {
         throw new Error(await readApiErrorMessage(response));
       }
 
-      return response.json();
+      return this.decodeJsonBody(response);
     } catch (error) {
       console.error("API request error:", error);
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -287,7 +316,8 @@ export class BackendApiClient {
   async upload<T = any>(
     endpoint: string,
     file: File,
-    additionalData?: Record<string, any>
+    additionalData?: Record<string, any>,
+    onProgress?: (percent: number) => void
   ): Promise<T> {
     const formData = new FormData();
     formData.append("file", file);
@@ -301,28 +331,65 @@ export class BackendApiClient {
     const headers = this.getAuthHeaders();
     headers.delete("Content-Type"); // Let browser set correct content type for FormData
 
-    try {
-      const response = await fetch(this.buildUrl(endpoint), {
-        method: "POST",
-        headers,
-        body: formData,
-        credentials: "include",
-      });
+    if (!onProgress) {
+      try {
+        const response = await fetch(this.buildUrl(endpoint), {
+          method: "POST",
+          headers,
+          body: formData,
+          credentials: "include",
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.detail ||
-            errorData.message ||
-            `Upload failed: HTTP ${response.status}`
-        );
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.detail ||
+              errorData.message ||
+              `Upload failed: HTTP ${response.status}`
+          );
+        }
+
+        return this.parseResponse(response);
+      } catch (error) {
+        console.error(`File upload failed for ${endpoint}:`, error);
+        throw error;
       }
-
-      return this.parseResponse(response);
-    } catch (error) {
-      console.error(`File upload failed for ${endpoint}:`, error);
-      throw error;
     }
+
+    return new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", this.buildUrl(endpoint));
+      xhr.withCredentials = true;
+      headers.forEach((value, key) => {
+        xhr.setRequestHeader(key, value);
+      });
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      };
+      xhr.onload = () => {
+        try {
+          const body = xhr.responseText
+            ? JSON.parse(xhr.responseText)
+            : {};
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(body as T);
+            return;
+          }
+          reject(
+            new Error(
+              body.detail ||
+                body.message ||
+                `Upload failed: HTTP ${xhr.status}`
+            )
+          );
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error("Upload failed"));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Upload failed"));
+      xhr.send(formData);
+    });
   }
 }
 
@@ -384,6 +451,20 @@ export const adminApi = {
   createJobPosting: (data: any) =>
     backendApi.post("/api/admin/job-postings", data),
 
+  generateJobDescription: (data: {
+    prompt: string;
+    title?: string;
+    department?: string;
+    location?: string;
+    employmentType?: string;
+    existingDescription?: string;
+    mode?: "generate" | "adjust";
+  }) =>
+    backendApi.post<{ description: string }>(
+      "/api/admin/job-postings/ai/generate-description",
+      data
+    ),
+
   getJobPosting: (id: string) =>
     backendApi.get(`/api/admin/job-postings/${id}`),
 
@@ -429,6 +510,68 @@ export const adminApi = {
 
   deleteUser: (id: string) => backendApi.delete(`/api/admin/users/${id}`),
 
+  // People / Employees
+  getEmployees: (params?: {
+    search?: string;
+    departmentId?: string;
+    status?: string;
+    employmentType?: string;
+    skip?: number;
+    limit?: number;
+  }) => backendApi.get("/api/admin/employees", params),
+
+  getEmployee: (id: string) => backendApi.get(`/api/admin/employees/${id}`),
+
+  createEmployee: (data: Record<string, unknown>) =>
+    backendApi.post("/api/admin/employees", data),
+
+  updateEmployee: (id: string, data: Record<string, unknown>) =>
+    backendApi.patch(`/api/admin/employees/${id}`, data),
+
+  resendEmployeeInvite: (id: string) =>
+    backendApi.post<{
+      ok: boolean;
+      inviteStatus: string;
+      toEmail: string;
+      message: string;
+      invitePreferences?: Record<string, unknown>;
+    }>(`/api/admin/employees/${id}/resend-invite`),
+
+  uploadEmployeeDocument: (
+    employeeId: string,
+    data: {
+      name: string;
+      category: string;
+      fileUrl: string;
+      fileName: string;
+      fileSize: number;
+    }
+  ) => backendApi.post(`/api/admin/employees/${employeeId}/documents`, data),
+
+  deleteEmployee: (id: string) =>
+    backendApi.delete(`/api/admin/employees/${id}`),
+
+  getEmployeeOrgChart: () => backendApi.get("/api/admin/employees/org-chart"),
+
+  getAttendanceOverview: () =>
+    backendApi.get("/api/admin/employees/attendance-overview"),
+
+  seedEmployees: () => backendApi.post("/api/admin/employees/seed"),
+
+  importEmployees: (data: { rows: Record<string, unknown>[] }) =>
+    backendApi.post("/api/admin/employees/import", data),
+
+  getDepartments: () => backendApi.get("/api/admin/departments"),
+
+  createDepartment: (data: Record<string, unknown>) =>
+    backendApi.post("/api/admin/departments", data),
+
+  updateDepartment: (id: string, data: Record<string, unknown>) =>
+    backendApi.patch(`/api/admin/departments/${id}`, data),
+
+  deleteDepartment: (id: string) =>
+    backendApi.delete(`/api/admin/departments/${id}`),
+
   // Blog Posts
   getBlogPosts: (params?: { skip?: number; limit?: number }) =>
     backendApi.get("/api/admin/blog-posts", params),
@@ -461,6 +604,71 @@ export const adminApi = {
         ...(options?.archived && { archived: true }),
       }
     ),
+
+  getMyAgenda: (params?: { limit?: number }) =>
+    backendApi.get("/api/admin/my-agenda", params),
+
+  getMyTasks: (params?: { limit?: number }) =>
+    backendApi.get("/api/admin/my-tasks", params),
+
+  getTasks: (params?: { filter?: "mine" | "team" | "completed"; limit?: number }) =>
+    backendApi.get("/api/admin/tasks", params),
+
+  createTask: (data: {
+    title: string;
+    description?: string;
+    assigneeId?: string | null;
+    assigneeName?: string | null;
+    dueDate?: string | null;
+    positionId?: string | null;
+  }) => backendApi.post("/api/admin/tasks", data),
+
+  updateTask: (
+    taskId: string,
+    data: {
+      title?: string;
+      description?: string;
+      assigneeId?: string | null;
+      assigneeName?: string | null;
+      dueDate?: string | null;
+      status?: "open" | "completed";
+      positionId?: string | null;
+    }
+  ) => backendApi.patch(`/api/admin/tasks/${taskId}`, data),
+
+  deleteTask: (taskId: string) =>
+    backendApi.delete(`/api/admin/tasks/${taskId}`),
+
+  listCompanyDocuments: (params?: {
+    category?: string;
+    search?: string;
+    limit?: number;
+  }) => backendApi.get("/api/admin/documents", params),
+
+  createCompanyDocument: (data: {
+    title: string;
+    description?: string;
+    category: "policies" | "handbooks" | "templates" | "forms";
+    format: "PDF" | "DOC" | "XLS";
+    fileUrl: string;
+    fileName: string;
+    fileSize: number;
+  }) => backendApi.post("/api/admin/documents", data),
+
+  updateCompanyDocument: (
+    documentId: string,
+    data: {
+      title?: string;
+      description?: string;
+      category?: "policies" | "handbooks" | "templates" | "forms";
+    }
+  ) => backendApi.patch(`/api/admin/documents/${documentId}`, data),
+
+  markCompanyDocumentAccessed: (documentId: string) =>
+    backendApi.post(`/api/admin/documents/${documentId}/access`, {}),
+
+  deleteCompanyDocument: (documentId: string) =>
+    backendApi.delete(`/api/admin/documents/${documentId}`),
 
   // Questions
   getQuestions: (jobId?: string) =>
@@ -522,6 +730,40 @@ export const adminApi = {
   testAiProvider: (data?: Record<string, unknown>) =>
     backendApi.post("/api/admin/settings/ai-providers/test", data ?? {}),
   getAiStatus: () => backendApi.get("/api/admin/ai/status"),
+
+  getMicrosoftIntegrationStatus: () =>
+    backendApi.get("/api/admin/integrations/microsoft/status"),
+  startMicrosoftConnect: () =>
+    backendApi.get("/api/admin/integrations/microsoft/connect"),
+  disconnectMicrosoft: () =>
+    backendApi.delete("/api/admin/integrations/microsoft"),
+  syncMicrosoftCalendar: () =>
+    backendApi.post("/api/admin/integrations/microsoft/sync", {}),
+  getMicrosoftCalendarEvents: () =>
+    backendApi.get("/api/admin/integrations/microsoft/events"),
+
+  getDocuSignIntegrationStatus: () =>
+    backendApi.get("/api/admin/integrations/docusign/status"),
+  getLinearIntegrationStatus: () =>
+    backendApi.get("/api/admin/integrations/linear/status"),
+  verifyLinearIntegration: () =>
+    backendApi.post("/api/admin/integrations/linear/verify", {}),
+  saveIntegrationCredentials: (
+    provider: "microsoft" | "docusign" | "linear",
+    data: Record<string, unknown>
+  ) =>
+    backendApi.put(
+      `/api/admin/integrations/${provider}/credentials`,
+      data
+    ),
+  clearIntegrationCredentials: (
+    provider: "microsoft" | "docusign" | "linear"
+  ) => backendApi.delete(`/api/admin/integrations/${provider}/credentials`),
+  sendEmployeeOfferViaDocuSign: (employeeId: string) =>
+    backendApi.post(
+      `/api/admin/employees/${employeeId}/docusign/send-offer`,
+      {}
+    ),
 
   // Get notifications
   async getNotifications(params?: { skip?: number; limit?: number }) {
@@ -615,6 +857,30 @@ export const adminApi = {
   getSurveyAnalytics: (id: string) =>
     backendApi.get(`/api/admin/surveys/${id}/analytics`),
 
+  // Leave
+  getLeaveOverview: () => backendApi.get("/api/admin/leave/overview"),
+  listLeaveRequests: (params?: {
+    status?: string;
+    skip?: number;
+    limit?: number;
+  }) => backendApi.get("/api/admin/leave/requests", params),
+  createLeaveRequest: (data: Record<string, unknown>) =>
+    backendApi.post("/api/admin/leave/requests", data),
+  updateLeaveRequest: (id: string, data: Record<string, unknown>) =>
+    backendApi.patch(`/api/admin/leave/requests/${id}`, data),
+  listLeaveBalances: (params?: { skip?: number; limit?: number }) =>
+    backendApi.get("/api/admin/leave/balances", params),
+  recomputeLeaveBalances: () =>
+    backendApi.post("/api/admin/leave/balances/recompute", {}),
+  listLeaveTypes: () => backendApi.get("/api/admin/leave/types"),
+  updateLeaveType: (id: string, data: Record<string, unknown>) =>
+    backendApi.patch(`/api/admin/leave/types/${id}`, data),
+  listLeavePolicies: () => backendApi.get("/api/admin/leave/policies"),
+  getLeaveCalendar: (year: number, month: number) =>
+    backendApi.get("/api/admin/leave/calendar", { year, month }),
+  seedLeaveData: (force = false) =>
+    backendApi.post(`/api/admin/leave/seed?force=${force ? "true" : "false"}`, {}),
+
   // Email Broadcast
   getUsersCount: () => backendApi.get("/api/admin/users/count"),
   generateAIEmail: (data: { prompt: string }) =>
@@ -625,6 +891,29 @@ export const adminApi = {
     recipients: string[];
     mode: string;
   }) => backendApi.post("/api/admin/emails/broadcast", data),
+  listEmailTemplates: () =>
+    backendApi.get<{
+      items: Array<{
+        id: string;
+        stageKey: string;
+        name: string;
+        subject: string;
+        html: string;
+        body: string;
+        isDefault?: boolean;
+      }>;
+      total: number;
+    }>("/api/admin/emails/templates"),
+  getEmailTemplateByStage: (stageKey: string) =>
+    backendApi.get(
+      `/api/admin/emails/templates/by-stage/${encodeURIComponent(stageKey)}`
+    ),
+  ensureEmailTemplates: () =>
+    backendApi.post("/api/admin/emails/templates/ensure", {}),
+  updateEmailTemplate: (
+    id: string,
+    data: { name?: string; subject?: string; html?: string; body?: string }
+  ) => backendApi.patch(`/api/admin/emails/templates/${id}`, data),
 
   // Email History & Analytics
   getEmailCampaigns: (params?: { skip?: number; limit?: number }) =>
@@ -637,6 +926,30 @@ export const adminApi = {
     campaign_id?: string;
     status?: string;
   }) => backendApi.get("/api/admin/emails/logs", params),
+
+  getCommunicationEmails: (params?: {
+    skip?: number;
+    limit?: number;
+    status?: string;
+    type?: string;
+    q?: string;
+    starred?: boolean;
+  }) =>
+    backendApi.get("/api/admin/communications/emails", params),
+
+  starCommunicationEmail: (emailId: string, starred: boolean) =>
+    backendApi.patch<CommunicationEmail>(
+      `/api/admin/communications/emails/${emailId}/star`,
+      { starred }
+    ),
+
+  getCommunicationEmailCounts: () =>
+    backendApi.get<CommunicationEmailCounts>(
+      "/api/admin/communications/emails/counts"
+    ),
+
+  resendCommunicationEmail: (emailId: string) =>
+    backendApi.post(`/api/admin/communications/emails/${emailId}/resend`, {}),
 
   // Broadcast Lists
   listBroadcastLists: (params?: { skip?: number; limit?: number }) =>
@@ -716,8 +1029,20 @@ export const userApi = {
 
   // Email verification
   async resendVerification() {
-    const profile = await this.getProfile();
-    return backendApi.post("/api/users/resend-verification", profile.email);
+    const sessionEmail = authService.getSession()?.user?.email;
+    let email = sessionEmail || "";
+    try {
+      const profile = await this.getProfile();
+      if (typeof profile?.email === "string" && profile.email.trim()) {
+        email = profile.email.trim();
+      }
+    } catch {
+      // Fall back to session email when profile decrypt/load fails
+    }
+    if (!email) {
+      throw new Error("No email available to resend verification");
+    }
+    return backendApi.post("/api/users/resend-verification", email);
   },
 
   // Avatar Upload
@@ -818,6 +1143,110 @@ export const publicApi = {
     const json = await response.json().catch(() => ({}));
     return { ...json, httpStatus: response.status, ok: response.ok };
   },
+};
+
+/** Employee self-service portal (`/api/employee/*`). */
+export const employeePortalApi = {
+  getMe: () => backendApi.get("/api/employee/me"),
+  updateMe: (data: Record<string, unknown>) =>
+    backendApi.patch("/api/employee/me", data),
+  getLeaveBalances: () =>
+    backendApi.get<{ items: unknown[]; total: number }>(
+      "/api/employee/leave/balances"
+    ),
+  getLeaveTypes: () =>
+    backendApi.get<{ items: unknown[]; total: number }>(
+      "/api/employee/leave/types"
+    ),
+  getLeaveRequests: () =>
+    backendApi.get<{ items: unknown[]; total: number }>(
+      "/api/employee/leave/requests"
+    ),
+  getLeaveRequestDetail: (requestId: string) =>
+    backendApi.get<unknown>(`/api/employee/leave/requests/${requestId}`),
+  cancelLeaveRequest: (requestId: string) =>
+    backendApi.post<unknown>(
+      `/api/employee/leave/requests/${requestId}/cancel`,
+      {}
+    ),
+  getLeaveRequestOverlaps: (requestId: string) =>
+    backendApi.get<{
+      department: unknown[];
+      company: unknown[];
+      departmentName?: string | null;
+    }>(`/api/employee/leave/requests/${requestId}/overlaps`),
+  getLeaveRequestComments: (requestId: string) =>
+    backendApi.get<{ items: unknown[]; total: number }>(
+      `/api/employee/leave/requests/${requestId}/comments`
+    ),
+  addLeaveRequestComment: (requestId: string, body: string) =>
+    backendApi.post<unknown>(
+      `/api/employee/leave/requests/${requestId}/comments`,
+      { body }
+    ),
+  getLeaveCalendar: (year: number, month: number) =>
+    backendApi.get<{
+      year: number;
+      month: number;
+      days: Array<{ date: string; entries: unknown[] }>;
+      events: unknown[];
+    }>("/api/employee/leave/calendar", { year, month }),
+  getLeaveCalendarFilters: () =>
+    backendApi.get<{
+      users: Array<{
+        id: string;
+        name: string;
+        departmentName: string;
+        jobTitle: string;
+      }>;
+      teams: string[];
+      positions: string[];
+    }>("/api/employee/leave/calendar/filters"),
+  createLeaveRequest: (data: {
+    leaveTypeId: string;
+    startDate: string;
+    endDate: string;
+    startPeriod?: "morning" | "afternoon";
+    endPeriod?: "end_of_day" | "morning" | "afternoon";
+    reason?: string;
+    substituteEmployeeId?: string;
+  }) =>
+    backendApi.post<unknown>("/api/employee/leave/requests", data),
+  getDocuments: () =>
+    backendApi.get<{ items: unknown[]; total: number }>(
+      "/api/employee/documents"
+    ),
+  uploadFile: (file: File, onProgress?: (percent: number) => void) =>
+    backendApi.upload<{
+      url?: string;
+      fileName?: string;
+      fileSize?: number;
+    }>("/api/upload", file, undefined, onProgress),
+  addDocument: (data: {
+    name: string;
+    category: string;
+    fileUrl: string;
+    fileName: string;
+    fileSize: number;
+  }) =>
+    backendApi.post<{ document: unknown; items: unknown[] }>(
+      "/api/employee/documents",
+      data
+    ),
+  replaceDocument: (
+    documentId: string,
+    data: {
+      name: string;
+      category: string;
+      fileUrl: string;
+      fileName: string;
+      fileSize: number;
+    }
+  ) =>
+    backendApi.patch<{ document: unknown; items: unknown[] }>(
+      `/api/employee/documents/${documentId}`,
+      data
+    ),
 };
 
 export default backendApi;

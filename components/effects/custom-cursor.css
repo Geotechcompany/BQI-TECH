@@ -1,0 +1,68 @@
+@keyframes custom-cursor-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Hide system cursor site-wide while the custom cursor is active */
+html.custom-cursor-active,
+html.custom-cursor-active * {
+  cursor: none !important;
+}
+
+/*
+  High-contrast dual-tone: dark fill + light rim.
+  No mix-blend-mode — hard-light + cream vanished on light admin UIs.
+*/
+.bqi-cursor {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bqi-cursor-fill, #1c1917);
+  border: 1.5px solid var(--bqi-cursor-rim, #f4efe3);
+  box-shadow: 0 0 0 1px rgba(28, 25, 23, 0.35);
+  position: fixed;
+  top: 0;
+  left: 0;
+  /* Above admin chrome, dialogs (~9999), and tour overlays (~10000) */
+  z-index: 2147483646;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+
+.bqi-cursor-f {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  border: 1.5px dashed var(--bqi-cursor-ring, #1c1917);
+  /* Light halo so the ring stays visible on dark surfaces too */
+  box-shadow: 0 0 0 1px var(--bqi-cursor-rim, #f4efe3);
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+  z-index: 2147483645;
+  animation: custom-cursor-spin 2.6s linear infinite;
+  animation-play-state: paused;
+  transition: opacity 0.4s, background-color 0.15s;
+}
+
+.bqi-cursor.clicked .bqi-cursor-f {
+  background-color: color-mix(
+    in srgb,
+    var(--bqi-cursor-fill, #1c1917) 14%,
+    transparent
+  );
+}
+
+.bqi-cursor.hidden,
+.bqi-cursor.hidden .bqi-cursor-f {
+  opacity: 0;
+}
+
+.bqi-cursor-f.is-spinning {
+  animation-play-state: running;
+}

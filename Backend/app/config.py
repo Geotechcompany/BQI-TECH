@@ -29,15 +29,23 @@ class Settings(BaseModel):
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "BQI Tech Backend"
     app_url: str = "https://api.bqitech.com"
+    # Prefer FRONTEND_URL. Do not default to production — invite/email links use
+    # get_frontend_url() which maps DB env → Netlify/prod hosts.
     frontend_url: str = (
         os.getenv("FRONTEND_URL")
         or os.getenv("NEXT_PUBLIC_APP_URL")
-        or "https://bqitech.com"
+        or (
+            "https://bqitech.com"
+            if os.getenv("NODE_ENV", "development").lower() == "production"
+            else "https://bqitech-hr-dev.netlify.app"
+        )
     )
     
     # Security
     SECRET_KEY: str = Field(default=os.getenv("SECRET_KEY", "your-secret-key-change-in-production"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+    # Refresh tokens must outlive idle session warnings so "Stay Logged In" can renew
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
     algorithm: str = os.getenv("ALGORITHM", "HS256")
     
     # Production/Development Mode
@@ -113,6 +121,12 @@ class Settings(BaseModel):
     dropbox_access_token: str = os.getenv("DROPBOX_ACCESS_TOKEN", "")
     dropbox_refresh_token: str = os.getenv("DROPBOX_REFRESH_TOKEN", "")
     dropbox_redirect_uri: str = os.getenv("DROPBOX_REDIRECT_URI", "")
+
+    # Microsoft Graph (delegated calendar sync — Settings → Integrations)
+    microsoft_client_id: str = os.getenv("MICROSOFT_CLIENT_ID", "")
+    microsoft_client_secret: str = os.getenv("MICROSOFT_CLIENT_SECRET", "")
+    microsoft_tenant_id: str = os.getenv("MICROSOFT_TENANT_ID", "organizations")
+    microsoft_redirect_uri: str = os.getenv("MICROSOFT_REDIRECT_URI", "")
     
     # Pusher Configuration
     pusher_app_id: str = os.getenv("PUSHER_APP_ID", "")

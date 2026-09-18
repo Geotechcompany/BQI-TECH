@@ -29,15 +29,15 @@ export function AiConfigBanner() {
       <div className="flex items-center gap-3">
         <AlertTriangle className="h-4 w-4 flex-shrink-0" />
         <p className="text-sm">
-          AI features are turned off because no provider API key is set. Add one
-          in{" "}
+          BQI Intelligence features are turned off because no provider API key is
+          set. Add one in{" "}
           <Link
             href="/admin/settings?section=ai"
             className="font-semibold underline underline-offset-2 hover:opacity-80"
           >
             Settings → AI providers
           </Link>{" "}
-          to enable AI ranking.
+          to enable ranking.
         </p>
         <button
           type="button"

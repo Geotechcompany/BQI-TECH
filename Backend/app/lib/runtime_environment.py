@@ -2,6 +2,7 @@
 
 from enum import Enum
 import os
+from urllib.parse import urlparse
 
 from app.database import get_active_database_name, is_connected
 
@@ -25,6 +26,12 @@ _ENVIRONMENT_FRONTEND_URLS = {
 }
 
 _PRODUCTION_FRONTEND_URL = _ENVIRONMENT_FRONTEND_URLS[RuntimeEnvironment.PRODUCTION]
+_PRODUCTION_FRONTEND_HOSTS = frozenset(
+    {
+        "bqitech.com",
+        "www.bqitech.com",
+    }
+)
 
 
 def detect_environment_from_database_name(db_name: str) -> RuntimeEnvironment:
@@ -58,16 +65,67 @@ def _fallback_environment() -> RuntimeEnvironment:
     return RuntimeEnvironment.DEVELOPMENT
 
 
+def _normalize_base_url(value: str | None) -> str:
+    return (value or "").strip().rstrip("/")
+
+
+def _hostname(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _is_production_frontend_url(url: str) -> bool:
+    host = _hostname(url)
+    if host in _PRODUCTION_FRONTEND_HOSTS:
+        return True
+    return _normalize_base_url(url) in {
+        _PRODUCTION_FRONTEND_URL,
+        "https://www.bqitech.com",
+        "http://bqitech.com",
+        "http://www.bqitech.com",
+    }
+
+
+def _is_loopback_frontend_url(url: str) -> bool:
+    """Local browser URLs are not useful in outbound invite emails."""
+    host = _hostname(url)
+    return host in {"localhost", "127.0.0.1", "0.0.0.0"} or host.endswith(".local")
+
+
+def _usable_public_url(url: str, *, allow_loopback: bool = False) -> str | None:
+    normalized = _normalize_base_url(url)
+    if not normalized:
+        return None
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if not allow_loopback and _is_loopback_frontend_url(normalized):
+        return None
+    return normalized
+
+
 def get_frontend_url() -> str:
-    """Resolve the public frontend base URL for links in emails and redirects."""
-    explicit = (os.getenv("FRONTEND_URL") or "").strip().rstrip("/")
-    explicit_next = (os.getenv("NEXT_PUBLIC_APP_URL") or "").strip().rstrip("/")
+    """Resolve the public frontend base URL for links in emails and redirects.
+
+    Priority:
+    1. FRONTEND_URL_<ENV> (e.g. FRONTEND_URL_DEVELOPMENT)
+    2. FRONTEND_URL (ignored on non-prod when it points at production)
+    3. NEXT_PUBLIC_APP_URL when it is a public (non-loopback) URL
+    4. Environment default (Netlify for dev/staging, bqitech.com for production)
+    """
+    explicit = _usable_public_url(os.getenv("FRONTEND_URL"), allow_loopback=True)
+    explicit_next = _usable_public_url(os.getenv("NEXT_PUBLIC_APP_URL"))
 
     db_name = get_active_database_name()
     environment = detect_environment_from_database_name(db_name)
 
     env_key = environment.name
-    env_override = (os.getenv(f"FRONTEND_URL_{env_key}") or "").strip().rstrip("/")
+    env_override = _usable_public_url(
+        os.getenv(f"FRONTEND_URL_{env_key}"),
+        allow_loopback=True,
+    )
     if env_override:
         return env_override
 
@@ -77,9 +135,11 @@ def get_frontend_url() -> str:
     ).rstrip("/")
 
     if environment != RuntimeEnvironment.PRODUCTION:
-        if explicit and explicit != _PRODUCTION_FRONTEND_URL:
+        # A production FRONTEND_URL on a non-prod DB is almost always a misconfig
+        # copied from Render production — prefer the env default instead.
+        if explicit and not _is_production_frontend_url(explicit):
             return explicit
-        if explicit_next and environment == RuntimeEnvironment.DEVELOPMENT:
+        if explicit_next:
             return explicit_next
         return env_default
 

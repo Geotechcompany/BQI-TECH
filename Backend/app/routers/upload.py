@@ -11,6 +11,7 @@ import dropbox
 from dropbox.exceptions import ApiError, AuthError
 from dropbox.files import WriteMode
 from ..lib.dropbox import get_dropbox_access_token
+from app.lib.user_avatar import sync_avatar_to_employee_roster
 import io
 from bson import ObjectId
 
@@ -22,7 +23,18 @@ router = APIRouter(tags=["upload"])
 # Configure upload settings
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", 10485760))  # 10MB default
 # Hardcode allowed extensions to include images
-ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "jpg", "jpeg", "png", "gif", "webp"}
+ALLOWED_EXTENSIONS = {
+    "pdf",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+}
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 
 # Debug logging
@@ -102,9 +114,16 @@ async def upload_avatar(
                 {
                     "$set": {
                         "avatar": avatar_url,
+                        "avatarUrl": avatar_url,
                         "updatedAt": datetime.utcnow()
                     }
                 }
+            )
+            # Mirror onto matching employee roster row when present.
+            await sync_avatar_to_employee_roster(
+                db,
+                avatar_url=avatar_url,
+                user=current_user,
             )
 
             return {

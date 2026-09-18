@@ -45,7 +45,7 @@ export default function AiApplicantRankingReleasePage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg" className="bg-white text-violet-700 hover:bg-white/90">
-              <Link href="/admin/applications">
+              <Link href="/admin/candidates">
                 Try on Applications
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -62,7 +62,7 @@ export default function AiApplicantRankingReleasePage() {
 
           <div className="mt-10 grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-sm">
-              <p className="text-xs uppercase tracking-wide text-white/70">AI Score</p>
+              <p className="text-xs uppercase tracking-wide text-white/70">BQI Intelligence</p>
               <div className="mt-2 flex items-end gap-2">
                 <span className="text-4xl font-bold">92</span>
                 <span className="pb-1 text-sm text-white/70">/100</span>
@@ -70,10 +70,10 @@ export default function AiApplicantRankingReleasePage() {
               <p className="mt-1 text-sm text-emerald-200">Strong Fit</p>
             </div>
             <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-sm">
-              <p className="text-xs uppercase tracking-wide text-white/70">AI Assessment</p>
+              <p className="text-xs uppercase tracking-wide text-white/70">BQI Intelligence assessment</p>
               <p className="mt-2 text-sm font-medium text-violet-100">vs Full Stack Engineer</p>
               <p className="mt-2 text-sm leading-relaxed text-white/85">
-                Strong match on React, Python, and REST API experience aligned to role requirements.
+                Strong match on React, Python, and REST API experience aligned to position requirements.
               </p>
             </div>
           </div>
@@ -105,7 +105,7 @@ export default function AiApplicantRankingReleasePage() {
         <section className="rounded-2xl border border-border bg-card p-6 md:p-8">
           <h2 className="text-xl font-semibold text-foreground">How to use it</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Four steps to start ranking candidates with AI
+            Four steps to start ranking candidates with BQI Intelligence
           </p>
           <ol className="mt-6 space-y-4">
             {release.steps.map((step, index) => (
@@ -137,11 +137,11 @@ export default function AiApplicantRankingReleasePage() {
         <section className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center md:p-10">
           <h2 className="text-xl font-semibold text-foreground">Ready to rank your pipeline?</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-            Open Applications, click AI Rank Page, or rank individual candidates with the
-            sparkle icon or AI Rank button in the score column.
+            Open Applications, click Score with BQI Intelligence, or rank individual
+            candidates with the sparkle icon or BQI Intelligence button in the score column.
           </p>
           <Button asChild className="mt-6 bg-violet-600 hover:bg-violet-700">
-            <Link href="/admin/applications">
+            <Link href="/admin/candidates">
               Go to Applications
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>

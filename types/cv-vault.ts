@@ -10,8 +10,6 @@ export interface CvVaultEntry {
   source: "application" | "dropbox" | string
   applicationId?: string | null
   applicationStatus?: string | null
-  position?: string | null
-  jobId?: string | null
   appliedDate?: string | null
   modifiedAt?: string | null
   size?: number | null
@@ -19,6 +17,11 @@ export interface CvVaultEntry {
   aiRankRecommendation?: string | null
   nameSource?: CvVaultContactSource
   emailSource?: CvVaultContactSource
+  /** Populated from linked application when available */
+  position?: string | null
+  phoneNumber?: string | null
+  location?: string | null
+  jobId?: string | null
 }
 
 export type CvVaultSort =

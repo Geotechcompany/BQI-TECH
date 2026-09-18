@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Brain,
   FileSearch,
@@ -10,12 +10,32 @@ import {
   CheckCircle2,
   Minimize2,
   Maximize2,
+  type LucideIcon,
 } from "lucide-react";
 import { createPortal } from "react-dom";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAiRank } from "@/contexts/AiRankContext";
+import { cn } from "@/lib/utils";
 
-export type AiRankPhase = "extracting" | "analyzing" | "scoring" | "saving" | "complete";
+/** Job pipeline kanban — not pipeline settings. */
+function isJobPipelinePath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return /\/admin\/jobs\/[^/]+\/pipeline\/?$/.test(pathname);
+}
+
+/** Cross-position candidates table — keep scoring chrome out of the welcome banner. */
+function isCandidatesPath(pathname: string | null | undefined): boolean {
+  if (!pathname) return false;
+  return /^\/admin\/candidates\/?$/.test(pathname);
+}
+
+export type AiRankPhase =
+  | "extracting"
+  | "analyzing"
+  | "scoring"
+  | "saving"
+  | "complete";
 
 export interface AiRankProgressState {
   isActive: boolean;
@@ -54,7 +74,7 @@ const PHASES: Array<{
   },
   {
     id: "scoring",
-    label: "Scoring with AI",
+    label: "Scoring with BQI Intelligence",
     description: "Calculating fit score and recommendation",
     icon: Sparkles,
   },
@@ -65,6 +85,192 @@ const PHASES: Array<{
     icon: Save,
   },
 ];
+
+/** Critically damped springs — Apple defaults (damping 1.0 ≈ bounce 0). */
+const SPRING_UI = { type: "spring" as const, bounce: 0, duration: 0.4 };
+const SPRING_SNAPPY = { type: "spring" as const, bounce: 0, duration: 0.32 };
+/** Elegant ambient ease — soft settle, no abrupt edges (Emil / Sonner vibe). */
+const AMBIENT_EASE: [number, number, number, number] = [0.4, 0, 0.2, 1];
+
+function ScoringAmbientIcon({
+  Icon,
+  phase,
+  isComplete,
+  reduceMotion,
+}: {
+  Icon: LucideIcon;
+  phase: AiRankPhase;
+  isComplete: boolean;
+  reduceMotion: boolean | null;
+}) {
+  const isWorking = !isComplete && phase !== "saving";
+  const intensify =
+    phase === "scoring" || phase === "analyzing" || phase === "extracting";
+
+  return (
+    <div className="relative mb-3.5 flex h-[4.5rem] w-[4.5rem] items-center justify-center">
+      {/* Ambient lighting layers — soft violet bloom around the tile */}
+      {!reduceMotion && intensify ? (
+        <>
+          <motion.div
+            className="pointer-events-none absolute h-28 w-28 rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(167,139,250,0.45) 0%, rgba(124,58,237,0.18) 38%, transparent 68%)",
+            }}
+            animate={{
+              opacity: [0.45, 0.85, 0.45],
+              scale: [0.92, 1.12, 0.92],
+            }}
+            transition={{
+              duration: 2.8,
+              repeat: Infinity,
+              ease: AMBIENT_EASE,
+            }}
+            aria-hidden
+          />
+          <motion.div
+            className="pointer-events-none absolute h-20 w-20 rounded-full blur-xl"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(196,181,253,0.7) 0%, rgba(139,92,246,0.25) 50%, transparent 72%)",
+            }}
+            animate={{
+              opacity: [0.35, 0.7, 0.35],
+              scale: [1, 1.18, 1],
+            }}
+            transition={{
+              duration: 2.2,
+              repeat: Infinity,
+              ease: AMBIENT_EASE,
+              delay: 0.35,
+            }}
+            aria-hidden
+          />
+          <motion.div
+            className="pointer-events-none absolute inset-0"
+            animate={{ rotate: 360 }}
+            transition={{
+              duration: 10,
+              repeat: Infinity,
+              ease: "linear",
+            }}
+            aria-hidden
+          >
+            <div
+              className="absolute left-1/2 top-0 h-14 w-10 -translate-x-1/2 blur-md"
+              style={{
+                background:
+                  "radial-gradient(ellipse at center, rgba(233,213,255,0.55) 0%, transparent 70%)",
+              }}
+            />
+          </motion.div>
+        </>
+      ) : (
+        <div
+          className="pointer-events-none absolute h-20 w-20 rounded-full bg-violet-400/25 blur-2xl"
+          aria-hidden
+        />
+      )}
+
+      {/* Squircle tile */}
+      <motion.div
+        className="relative z-[1] flex h-11 w-11 items-center justify-center rounded-[14px] text-white"
+        style={{
+          background:
+            "linear-gradient(145deg, #a78bfa 0%, #8b5cf6 42%, #6d28d9 100%)",
+          boxShadow: isWorking
+            ? "0 0 0 1px rgba(255,255,255,0.18) inset, 0 10px 28px rgba(109,40,217,0.38), 0 0 36px rgba(139,92,246,0.28)"
+            : "0 0 0 1px rgba(255,255,255,0.12) inset, 0 8px 20px rgba(109,40,217,0.3)",
+        }}
+        initial={reduceMotion ? false : { scale: 0.88, opacity: 0 }}
+        animate={
+          reduceMotion || !isWorking
+            ? { scale: 1, opacity: 1 }
+            : {
+                scale: [1, 1.03, 1],
+                opacity: 1,
+              }
+        }
+        transition={
+          reduceMotion || !isWorking
+            ? SPRING_SNAPPY
+            : {
+                scale: {
+                  duration: 2.6,
+                  repeat: Infinity,
+                  ease: AMBIENT_EASE,
+                },
+                opacity: SPRING_SNAPPY,
+              }
+        }
+      >
+        {/* Specular sheen sweep */}
+        {!reduceMotion && isWorking ? (
+          <motion.span
+            className="pointer-events-none absolute inset-0 overflow-hidden rounded-[14px]"
+            aria-hidden
+          >
+            <motion.span
+              className="absolute -inset-y-4 -left-1/2 w-1/2 skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/35 to-transparent"
+              animate={{ x: ["-40%", "280%"] }}
+              transition={{
+                duration: 2.4,
+                repeat: Infinity,
+                ease: AMBIENT_EASE,
+                repeatDelay: 1.1,
+              }}
+            />
+          </motion.span>
+        ) : null}
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={phase}
+            initial={
+              reduceMotion
+                ? { opacity: 0 }
+                : { scale: 0.84, opacity: 0, filter: "blur(4px)" }
+            }
+            animate={{ scale: 1, opacity: 1, filter: "blur(0px)" }}
+            exit={
+              reduceMotion
+                ? { opacity: 0 }
+                : { scale: 0.92, opacity: 0, filter: "blur(3px)" }
+            }
+            transition={SPRING_SNAPPY}
+            className="relative z-[1]"
+          >
+            <motion.div
+              animate={
+                reduceMotion || isComplete
+                  ? undefined
+                  : { rotate: [0, 6, -4, 0], scale: [1, 1.06, 1] }
+              }
+              transition={
+                reduceMotion || isComplete
+                  ? undefined
+                  : {
+                      duration: 3.2,
+                      repeat: Infinity,
+                      ease: AMBIENT_EASE,
+                    }
+              }
+            >
+              <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Inner rim light */}
+        <span
+          className="pointer-events-none absolute inset-0 rounded-[14px] ring-1 ring-inset ring-white/25"
+          aria-hidden
+        />
+      </motion.div>
+    </div>
+  );
+}
 
 function useMounted() {
   const [mounted, setMounted] = useState(false);
@@ -198,19 +404,48 @@ function phaseDisplayLabel(progress: AiRankProgressState, isLongWait: boolean): 
     return "Complete";
   }
   if (progress.phase === "scoring" && isLongWait) {
-    return "Scoring with AI…";
+    return "Scoring with BQI Intelligence…";
   }
   const index = PHASES.findIndex((p) => p.id === progress.phase);
   return PHASES[index]?.label ?? "Ranking";
 }
 
-function ProgressCore({
+function secondaryStatusCopy(
+  progress: AiRankProgressState,
+  isLongWait: boolean
+): string {
+  if (progress.phase === "complete") {
+    return "Assessment saved";
+  }
+  if (progress.phase === "saving") {
+    return "Writing score to the application";
+  }
+  if (isLongWait) {
+    return "Still working — detailed CVs can take a few minutes";
+  }
+  if (progress.total > 1) {
+    return `Candidate ${Math.min(progress.current + 1, progress.total)} of ${progress.total}`;
+  }
+  return "Evaluating against position requirements";
+}
+
+/**
+ * Premium top panel — Apple-style materials + critically damped motion.
+ * Screenshot-matched: sparkle tile, title · name, status line, bottom progress.
+ */
+function AiRankTopPanel({
   progress,
-  compact = false,
+  onMinimize,
+  className,
+  embedded = false,
 }: {
   progress: AiRankProgressState;
-  compact?: boolean;
+  onMinimize?: () => void;
+  className?: string;
+  /** When true, panel fills parent (candidate header slot) instead of fixed viewport. */
+  embedded?: boolean;
 }) {
+  const reduceMotion = useReducedMotion();
   const percent = useMonotonicProgress(progress);
   const isLongWait = useLongWait(progress);
   const isComplete = progress.phase === "complete";
@@ -219,143 +454,129 @@ function ProgressCore({
     ? CheckCircle2
     : (PHASES[activePhaseIndex]?.icon ?? Sparkles);
   const label = phaseDisplayLabel(progress, isLongWait);
+  const subtitle = secondaryStatusCopy(progress, isLongWait);
   const showWorkingPulse =
     isLongWait && progress.phase !== "saving" && progress.phase !== "complete";
 
   return (
-    <div className={compact ? "space-y-3" : "space-y-5"}>
-      <div className="relative flex items-center justify-center">
+    <motion.div
+      role="status"
+      aria-live="polite"
+      aria-label={`${label}${progress.candidateName ? ` for ${progress.candidateName}` : ""} — ${percent}%`}
+      initial={
+        reduceMotion
+          ? { opacity: 0 }
+          : { opacity: 0, y: embedded ? -8 : -18, filter: "blur(8px)" }
+      }
+      animate={
+        reduceMotion
+          ? { opacity: 1 }
+          : { opacity: 1, y: 0, filter: "blur(0px)" }
+      }
+      exit={
+        reduceMotion
+          ? { opacity: 0 }
+          : { opacity: 0, y: embedded ? -6 : -12, filter: "blur(6px)" }
+      }
+      transition={SPRING_UI}
+      className={cn(
+        "relative overflow-x-clip",
+        embedded
+          ? "w-full"
+          : "fixed inset-x-0 top-0 z-[10050] border-b border-[#272055]/08 shadow-[0_8px_30px_rgba(39,32,85,0.06)]",
+        className
+      )}
+    >
+      {/* Translucent material */}
+      <div
+        className="absolute inset-0 bg-[#f6f5fa]/92 backdrop-blur-xl backdrop-saturate-150 dark:bg-[#16141f]/92"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(124,58,237,0.07),transparent_55%)]"
+        aria-hidden
+      />
+      {!reduceMotion && !isComplete ? (
         <motion.div
-          className="absolute h-28 w-28 rounded-full bg-violet-500/15 blur-3xl"
-          animate={{ scale: [1, 1.15, 1], opacity: [0.35, 0.6, 0.35] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          className="pointer-events-none absolute inset-x-0 top-0 h-full"
+          style={{
+            background:
+              "radial-gradient(ellipse 55% 80% at 50% 28%, rgba(139,92,246,0.14), transparent 70%)",
+          }}
+          animate={{ opacity: [0.4, 0.85, 0.4] }}
+          transition={{
+            duration: 3,
+            repeat: Infinity,
+            ease: AMBIENT_EASE,
+          }}
+          aria-hidden
         />
-        <motion.div
-          className={`relative flex items-center justify-center rounded-2xl border border-white/20 bg-gradient-to-br from-violet-600 via-violet-700 to-indigo-700 text-white shadow-xl shadow-violet-900/25 ${
-            compact ? "h-12 w-12" : "h-[4.5rem] w-[4.5rem]"
-          }`}
-        >
-          <motion.div
-            key={progress.phase}
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 320, damping: 22 }}
-          >
-            <ActiveIcon className={compact ? "h-5 w-5" : "h-8 w-8"} strokeWidth={1.75} />
-          </motion.div>
-          <motion.span
-            className="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/25"
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 2.2, repeat: Infinity }}
-          />
-        </motion.div>
-      </div>
+      ) : null}
 
-      <div className="space-y-1 text-center">
-        <p
-          className={`font-semibold tracking-tight text-foreground ${
-            compact ? "text-sm" : "text-lg"
-          }`}
-        >
+      <div className="relative mx-auto flex max-w-2xl flex-col items-center px-6 pb-5 pt-5 text-center sm:px-8 sm:pb-6 sm:pt-6">
+        {onMinimize ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-3 top-3 h-8 w-8 rounded-full text-muted-foreground hover:bg-[#272055]/06"
+            onClick={onMinimize}
+            aria-label="Continue in background"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </Button>
+        ) : null}
+
+        <ScoringAmbientIcon
+          Icon={ActiveIcon}
+          phase={progress.phase}
+          isComplete={isComplete}
+          reduceMotion={reduceMotion}
+        />
+
+        {/* Title */}
+        <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#1c1830] dark:text-foreground">
           {label}
           {progress.candidateName ? (
-            <span className="font-normal text-muted-foreground">
+            <span className="font-normal text-[#6b7280] dark:text-muted-foreground">
               {" "}
               · {progress.candidateName}
             </span>
           ) : null}
         </p>
+
         <AnimatePresence mode="wait">
           <motion.p
-            key={`${progress.candidateName}-${progress.phase}-${isLongWait}`}
-            initial={{ opacity: 0, y: 4 }}
+            key={`${progress.phase}-${isLongWait}-${progress.candidateName}`}
+            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            className={`text-muted-foreground ${compact ? "text-xs" : "text-sm"}`}
+            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -3 }}
+            transition={SPRING_SNAPPY}
+            className="mt-1 max-w-md text-[13px] leading-snug text-[#8b92a5] dark:text-muted-foreground"
           >
-            {showWorkingPulse
-              ? "Still working — detailed CVs can take a few minutes"
-              : progress.candidateName
-                ? `Evaluating against role requirements`
-                : PHASES[activePhaseIndex]?.description}
+            {subtitle}
           </motion.p>
         </AnimatePresence>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">
-            {progress.total > 1
-              ? `Candidate ${Math.min(progress.current + 1, progress.total)} of ${progress.total}`
-              : "Processing"}
-          </span>
-          <span className="font-semibold tabular-nums text-violet-600 dark:text-violet-400">
-            {percent}%
-          </span>
-        </div>
-        <div className="relative h-2 overflow-hidden rounded-full bg-violet-100/70 dark:bg-violet-950/50">
-          {showWorkingPulse ? (
-            <motion.div
-              className="absolute inset-y-0 w-1/3 rounded-full bg-gradient-to-r from-transparent via-white/40 to-transparent"
-              animate={{ x: ["-100%", "300%"] }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: "linear" }}
-              aria-hidden
-            />
-          ) : null}
+      {/* Bottom progress — thin Apple-style track */}
+      <div className="relative h-[3px] w-full bg-[#e8e4f2] dark:bg-violet-950/60">
+        <motion.div
+          className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#8b5cf6] via-[#7c3aed] to-[#a78bfa]"
+          initial={false}
+          animate={{ width: `${percent}%` }}
+          transition={reduceMotion ? { duration: 0.2 } : SPRING_UI}
+        />
+        {showWorkingPulse && !reduceMotion ? (
           <motion.div
-            className={`h-full rounded-full bg-gradient-to-r from-violet-500 via-indigo-500 to-violet-400 ${
-              showWorkingPulse ? "opacity-90" : ""
-            }`}
-            animate={{ width: `${percent}%` }}
-            transition={{ type: "spring", stiffness: 140, damping: 22 }}
+            className="absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-white/50 to-transparent"
+            animate={{ left: ["-25%", "100%"] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            aria-hidden
           />
-        </div>
+        ) : null}
       </div>
-
-      {!compact && (
-        <div className="relative">
-          <div className="absolute left-4 right-4 top-4 h-px bg-border/80" aria-hidden />
-          <div className="grid grid-cols-4 gap-2">
-            {PHASES.map((phase, index) => {
-              const Icon = phase.icon;
-              const isDone = index < activePhaseIndex;
-              const isCurrent = index === activePhaseIndex;
-              return (
-                <div
-                  key={phase.id}
-                  className={`relative rounded-xl border px-2 py-2.5 text-center transition-colors ${
-                    isCurrent
-                      ? "border-violet-300/80 bg-violet-50/90 shadow-sm dark:border-violet-700 dark:bg-violet-950/50"
-                      : isDone
-                        ? "border-emerald-200/80 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30"
-                        : "border-border/60 bg-muted/20"
-                  }`}
-                >
-                  <div className="flex flex-col items-center gap-1">
-                    {isDone ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                    ) : (
-                      <Icon
-                        className={`h-3.5 w-3.5 ${
-                          isCurrent ? "text-violet-600" : "text-muted-foreground"
-                        }`}
-                      />
-                    )}
-                    <span
-                      className={`text-[10px] font-medium leading-tight ${
-                        isCurrent ? "text-violet-700 dark:text-violet-300" : "text-muted-foreground"
-                      }`}
-                    >
-                      {phase.label}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -364,21 +585,16 @@ function AiRankFloatingPill({
   onExpand,
 }: {
   progress: AiRankProgressState;
-  onExpand: () => void;
+  onExpand?: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const percent = useMonotonicProgress(progress);
   const isLongWait = useLongWait(progress);
   const phaseLabel = phaseDisplayLabel(progress, isLongWait);
+  const expandable = typeof onExpand === "function";
 
-  return (
-    <motion.button
-      type="button"
-      onClick={onExpand}
-      initial={{ opacity: 0, y: 16, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 12, scale: 0.96 }}
-      className="fixed bottom-6 right-6 z-[10060] flex max-w-[min(100vw-2rem,22rem)] items-center gap-3 rounded-2xl border border-violet-200/70 bg-background/95 px-4 py-3 text-left shadow-2xl shadow-violet-900/15 backdrop-blur-md dark:border-violet-800/60"
-    >
+  const content = (
+    <>
       <div className="relative h-10 w-10 shrink-0">
         <svg className="h-10 w-10 -rotate-90" viewBox="0 0 36 36" aria-hidden>
           <circle
@@ -386,7 +602,7 @@ function AiRankFloatingPill({
             cy="18"
             r="15.5"
             fill="none"
-            className="stroke-violet-100 dark:stroke-violet-950"
+            className="stroke-[#272055]/15 dark:stroke-[#31CDFF]/20"
             strokeWidth="3"
           />
           <circle
@@ -394,32 +610,94 @@ function AiRankFloatingPill({
             cy="18"
             r="15.5"
             fill="none"
-            className="stroke-violet-600"
+            className="stroke-[#272055] dark:stroke-[#31CDFF]"
             strokeWidth="3"
             strokeLinecap="round"
             strokeDasharray={`${percent} 100`}
             pathLength={100}
           />
         </svg>
-        <Sparkles className="absolute inset-0 m-auto h-4 w-4 text-violet-600" />
+        <Sparkles className="absolute inset-0 m-auto h-4 w-4 text-[#272055] dark:text-[#31CDFF]" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">AI ranking</p>
+        <p className="truncate text-sm font-semibold tracking-tight text-foreground">
+          BQI Intelligence
+        </p>
         <p className="truncate text-xs text-muted-foreground">
           {phaseLabel}
           {progress.candidateName ? ` · ${progress.candidateName}` : ""}
         </p>
       </div>
-      <Maximize2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+      {expandable ? (
+        <Maximize2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+      ) : null}
+    </>
+  );
+
+  const shellClass =
+    "fixed bottom-6 right-6 z-[10060] flex max-w-[min(100vw-2rem,22rem)] items-center gap-3 rounded-2xl border border-[#272055]/15 bg-white/95 px-4 py-3 text-left shadow-2xl shadow-[#272055]/10 backdrop-blur-xl dark:border-[#31CDFF]/20 dark:bg-[#16141f]/95";
+
+  if (!expandable) {
+    return (
+      <motion.div
+        role="status"
+        aria-live="polite"
+        aria-label={`${phaseLabel}${progress.candidateName ? ` for ${progress.candidateName}` : ""} — ${percent}%`}
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.97 }}
+        transition={SPRING_UI}
+        className={shellClass}
+      >
+        {content}
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.button
+      type="button"
+      onClick={onExpand}
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.97 }}
+      transition={SPRING_UI}
+      whileTap={reduceMotion ? undefined : { scale: 0.97 }}
+      className={shellClass}
+    >
+      {content}
     </motion.button>
   );
 }
 
 export function AiRankProgressHost() {
   const mounted = useMounted();
+  const pathname = usePathname();
   const { progress, isBackground, sendToBackground, expandOverlay } = useAiRank();
+  const onPipelinePage = isJobPipelinePath(pathname);
+  const onCandidatesPage = isCandidatesPath(pathname);
 
   if (!mounted || !progress?.isActive) return null;
+
+  // Pipeline: board glow + header chip only — never the full top banner.
+  if (onPipelinePage) {
+    return null;
+  }
+
+  // Candidates: floating status pill only — no purple top-panel glow over the banner.
+  if (onCandidatesPage) {
+    return createPortal(
+      <AnimatePresence mode="wait">
+        <AiRankFloatingPill key="pill" progress={progress} />
+      </AnimatePresence>,
+      document.body
+    );
+  }
+
+  // Single-candidate background: page slot / header chip owns chrome.
+  if (isBackground && progress.mode === "single") {
+    return null;
+  }
 
   return createPortal(
     <AnimatePresence mode="wait">
@@ -430,74 +708,11 @@ export function AiRankProgressHost() {
           onExpand={expandOverlay}
         />
       ) : (
-        <motion.div
-          key="overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 10 }}
-            transition={{ type: "spring", stiffness: 300, damping: 28 }}
-            className="relative w-full max-w-md overflow-hidden rounded-2xl border border-violet-200/50 bg-background shadow-2xl shadow-violet-950/20 dark:border-violet-800/40"
-          >
-            <div
-              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-500/8 via-transparent to-transparent"
-              aria-hidden
-            />
-            <div className="relative border-b border-border/50 px-6 pb-4 pt-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="mb-1 flex items-center gap-2">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-violet-600/10">
-                      <Sparkles className="h-4 w-4 text-violet-600" />
-                    </span>
-                    <h3 className="text-base font-semibold tracking-tight">
-                      AI Ranking
-                    </h3>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {progress.total > 1
-                      ? `Evaluating ${progress.total} candidates`
-                      : "Evaluating candidate fit"}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0 rounded-lg text-muted-foreground"
-                  onClick={sendToBackground}
-                  aria-label="Continue in background"
-                >
-                  <Minimize2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="relative px-6 py-5">
-              <ProgressCore progress={progress} />
-            </div>
-
-            <div className="flex items-center justify-between gap-3 border-t border-border/50 bg-muted/20 px-6 py-4">
-              <p className="text-xs text-muted-foreground">
-                Ranking continues if you navigate away
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950/40"
-                onClick={sendToBackground}
-              >
-                Continue in background
-              </Button>
-            </div>
-          </motion.div>
-        </motion.div>
+        <AiRankTopPanel
+          key="panel"
+          progress={progress}
+          onMinimize={sendToBackground}
+        />
       )}
     </AnimatePresence>,
     document.body
@@ -521,21 +736,20 @@ export function AiRankInlineProgress({
   if (!progress?.isActive) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      className="overflow-hidden rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-50/80 to-indigo-50/40 p-4 dark:border-violet-800/60 dark:from-violet-950/40 dark:to-indigo-950/20"
-    >
-      <ProgressCore progress={progress} compact />
-    </motion.div>
+    <AiRankTopPanel progress={progress} embedded className="rounded-none" />
   );
 }
 
 export function AiRankHeaderIndicator() {
+  const pathname = usePathname();
   const { progress, isBackground, isRanking, expandOverlay } = useAiRank();
+  const onPipelinePage = isJobPipelinePath(pathname);
+  const onCandidatesPage = isCandidatesPath(pathname);
 
-  if (!isRanking || !isBackground || !progress) return null;
+  // Candidates uses the floating pill; pipeline uses this chip; elsewhere when backgrounded.
+  if (!isRanking || !progress) return null;
+  if (onCandidatesPage) return null;
+  if (!isBackground && !onPipelinePage) return null;
 
   return (
     <AiRankHeaderIndicatorContent progress={progress} onExpand={expandOverlay} />
@@ -558,14 +772,14 @@ function AiRankHeaderIndicatorContent({
     <button
       type="button"
       onClick={onExpand}
-      className="inline-flex items-center gap-2 rounded-xl border border-violet-200/70 bg-violet-50/80 px-2.5 py-1.5 text-xs font-medium text-violet-800 transition hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
+      className="inline-flex items-center gap-2 rounded-xl border border-[#272055]/15 bg-[#272055]/[0.06] px-2.5 py-1.5 text-xs font-medium text-[#272055] transition hover:bg-[#272055]/10 dark:border-[#31CDFF]/25 dark:bg-[#31CDFF]/10 dark:text-[#31CDFF] dark:hover:bg-[#31CDFF]/15"
     >
       {isComplete ? (
         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
       ) : (
         <span className="relative flex h-2 w-2">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-500 opacity-60" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-violet-600" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#31CDFF] opacity-60" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-[#272055] dark:bg-[#31CDFF]" />
         </span>
       )}
       {phaseLabel}

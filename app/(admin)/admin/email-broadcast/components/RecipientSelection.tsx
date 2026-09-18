@@ -388,7 +388,7 @@ export function RecipientSelection({
             onClick={() => setMode("all")}
             className={`h-16 flex flex-col items-center gap-2 ${
               mode === "all"
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "hover:bg-blue-50"
             }`}
           >
@@ -404,7 +404,7 @@ export function RecipientSelection({
             onClick={() => setMode("list")}
             className={`h-16 flex flex-col items-center gap-2 ${
               mode === "list"
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "hover:bg-blue-50"
             }`}
           >
@@ -420,7 +420,7 @@ export function RecipientSelection({
             onClick={() => setMode("search")}
             className={`h-16 flex flex-col items-center gap-2 ${
               mode === "search"
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "hover:bg-blue-50"
             }`}
           >
@@ -436,7 +436,7 @@ export function RecipientSelection({
             onClick={() => setMode("broadcast")}
             className={`h-16 flex flex-col items-center gap-2 ${
               mode === "broadcast"
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "hover:bg-blue-50"
             }`}
           >
@@ -925,7 +925,7 @@ export function RecipientSelection({
                     <Button
                       onClick={() => searchUsersInModal(modalSearchQuery)}
                       disabled={modalSearching || !modalSearchQuery.trim()}
-                      className="px-6 bg-blue-600 hover:bg-blue-700 text-white border-0"
+                      className="px-6 bg-primary text-primary-foreground hover:bg-primary/90 border-0"
                     >
                       {modalSearching ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1034,7 +1034,7 @@ export function RecipientSelection({
                   !newListName.trim() ||
                   modalSelectedUsers.length === 0
                 }
-                className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 border-0"
               >
                 {creatingList ? (
                   <div className="flex items-center gap-2">

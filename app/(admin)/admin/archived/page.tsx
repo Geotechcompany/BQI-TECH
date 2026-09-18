@@ -1,6 +1,8 @@
 "use client";
 
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { UnifiedApplicationTable } from "@/components/admin/UnifiedApplicationTable";
 import { EditApplicationModal } from "@/components/admin/EditApplicationModal";
 import { ViewApplicationModal } from "@/components/admin/ViewApplicationModal";
@@ -77,14 +79,23 @@ export default function ArchivedApplicationsPage() {
       searchPlaceholder="Search archived applications..."
       searchValue={searchTerm}
       onSearch={setSearchTerm}
+      tourId="archive"
+      guideInBanner
     >
-      {positionFilterOptions.length > 0 && (
-        <div className="mb-6 flex items-center gap-4">
+      <TourPageHelper tourId="archive" />
+      <div className="mb-4">
+        <AdminPageWelcomeBanner bannerKey="archive" tourId="archive" />
+      </div>
+      {positionFilterOptions.length > 0 ? (
+        <div
+          className="mb-6 flex items-center gap-4"
+          data-tour="archive-filters"
+        >
           <Label htmlFor="position-filter" className="text-sm font-medium">
             Filter by Position:
           </Label>
           <Select value={selectedPosition} onValueChange={setSelectedPosition}>
-            <SelectTrigger className="w-64">
+            <SelectTrigger className="w-64" id="position-filter">
               <SelectValue placeholder="All Positions" />
             </SelectTrigger>
             <SelectContent>
@@ -97,12 +108,17 @@ export default function ArchivedApplicationsPage() {
             </SelectContent>
           </Select>
         </div>
+      ) : (
+        <div className="mb-4 text-sm text-muted-foreground" data-tour="archive-filters">
+          All archived applications across positions.
+        </div>
       )}
 
       <div className="mb-4 text-sm text-muted-foreground">
         Showing {applications.length} of {total} archived applications
       </div>
 
+      <div data-tour="archive-table">
       <UnifiedApplicationTable
         applications={applications}
         jobTitles={jobTitles}
@@ -115,6 +131,7 @@ export default function ArchivedApplicationsPage() {
         onRank={handleRankApplication}
         rankingApplicationId={rankingApplicationId}
       />
+      </div>
 
       {totalPages > 1 && (
         <Pagination

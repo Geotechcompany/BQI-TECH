@@ -123,6 +123,21 @@ async def submit_application(
         
         application_data["_id"] = str(result.inserted_id)
         application_data["id"] = str(result.inserted_id)
+
+        # Backfill phone/location/name from CV when form left them empty
+        try:
+            import asyncio
+            from app.lib.cv_contact_extract import sync_contact_after_insert
+
+            asyncio.create_task(
+                sync_contact_after_insert(
+                    db,
+                    result.inserted_id,
+                    cv_url=application_data.get("cvUrl"),
+                )
+            )
+        except Exception as sync_err:
+            logger.debug("CV contact sync schedule failed: %s", sync_err)
         
         # Verify the application was saved
         saved_app = await db.applications.find_one({"_id": result.inserted_id})

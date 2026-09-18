@@ -9,7 +9,8 @@ from app.config import settings
 from app.lib.runtime_environment import get_frontend_url
 
 BQI_BRAND = {
-    "dark_blue": "#272055",
+    "dark_blue": "#272156",
+    "navy": "#272156",
     "cyan": "#31CDFF",
     "accent_blue": "#2563EB",
     "admin_bg": "#2B2B2B",
@@ -40,11 +41,15 @@ def escape_email_text(value: str) -> str:
 def branded_email_header_html() -> str:
     """Gradient header for public-facing emails."""
     logo_url = _logo_url(light=False)
+    base = _frontend_url()
+    host_label = escape_email_text(
+        (base.replace("https://", "").replace("http://", "").split("/")[0]) or "BQI Tech"
+    )
     return f"""
     <tr>
       <td style="background: linear-gradient(135deg, {BQI_BRAND['dark_blue']} 0%, {BQI_BRAND['cyan']} 100%); padding: 32px 40px; text-align: center;">
         <img src="{logo_url}" alt="BQI Tech" width="160" style="width: 160px; max-width: 100%; height: auto; display: block; margin: 0 auto 12px;" />
-        <div style="color: rgba(255,255,255,0.9); font-size: 13px; letter-spacing: 0.04em;">bqitech.com</div>
+        <div style="color: rgba(255,255,255,0.9); font-size: 13px; letter-spacing: 0.04em;">{host_label}</div>
       </td>
     </tr>
   """
@@ -80,7 +85,7 @@ def branded_email_footer_html() -> str:
           Empowering businesses through innovative technology solutions
         </p>
         <p style="margin: 0 0 12px; color: {BQI_BRAND['muted_text']}; font-size: 12px;">
-          Visit us at <a href="https://bqitech.com" style="color: {BQI_BRAND['cyan']}; text-decoration: none;">bqitech.com</a>
+          Visit us at <a href="{escape_email_text(base)}" style="color: {BQI_BRAND['cyan']}; text-decoration: none;">{escape_email_text(base.replace("https://", "").replace("http://", ""))}</a>
         </p>
         <p style="margin: 0; color: {BQI_BRAND['muted_text']}; font-size: 12px;">
           © {year} BQI Tech. All rights reserved.

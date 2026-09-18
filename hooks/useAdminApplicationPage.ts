@@ -21,7 +21,7 @@ export const APPLICATION_SORT_OPTIONS = [
   { label: 'Applicant Name', value: 'name' },
   { label: 'Position', value: 'position' },
   { label: 'Status', value: 'status' },
-  { label: 'AI Score', value: 'aiRankScore' },
+  { label: 'BQI Intelligence score', value: 'aiRankScore' },
 ] as const;
 
 const DEFAULT_SORT_BY = 'appliedDate';
@@ -34,6 +34,7 @@ interface UseAdminApplicationPageOptions {
   enablePositionFilter?: boolean;
   enableStatusFilter?: boolean;
   enableAiScoreFilter?: boolean;
+  initialJobId?: string;
 }
 
 export function useAdminApplicationPage({
@@ -43,6 +44,7 @@ export function useAdminApplicationPage({
   enablePositionFilter = true,
   enableStatusFilter = false,
   enableAiScoreFilter = false,
+  initialJobId,
 }: UseAdminApplicationPageOptions) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -151,6 +153,7 @@ export function useAdminApplicationPage({
         skip,
         limit: pageSize,
         search: debouncedSearchTerm || undefined,
+        jobId: initialJobId || undefined,
         position: selectedPosition !== 'all' ? selectedPosition : undefined,
         aiScoreFilter:
           enableAiScoreFilter && selectedAiScore !== 'all'
@@ -213,7 +216,7 @@ export function useAdminApplicationPage({
     } finally {
       setIsLoading(false);
     }
-  }, [statusType, currentPage, pageSize, debouncedSearchTerm, selectedPosition, selectedStatus, selectedAiScore, sortBy, sortOrder, dateFrom, dateTo, enableStatusFilter, enableAiScoreFilter]);
+  }, [statusType, currentPage, pageSize, debouncedSearchTerm, selectedPosition, selectedStatus, selectedAiScore, sortBy, sortOrder, dateFrom, dateTo, enableStatusFilter, enableAiScoreFilter, initialJobId]);
 
   // Load applications when dependencies change
   useEffect(() => {
@@ -252,7 +255,7 @@ export function useAdminApplicationPage({
       console.error('Failed to load position options:', error);
       // Fallback to the old method if the new endpoint fails
       try {
-        const response = await adminApplicationsApi.getApplicationsByStatus(statusType, { limit: 500 });
+        const response = await adminApplicationsApi.getApplicationsByStatus(statusType, { limit: 100 });
         const apps = response.applications || [];
         
         const optionSet = new Set<string>();

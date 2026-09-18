@@ -12,6 +12,7 @@ import Image from "next/image"
 import { useAuth } from "@/contexts/AuthContext"
 import { authService } from "@/lib/auth-backend"
 import { useEffect } from "react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export default function ViewBlogPost() {
   const params = useParams()
@@ -79,8 +80,17 @@ export default function ViewBlogPost() {
   if (authLoading || isLoading) {
     return (
       <AdminPageLayout title="View Blog Post">
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        <div className="mx-auto max-w-4xl space-y-6 p-6">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+          <Skeleton className="h-8 w-3/4" />
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-[85%]" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-[70%]" />
+          </div>
         </div>
       </AdminPageLayout>
     )
@@ -114,7 +124,7 @@ export default function ViewBlogPost() {
             Back
           </Button>
           <Button
-            onClick={() => router.push(`/admin/blog-management/${postId}/edit`)}
+            onClick={() => router.push(`/admin/blog-management/${postId}/wizard`)}
           >
             <Pencil className="mr-2 h-4 w-4" />
             Edit Post

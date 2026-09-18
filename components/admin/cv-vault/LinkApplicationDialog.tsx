@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, Link2, PlusCircle, Search, Sparkles } from "lucide-react"
+import { ListRowSkeleton } from "@/components/ui/skeleton"
 import { adminApplicationsApi } from "@/components/admin/utils/applications-api"
 import { authService } from "@/lib/auth-backend"
 import { BACKEND_URL } from "@/lib/config"
@@ -50,18 +51,6 @@ interface JobPostingOption {
   title: string
   isActive?: boolean
 }
-
-/** Fields needed to render / select an application in the link dialog */
-type ApplicationListItem = Pick<
-  Application,
-  "name" | "email" | "position" | "status"
-> & {
-  id?: string
-  _id?: string
-  appliedDate?: Date | string | null
-  cvUrl?: string
-}
-
 interface LinkApplicationDialogProps {
   entry: CvVaultEntry | null
   open: boolean
@@ -69,7 +58,15 @@ interface LinkApplicationDialogProps {
   onLinked: (entry: CvVaultEntry) => void
 }
 
-function applicationLabel(app: Pick<ApplicationListItem, "name" | "email" | "position" | "status">) {
+type LinkApplicationOption = Pick<
+  Application,
+  "id" | "name" | "email" | "position" | "status" | "cvUrl"
+> & {
+  _id?: string
+  appliedDate?: Date | string
+}
+
+function applicationLabel(app: Pick<Application, "name" | "email" | "position" | "status">) {
   const parts = [app.name || "Unknown"]
   if (app.email) parts.push(app.email)
   if (app.position) parts.push(app.position)
@@ -248,24 +245,26 @@ export function LinkApplicationDialog({
       .filter((job) => job.isActive !== false)
       .map((job) => ({
         id: job.id || (job as { _id?: string })._id || "",
-        title: job.title || "Untitled role",
+        title: job.title || "Untitled position",
       }))
       .filter((job) => job.id)
   }, [jobsData])
 
-  const applications = useMemo((): ApplicationListItem[] => {
-    const fromSearch = searchResults?.applications ?? []
+  const applications = useMemo((): LinkApplicationOption[] => {
+    const fromSearch = (searchResults?.applications ?? []) as LinkApplicationOption[]
     if (fromSearch.length > 0) return fromSearch
 
-    return suggestions.map((s) => ({
-      id: s.id,
-      name: s.name,
-      email: s.email,
-      position: s.position,
-      status: s.status,
-      appliedDate: s.appliedDate,
-      cvUrl: s.hasCvUrl ? "linked" : "",
-    }))
+    return suggestions.map(
+      (s): LinkApplicationOption => ({
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        position: s.position,
+        status: s.status,
+        appliedDate: s.appliedDate ?? undefined,
+        cvUrl: s.hasCvUrl ? "linked" : "",
+      })
+    )
   }, [searchResults, suggestions])
 
   const linkMutation = useMutation({
@@ -366,10 +365,7 @@ export function LinkApplicationDialog({
 
             <div className="border rounded-lg max-h-64 overflow-y-auto divide-y">
               {(searchLoading || suggestionsLoading) && applications.length === 0 ? (
-                <div className="flex items-center justify-center py-8 text-muted-foreground text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Searching…
-                </div>
+                <ListRowSkeleton rows={4} />
               ) : applications.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground text-center">
                   {debouncedSearch.trim().length < 2
@@ -466,7 +462,7 @@ export function LinkApplicationDialog({
               </div>
 
               <div className="grid gap-1.5">
-                <Label>Job posting</Label>
+                <Label>Position</Label>
                 <Select value={jobId} onValueChange={setJobId} disabled={jobsLoading}>
                   <SelectTrigger>
                     <SelectValue placeholder={jobsLoading ? "Loading jobs…" : "Select a job"} />

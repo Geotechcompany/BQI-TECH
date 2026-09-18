@@ -91,4 +91,4 @@ export function useAiStatus(): AiStatusContextValue {
 }
 
 export const AI_UNCONFIGURED_MESSAGE =
-  "AI is not configured. Add an API key in Settings → AI providers to enable this.";
+  "BQI Intelligence is not configured. Add an API key in Settings → AI providers to enable this.";

@@ -1,49 +1,27 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useForm, SubmitHandler } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { useActionState } from "@/hooks/useActionState";
-import toast, { Toaster } from "react-hot-toast";
-import { ArrowLeft, ArrowRight, Send, Loader2 } from "lucide-react";
+import toast from "react-hot-toast";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import {
-  ExclamationTriangleIcon,
-  ExclamationCircleIcon,
-  DocumentIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
+import { FormSkeleton } from "@/components/ui/skeleton";
+import { ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/contexts/AuthContext";
 import { authService } from "@/lib/auth-backend";
 import { BACKEND_URL } from "@/lib/config";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { userApi } from "@/lib/api-backend";
+import { CandidateApplicationForm } from "@/components/apply/CandidateApplicationForm";
+import type { CandidateApplicationQuestion } from "@/components/apply/candidate-application-types";
+import { normalizeCandidateQuestionType } from "@/components/apply/candidate-application-utils";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 
 function ApplicationForm() {
   const router = useRouter();
   const { id } = useParams();
   const { user, authLoading } = useAuth();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [formErrors, setFormErrors] = useState<string[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
-  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [submitComplete, setSubmitComplete] = useState(false);
 
-  // Fetch job details
   const { data: job, isLoading: jobLoading } = useQuery({
     queryKey: ["job", id],
     queryFn: async () => {
@@ -60,7 +38,6 @@ function ApplicationForm() {
     enabled: !!id,
   });
 
-  // Check if user has already applied for this job
   const { data: hasApplied = false, isLoading: hasAppliedLoading } = useQuery({
     queryKey: ["hasApplied", id, user?.id],
     queryFn: async () => {
@@ -70,7 +47,6 @@ function ApplicationForm() {
     enabled: !!id && !!user,
   });
 
-  // Fetch job-specific questions
   const { data: questions = [], isLoading: questionsLoading } = useQuery({
     queryKey: ["jobQuestions", id],
     queryFn: async () => {
@@ -82,7 +58,6 @@ function ApplicationForm() {
         },
       });
       if (!response.ok) {
-        // If no questions found, return empty array
         if (response.status === 404) return [];
         throw new Error("Failed to fetch questions");
       }
@@ -91,217 +66,32 @@ function ApplicationForm() {
     enabled: !!id,
   });
 
-  // Dynamically build the form schema based on questions
-  const buildFormSchema = () => {
-    const schemaMap = questions.reduce((acc, question) => {
-      const fieldName = question._id || question.id;
-      let schema: z.ZodTypeAny;
-
-      // Add type-specific validation with custom error messages
-      switch (question.type) {
-        case "text":
-          if (question.question.toLowerCase().includes("email")) {
-            schema = z
-              .string()
-              .min(1, { message: `${question.question} is required` })
-              .email({ message: "Please enter a valid email address" });
-          } else if (question.question.toLowerCase().includes("phone")) {
-            schema = z
-              .string()
-              .min(1, { message: `${question.question} is required` })
-              .regex(/^\+?[0-9\s-()]{10,}$/, {
-                message:
-                  "Please enter a valid phone number (at least 10 digits)",
-              });
-          } else if (question.question.toLowerCase().includes("salary")) {
-            schema = z
-              .string()
-              .min(1, { message: `${question.question} is required` })
-              .regex(/^\d+(?:\.\d+)?$/, {
-                message: "Please enter a valid number for salary",
-              });
-          } else {
-            schema = z
-              .string()
-              .min(1, { message: `${question.question} is required` });
-          }
-          break;
-        case "select":
-          schema = z.string().min(1, {
-            message: `Please select an option for ${question.question.toLowerCase()}`,
-          });
-          break;
-        case "radio":
-          schema = z.string().min(1, {
-            message: `Please select an option for ${question.question.toLowerCase()}`,
-          });
-          break;
-        case "boolean":
-          schema = z
-            .string()
-            .min(1, { message: `${question.question} is required` });
-          break;
-        case "file":
-          schema = z.string().min(1, {
-            message: `Please upload a file for ${question.question.toLowerCase()}`,
-          });
-          break;
-        case "date":
-          schema = z
-            .string()
-            .min(1, { message: `${question.question} is required` })
-            .refine((value) => !Number.isNaN(new Date(value).getTime()), {
-              message: "Please enter a valid date",
-            });
-          break;
-        default:
-          schema = z
-            .string()
-            .min(1, { message: `${question.question} is required` });
-      }
-
-      // Add required validation
-      if (!question.required) {
-        schema = schema.optional();
-      }
-
-      return {
-        ...acc,
-        [fieldName]: schema,
-      };
-    }, {} as Record<string, z.ZodTypeAny>);
-
-    return z.object(schemaMap);
-  };
-
-  // Form setup with mode: "onSubmit" to only validate on submit
-  const {
-    register,
-    handleSubmit,
-    formState,
-    reset,
-    setValue,
-    setError,
-    trigger,
-    watch,
-    getValues,
-    clearErrors,
-  } = useForm({
-    defaultValues: getDefaultValues(questions),
-    resolver: zodResolver(buildFormSchema()),
-    mode: "onSubmit", // Only validate on submit
-    reValidateMode: "onSubmit", // Only revalidate on submit
-  });
-
-  // Multistep grouping: derive steps from questions
-  const steps = useMemo(() => {
-    const basicInfoIds: string[] = [];
-    const questionIds: string[] = [];
-    const attachmentIds: string[] = [];
-
-    for (const q of questions) {
-      const id = (q._id || q.id) as string;
-      if (!id) continue;
-      const qText = (q.question || "").toLowerCase();
-      if (q.type === "file") {
-        attachmentIds.push(id);
-      } else if (
-        qText.includes("email") ||
-        qText.includes("phone") ||
-        qText.includes("name")
-      ) {
-        basicInfoIds.push(id);
-      } else {
-        questionIds.push(id);
-      }
+  const normalizedQuestions = useMemo((): CandidateApplicationQuestion[] => {
+    if (!Array.isArray(questions)) return [];
+    const mapped: CandidateApplicationQuestion[] = [];
+    for (const question of questions as Record<string, unknown>[]) {
+      const fieldId = String(question._id || question.id || "");
+      if (!fieldId) continue;
+      mapped.push({
+        id: fieldId,
+        _id: question._id ? String(question._id) : undefined,
+        question: String(question.question || ""),
+        type: normalizeCandidateQuestionType(question.type),
+        required: Boolean(question.required),
+        options: Array.isArray(question.options)
+          ? question.options.map(String)
+          : [],
+      });
     }
-
-    const result = [
-      { key: "basic", title: "Basic Info", fieldIds: basicInfoIds },
-      { key: "questions", title: "Questions", fieldIds: questionIds },
-      { key: "attachments", title: "Attachments", fieldIds: attachmentIds },
-    ].filter((s) => s.fieldIds.length > 0);
-
-    // Fallback single step if nothing grouped
-    if (result.length === 0) {
-      return [
-        {
-          key: "all",
-          title: "Application",
-          fieldIds: questions.map((q: any) => q._id || q.id).filter(Boolean),
-        },
-      ];
-    }
-    return result;
+    return mapped;
   }, [questions]);
 
-  const [currentStep, setCurrentStep] = useState(0);
-
-  const currentFieldIds = useMemo(
-    () => steps[currentStep]?.fieldIds || [],
-    [steps, currentStep]
-  );
-
-  const validateCurrentStep = useCallback(async () => {
-    if (currentFieldIds.length === 0)
-      return { ok: true, errors: [] as string[] };
-
-    // Run schema-based validation for only the fields in the current step
-    clearErrors(currentFieldIds as any);
-    const valid = await trigger(currentFieldIds as any);
-
-    if (valid) {
-      return { ok: true, errors: [] as string[] };
-    }
-
-    // Collect concrete error messages for the fields in this step
-    const stepErrors: string[] = [];
-    for (const fieldId of currentFieldIds) {
-      const anyErrors: any = formState.errors as any;
-      const msg = anyErrors?.[fieldId]?.message as string | undefined;
-      if (msg) stepErrors.push(msg);
-    }
-
-    // Fallback: ensure required fields also surface a message if none provided
-    if (stepErrors.length === 0) {
-      const values = getValues();
-      for (const fieldId of currentFieldIds) {
-        const q = questions.find((qq: any) => (qq._id || qq.id) === fieldId);
-        if (!q || !q.required) continue;
-        const raw = values[fieldId as any];
-        const str = typeof raw === "string" ? raw.trim() : "";
-        if (!str) {
-          const msg = `${q.question} is required`;
-          stepErrors.push(msg);
-          setError(fieldId as any, { type: "manual", message: msg });
-        }
-      }
-    }
-
-    return { ok: false, errors: stepErrors };
-  }, [
-    currentFieldIds,
-    trigger,
-    clearErrors,
-    formState.errors,
-    getValues,
-    questions,
-    setError,
-  ]);
-
-  const getFieldError = (fieldId: string): string | undefined => {
-    const anyErrors: any = formState.errors as any;
-    return anyErrors?.[fieldId]?.message as string | undefined;
-  };
-
-  // Effect: Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !user) {
       router.push(`/login?redirect=/dashboard/apply/${id}`);
     }
   }, [user, authLoading, router, id]);
 
-  // Effect: Redirect if already applied
   useEffect(() => {
     if (hasApplied) {
       toast.error("You have already applied for this position");
@@ -309,14 +99,6 @@ function ApplicationForm() {
     }
   }, [hasApplied, router]);
 
-  // Effect: Update form when questions change
-  useEffect(() => {
-    reset(getDefaultValues(questions));
-  }, [questions, reset]);
-
-  // Do not auto-trigger validation on mount; validate only on Next/Submit
-
-  // Effect: Handle invalid job ID
   useEffect(() => {
     if (id === "undefined" || !id) {
       toast.error("Invalid job application. Redirecting to jobs page...");
@@ -324,95 +106,97 @@ function ApplicationForm() {
     }
   }, [id, router]);
 
-  // Loading states
   const isLoading =
     authLoading || jobLoading || questionsLoading || hasAppliedLoading;
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="mx-auto max-w-3xl space-y-6">
+        <FormSkeleton />
       </div>
     );
   }
 
-  // Authentication check
-  if (!user) {
-    return null; // The redirect will happen in the useEffect
+  if (!user || submitComplete) {
+    return null;
   }
 
-  // Job not found
   if (!job) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
-        <ExclamationTriangleIcon className="h-12 w-12 text-red-500" />
-        <h1 className="text-xl font-semibold">Job Not Found</h1>
-        <p className="text-gray-600">
-          The job posting you're looking for doesn't exist or has been removed.
+      <div className="mx-auto flex max-w-md flex-col items-center justify-center space-y-4 py-16 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10 ring-1 ring-destructive/20">
+          <ExclamationTriangleIcon className="h-7 w-7 text-destructive" />
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight text-[#272156] dark:text-foreground">
+          Job not found
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          This posting is missing or no longer available.
         </p>
-        <Button onClick={() => router.push("/dashboard/jobs")}>
-          View All Jobs
+        <Button
+          className="bg-[#272156] text-white hover:bg-[#272156]/90"
+          onClick={() => router.push("/dashboard/jobs")}
+        >
+          Browse jobs
         </Button>
       </div>
     );
   }
 
-  const onSubmit: SubmitHandler<any> = async (data) => {
-    // Clear previous errors
-    setFormErrors([]);
-
-    // Check for validation errors
-    const errors = Object.entries(formState.errors).map(
-      ([field, error]) => error.message as string
-    );
-    if (errors.length > 0) {
-      setFormErrors(errors);
-      setShowErrorDialog(true);
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Validate email format if email field exists
-      const emailQuestion = questions.find((q) =>
-        q.question.toLowerCase().includes("email")
-      );
-      if (emailQuestion && data[emailQuestion._id]) {
-        const email = data[emailQuestion._id];
-        if (!z.string().email().safeParse(email).success) {
-          throw new Error("Please enter a valid email address");
-        }
-      }
-
-      // Format answers in the expected structure
-      const answers = questions.map((q) => {
-        const questionId = q._id || q.id;
-        const answer = data[questionId];
-
-        // Additional validation for required fields
-        if (q.required && (!answer || answer.trim() === "")) {
-          throw new Error(`${q.question} is required`);
-        }
-
-        return {
-          questionId,
-          questionText: q.question,
-          answer: answer || "",
-        };
+  const uploadFile = async (file: File): Promise<string> => {
+    const uploadWithToken = async (token: string): Promise<string> => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`${BACKEND_URL}/api/upload/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
       });
 
-      // Create the application data structure
-      const applicationData = {
-        jobId: id,
-        answers,
-        status: "New",
-        appliedDate: new Date().toISOString(),
-        userId: user.id,
-      };
+      if (response.status === 401) {
+        const refreshed = await authService.refreshToken();
+        if (refreshed) {
+          return uploadWithToken(authService.getSession()?.token || "");
+        }
+        throw new Error("Session expired. Please log in again.");
+      }
 
-      // Submit to application endpoint with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout (longer for file uploads)
+      if (!response.ok) {
+        const errorBody = await response.json();
+        throw new Error(errorBody.detail || "Upload failed");
+      }
 
+      const payload = await response.json();
+      return String(payload.url);
+    };
+
+    return uploadWithToken(authService.getSession()?.token || "");
+  };
+
+  const submitApplication = async ({
+    answers,
+  }: {
+    values: Record<string, string>;
+    answers: Array<{
+      questionId: string;
+      questionText: string;
+      answer: string;
+    }>;
+  }) => {
+    const applicationData = {
+      jobId: id,
+      answers,
+      status: "New",
+      appliedDate: new Date().toISOString(),
+      userId: user.id,
+    };
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    try {
       const response = await fetch(`${BACKEND_URL}/api/applications/`, {
         method: "POST",
         credentials: "include",
@@ -427,14 +211,12 @@ function ApplicationForm() {
 
       clearTimeout(timeoutId);
 
-      // Check if response is ok before parsing
       if (!response.ok) {
         let errorDetail = "Failed to submit application";
         try {
           const result = await response.json();
           errorDetail = result?.detail || result?.message || errorDetail;
 
-          // Check for duplicate application
           const normalized = errorDetail.toLowerCase();
           if (
             (response.status === 400 || response.status === 409) &&
@@ -451,20 +233,14 @@ function ApplicationForm() {
         throw new Error(errorDetail);
       }
 
-      // Parse success response
-      const result = await response.json();
-      console.log("Application submitted successfully:", result);
-
-      // Show success message and redirect
+      await response.json();
+      setSubmitComplete(true);
       toast.success("Application submitted successfully!");
       router.push("/dashboard/apply/thank-you");
-    } catch (error: any) {
+    } catch (error) {
       console.error("Application submission error:", error);
 
-      // Network errors can occur after the backend has already inserted the application.
-      // Fallback: check if an application for this job now exists for the current user.
       try {
-        // Wait a bit longer for DB to sync and worker to restart
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         const verifyRes = await fetch(`${BACKEND_URL}/api/applications/user`, {
@@ -480,13 +256,15 @@ function ApplicationForm() {
           const list = Array.isArray(verifyData?.applications)
             ? verifyData.applications
             : Array.isArray(verifyData)
-            ? verifyData
-            : [];
-          const exists = list.some((a: any) => String(a.jobId) === String(id));
+              ? verifyData
+              : [];
+          const exists = list.some(
+            (application: { jobId?: string }) =>
+              String(application.jobId) === String(id)
+          );
 
           if (exists) {
-            // Application was successfully saved despite error
-            console.log("Application verified in database");
+            setSubmitComplete(true);
             toast.success("Application submitted successfully!");
             router.push("/dashboard/apply/thank-you");
             return;
@@ -494,515 +272,37 @@ function ApplicationForm() {
         }
       } catch (verifyError) {
         console.error("Verification error:", verifyError);
-        // Continue to show error if verification also fails
       }
 
-      setIsSubmitting(false);
-      toast.error("Failed to submit application. Please try again.");
-      setFormErrors([
-        "Network error occurred. Please check your connection and try again.",
-      ]);
-      setShowErrorDialog(true);
-    }
-  };
-
-  // Render dynamic form fields
-  const renderQuestionField = (question: any) => {
-    const fieldName = question._id || question.id;
-
-    const baseInputClasses =
-      "w-full px-3 py-2 border rounded-md transition-all duration-200 focus:outline-none focus:ring-2";
-    const normalClasses =
-      "border-gray-300 focus:ring-blue-500 focus:border-blue-500";
-    const inputClasses = `${baseInputClasses} ${normalClasses}`;
-
-    const renderLabel = () => (
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {question.question}
-        {question.required && <span className="text-red-500 ml-1">*</span>}
-      </label>
-    );
-
-    switch (question.type) {
-      case "text":
-        return (
-          <div key={fieldName} className="space-y-2">
-            {renderLabel()}
-            <div className="relative">
-              <input
-                {...register(fieldName)}
-                className={inputClasses}
-                type={
-                  String(question.question).toLowerCase().includes("salary")
-                    ? "number"
-                    : "text"
-                }
-                inputMode={
-                  String(question.question).toLowerCase().includes("salary")
-                    ? "decimal"
-                    : undefined
-                }
-                placeholder={`Enter your ${question.question.toLowerCase()}`}
-              />
-            </div>
-            {getFieldError(fieldName) && (
-              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
-            )}
-          </div>
-        );
-
-      case "select":
-        return (
-          <div key={fieldName} className="space-y-2">
-            {renderLabel()}
-            <div className="relative">
-              <select
-                {...register(fieldName)}
-                className={inputClasses}
-                defaultValue=""
-              >
-                <option value="" disabled>
-                  Select an option
-                </option>
-                {question.options?.map((option: string) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {getFieldError(fieldName) && (
-              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
-            )}
-          </div>
-        );
-
-      case "radio":
-        return (
-          <div key={fieldName} className="space-y-2">
-            {renderLabel()}
-            <div className="space-y-3 bg-white dark:bg-gray-900 p-3 rounded-md border border-gray-200 dark:border-gray-800">
-              {question.options?.map((option: string) => (
-                <div key={option} className="relative flex items-start">
-                  <div className="flex items-center h-5">
-                    <input
-                      type="radio"
-                      {...register(fieldName)}
-                      value={option}
-                      id={`${fieldName}-${option}`}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                    />
-                  </div>
-                  <label
-                    htmlFor={`${fieldName}-${option}`}
-                    className="ml-3 text-sm text-gray-700 dark:text-gray-300 select-none cursor-pointer"
-                  >
-                    {option}
-                  </label>
-                </div>
-              ))}
-            </div>
-            {getFieldError(fieldName) && (
-              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
-            )}
-          </div>
-        );
-
-      case "boolean":
-        return (
-          <div key={fieldName} className="space-y-2">
-            {renderLabel()}
-            <div className="space-y-3 bg-white dark:bg-gray-900 p-3 rounded-md border border-gray-200 dark:border-gray-800">
-              {["Yes", "No"].map((option) => (
-                <div key={option} className="relative flex items-start">
-                  <div className="flex items-center h-5">
-                    <input
-                      type="radio"
-                      {...register(fieldName)}
-                      value={option}
-                      id={`${fieldName}-${option}`}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                    />
-                  </div>
-                  <label
-                    htmlFor={`${fieldName}-${option}`}
-                    className="ml-3 text-sm text-gray-700 dark:text-gray-300 select-none cursor-pointer"
-                  >
-                    {option}
-                  </label>
-                </div>
-              ))}
-            </div>
-            {getFieldError(fieldName) && (
-              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
-            )}
-          </div>
-        );
-
-      case "file":
-        return (
-          <div key={fieldName} className="space-y-2">
-            {renderLabel()}
-            <div className="relative">
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    if (file.size > 5 * 1024 * 1024) {
-                      // 5MB limit
-                      toast.error("File size should not exceed 5MB");
-                      return;
-                    }
-                    setUploadedFile(file);
-                    setIsUploading(true);
-                    try {
-                      // Try to upload with current token
-                      const uploadFile = async (token: string) => {
-                        const formData = new FormData();
-                        formData.append("file", file);
-                        const response = await fetch(
-                          `${BACKEND_URL}/api/upload/`,
-                          {
-                            method: "POST",
-                            headers: {
-                              Authorization: `Bearer ${token}`,
-                            },
-                            body: formData,
-                          }
-                        );
-
-                        if (response.status === 401) {
-                          // Token expired, try to refresh
-                          const refreshed = await authService.refreshToken();
-                          if (refreshed) {
-                            // Retry with new token
-                            return uploadFile(
-                              authService.getSession()?.token || ""
-                            );
-                          }
-                          throw new Error(
-                            "Session expired. Please log in again."
-                          );
-                        }
-
-                        if (!response.ok) {
-                          const error = await response.json();
-                          throw new Error(error.detail || "Upload failed");
-                        }
-
-                        return response.json();
-                      };
-
-                      const data = await uploadFile(
-                        authService.getSession()?.token || ""
-                      );
-                      setUploadedFileUrl(data.url);
-                      setValue(fieldName, data.url, {
-                        shouldValidate: true,
-                        shouldDirty: true,
-                        shouldTouch: true,
-                      });
-                      toast.success("File uploaded successfully!");
-                    } catch (error) {
-                      console.error("Upload error:", error);
-                      if (
-                        error.message ===
-                        "Session expired. Please log in again."
-                      ) {
-                        // Redirect to login
-                        router.push(`/login?redirect=/dashboard/apply/${id}`);
-                      } else {
-                        toast.error(
-                          error.message ||
-                            "Failed to upload file. Please try again."
-                        );
-                      }
-                      setUploadedFile(null);
-                      setValue(fieldName, "", {
-                        shouldValidate: true,
-                        shouldDirty: true,
-                        shouldTouch: true,
-                      });
-                    } finally {
-                      setIsUploading(false);
-                    }
-                  }
-                }}
-                className={`${inputClasses} file:mr-4 file:py-2 file:px-4 file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100`}
-              />
-              {/* Hidden registered field carrying uploaded file URL for validation */}
-              <input
-                type="hidden"
-                {...register(fieldName)}
-                value={uploadedFileUrl || ""}
-                readOnly
-              />
-            </div>
-            {uploadedFile && (
-              <div className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
-                <div className="flex items-center gap-2">
-                  <DocumentIcon className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm text-gray-600">
-                    {uploadedFile.name}
-                  </span>
-                </div>
-                {uploadedFileUrl && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUploadedFile(null);
-                      setUploadedFileUrl(null);
-                      setValue(fieldName, "");
-                    }}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <XMarkIcon className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            )}
-            {getFieldError(fieldName) && (
-              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
-            )}
-            {isUploading && (
-              <div className="flex items-center gap-2 text-blue-600">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Uploading...</span>
-              </div>
-            )}
-          </div>
-        );
-
-      case "date":
-        return (
-          <div key={fieldName} className="space-y-2">
-            {renderLabel()}
-            <div className="relative">
-              <input
-                {...register(fieldName)}
-                className={inputClasses}
-                type="date"
-              />
-            </div>
-            {getFieldError(fieldName) && (
-              <p className="text-sm text-red-600">{getFieldError(fieldName)}</p>
-            )}
-          </div>
-        );
-
-      default:
-        return null;
+      throw new Error(
+        "Network error occurred. Please check your connection and try again."
+      );
     }
   };
 
   return (
     <>
-      <motion.div
-        className="min-h-screen py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {job?.title || "Job Application"}
-            </h1>
-            <p className="text-gray-600">
-              Complete the form below to apply for this position
-            </p>
-          </div>
-
-          {/* Stepper */}
-          <div className="mb-6">
-            <ol className="flex items-center justify-center gap-4">
-              {steps.map((s, idx) => (
-                <li key={s.key} className="flex items-center">
-                  <div
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm border ${
-                      idx < currentStep
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : idx === currentStep
-                        ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800"
-                        : "bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
-                    }`}
-                  >
-                    <span
-                      className={`w-5 h-5 inline-flex items-center justify-center rounded-full border ${
-                        idx <= currentStep
-                          ? "border-current"
-                          : "border-gray-300 dark:border-gray-600"
-                      }`}
-                    >
-                      {idx + 1}
-                    </span>
-                    <span className="whitespace-nowrap">{s.title}</span>
-                  </div>
-                  {idx < steps.length - 1 && (
-                    <span className="mx-2 h-px w-6 bg-gray-200 dark:bg-gray-700" />
-                  )}
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <div className="bg-white dark:bg-gray-900 shadow-xl rounded-2xl overflow-hidden">
-            <div className="p-6 md:p-8">
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-                <div className="space-y-6">
-                  {questions
-                    .filter((q) => currentFieldIds.includes(q._id || q.id))
-                    .map((question) => renderQuestionField(question))}
-                </div>
-
-                <div className="mt-8 pt-5 border-t border-gray-200 dark:border-gray-800 flex items-center gap-3">
-                  {currentStep > 0 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setCurrentStep((s) => Math.max(0, s - 1))}
-                    >
-                      <ArrowLeft className="h-4 w-4 mr-2" /> Back
-                    </Button>
-                  )}
-                  {currentStep < steps.length - 1 && (
-                    <Button
-                      type="button"
-                      className="ml-auto"
-                      onClick={async () => {
-                        const result = await validateCurrentStep();
-                        if (result.ok) {
-                          setCurrentStep((s) =>
-                            Math.min(steps.length - 1, s + 1)
-                          );
-                        } else {
-                          // Show the first concrete error so users know which field to fix
-                          toast.error(
-                            result.errors[0] ||
-                              "Please complete required fields to continue"
-                          );
-                        }
-                      }}
-                    >
-                      Next <ArrowRight className="h-4 w-4 ml-2" />
-                    </Button>
-                  )}
-                  {currentStep === steps.length - 1 && (
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className={`ml-auto py-3 text-lg transition-all duration-200 ${
-                        isSubmitting
-                          ? "bg-blue-400"
-                          : "bg-blue-600 hover:bg-blue-700"
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      {isSubmitting ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                          <span>Submitting Application...</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <Send className="h-5 w-5" />
-                          <span>Submit Application</span>
-                        </div>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-              <ExclamationCircleIcon className="h-6 w-6" />
-              Please Fix the Following Issues
-            </AlertDialogTitle>
-          </AlertDialogHeader>
-          <AlertDialogDescription>
-            <ul className="list-disc pl-5 space-y-2">
-              {formErrors.map((error, index) => (
-                <li key={index} className="text-gray-700">
-                  {error}
-                </li>
-              ))}
-            </ul>
-          </AlertDialogDescription>
-          <AlertDialogFooter>
-            <AlertDialogAction onClick={() => setShowErrorDialog(false)}>
-              Got it
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          duration: 5000,
-          style: {
-            background: "#363636",
-            color: "#fff",
-          },
-          success: {
-            duration: 3000,
-            iconTheme: {
-              primary: "#4ade80",
-              secondary: "#fff",
-            },
-          },
-          error: {
-            duration: 4000,
-            iconTheme: {
-              primary: "#ef4444",
-              secondary: "#fff",
-            },
-          },
+      <TourPageHelper tourId="user-apply" />
+      <CandidateApplicationForm
+        title={job?.title || "Job application"}
+        questions={normalizedQuestions}
+        mode="live"
+        subtitle="Complete each section, then submit your application."
+        jobMeta={{
+          department: job?.department ? String(job.department) : undefined,
+          location: job?.location ? String(job.location) : undefined,
+          employmentType: job?.employmentType
+            ? String(job.employmentType)
+            : undefined,
         }}
+        onSubmitApplication={submitApplication}
+        onUploadFile={uploadFile}
+        onSessionExpired={() =>
+          router.push(`/login?redirect=/dashboard/apply/${id}`)
+        }
       />
     </>
   );
-}
-
-function getDefaultValues(
-  questions: Array<{ _id?: string; id?: string; type: string }>
-) {
-  return questions.reduce((acc, question) => {
-    const fieldName = question._id || question.id;
-    if (!fieldName) return acc;
-
-    switch (question.type) {
-      case "text":
-        acc[fieldName] = "";
-        break;
-      case "select":
-        acc[fieldName] = "";
-        break;
-      case "radio":
-        acc[fieldName] = "";
-        break;
-      case "boolean":
-        acc[fieldName] = "";
-        break;
-      case "file":
-        acc[fieldName] = "";
-        break;
-      case "date":
-        acc[fieldName] = "";
-        break;
-      default:
-        acc[fieldName] = "";
-    }
-    return acc;
-  }, {} as Record<string, string>);
 }
 
 export default function ApplyPage() {

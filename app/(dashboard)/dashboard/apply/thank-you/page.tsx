@@ -1,78 +1,89 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
-import { CheckCircle, ArrowRight } from "lucide-react";
+import { ArrowRight, CheckCircle2, Mail } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function ThankYouPage() {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <motion.div
-      className="container mx-auto px-4 py-16 mt-32 text-center"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
+      className="mx-auto flex max-w-lg flex-col items-center px-2 py-10 text-center sm:py-14"
+      initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
     >
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
+      <div
+        className="relative mb-6 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-[#272156]/10 bg-[#272156]/5 shadow-sm"
+        aria-hidden
       >
-        <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-8" />
-      </motion.div>
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 40%, rgba(49,205,255,0.25), transparent 70%)",
+          }}
+        />
+        <CheckCircle2 className="relative h-10 w-10 text-[#272156]" strokeWidth={1.5} />
+      </div>
 
-      <motion.h1
-        className="text-4xl font-bold mb-4 text-gray-800"
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-      >
-        Thank You for Your Application!
-      </motion.h1>
+      <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#31CDFF]">
+        Application received
+      </p>
+      <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#272156] dark:text-foreground sm:text-3xl">
+        Thanks — we got your application
+      </h1>
+      <p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
+        Hiring will review it and contact you if you move forward.
+      </p>
 
-      <motion.p
-        className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto"
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.4 }}
-      >
-        We've received your application and appreciate your interest in joining our team. Our hiring team will review your information and get back to you soon.
-      </motion.p>
-
-      <motion.div
-        className="bg-blue-50 p-6 rounded-lg shadow-md mb-8 max-w-2xl mx-auto"
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.5 }}
-      >
-        <h2 className="text-2xl font-semibold mb-4 text-blue-800">What's Next?</h2>
-        <ul className="text-left text-blue-700 space-y-2">
-          <li>• Our team will review your application</li>
-          <li>• If your profile matches our requirements, we'll contact you for an interview</li>
+      <div className="mt-8 w-full rounded-2xl border border-border/60 bg-card p-5 text-left shadow-sm sm:p-6">
+        <h2 className="text-sm font-semibold text-[#272156] dark:text-foreground">
+          What happens next
+        </h2>
+        <ul className="mt-3 space-y-2.5 text-sm text-muted-foreground">
+          <li className="flex gap-2.5">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#31CDFF]" />
+            Your application is in the review queue.
+          </li>
+          <li className="flex gap-2.5">
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#31CDFF]" />
+            If your profile fits, we&apos;ll reach out about next steps.
+          </li>
         </ul>
-      </motion.div>
+      </div>
 
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.6 }}
-      >
-        <Link
-          href="/dashboard/applications"
-          className="inline-flex items-center px-6 py-3 bg-[#4D4D70] text-white font-semibold rounded-full hover:bg-[#4D4D70] transition-colors duration-300"
+      <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
+        <Button
+          asChild
+          className="bg-[#31CDFF] text-white hover:bg-[#31CDFF]/90"
         >
-          TRACK STATUS
-          <ArrowRight className="ml-2 h-5 w-5" />
-        </Link>
-      </motion.div>
+          <Link href="/dashboard/applications">
+            Track status
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
+        </Button>
+        <Button
+          asChild
+          variant="outline"
+          className="border-[#272156]/20 text-[#272156] hover:bg-[#272156]/5"
+        >
+          <Link href="/dashboard/jobs">Browse more jobs</Link>
+        </Button>
+      </div>
 
-      <motion.div
-        className="mt-16 text-gray-500"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5, delay: 0.7 }}
-      >
-        <p>Have any questions? Contact us at <a href="mailto:info@bqitech.com" className="text-blue-500 hover:underline">info@bqitech.com</a></p>
-      </motion.div>
+      <p className="mt-10 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        Questions?{" "}
+        <a
+          href="mailto:info@bqitech.com"
+          className="font-medium text-[#272156] underline-offset-2 hover:underline dark:text-[#31CDFF]"
+        >
+          info@bqitech.com
+        </a>
+      </p>
     </motion.div>
   );
 }

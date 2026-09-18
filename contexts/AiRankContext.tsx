@@ -54,24 +54,6 @@ interface AiRankContextValue {
 
 const AiRankContext = createContext<AiRankContextValue | null>(null);
 
-const EMPTY_RANK_RESULT: AiRankCompletePayload = {
-  ranked: 0,
-  errors: [],
-  results: [],
-};
-
-const AI_RANK_FALLBACK: AiRankContextValue = {
-  progress: null,
-  isBackground: false,
-  isRanking: false,
-  inFlightApplicationIds: [],
-  rankingApplicationId: null,
-  rankApplications: async () => EMPTY_RANK_RESULT,
-  rankApplication: async () => EMPTY_RANK_RESULT,
-  sendToBackground: () => {},
-  expandOverlay: () => {},
-};
-
 const LLM_PHASE_INTERVAL_MS = 2200;
 const SAVE_FLASH_MS = 450;
 const COMPLETE_FLASH_MS = 500;
@@ -98,7 +80,7 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
       invalidateAfterRank();
 
       if (errors.length && !ranked) {
-        toast.error(errors[0]?.error || "AI ranking failed");
+        toast.error(errors[0]?.error || "BQI Intelligence ranking failed");
         return;
       }
 
@@ -110,12 +92,12 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
       }
 
       if (ranked === 1 && candidateNames[0]) {
-        toast.success(`AI ranking complete for ${candidateNames[0]}`);
+        toast.success(`BQI Intelligence ranking complete for ${candidateNames[0]}`);
         return;
       }
 
       if (ranked > 0) {
-        toast.success(`AI ranking complete for ${ranked} candidates`);
+        toast.success(`BQI Intelligence ranking complete for ${ranked} candidates`);
       }
     },
     [invalidateAfterRank]
@@ -135,18 +117,18 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
 
       const blocked = uniqueIds.filter((id) => inFlightIdsRef.current.has(id));
       if (blocked.length === uniqueIds.length) {
-        toast.error("AI ranking is already in progress for this candidate");
+        toast.error("BQI Intelligence ranking is already in progress for this candidate");
         return { ranked: 0, errors: [], results: [] };
       }
 
       const targetIds = uniqueIds.filter((id) => !inFlightIdsRef.current.has(id));
       if (!targetIds.length) {
-        toast.error("AI ranking is already in progress");
+        toast.error("BQI Intelligence ranking is already in progress");
         return { ranked: 0, errors: [], results: [] };
       }
 
       if (sessionActiveRef.current) {
-        toast.error("AI ranking is already in progress");
+        toast.error("BQI Intelligence ranking is already in progress");
         return { ranked: 0, errors: [], results: [] };
       }
 
@@ -226,7 +208,7 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
           } catch (error) {
             errors.push({
               id: applicationId,
-              error: error instanceof Error ? error.message : "AI ranking failed",
+              error: error instanceof Error ? error.message : "BQI Intelligence ranking failed",
             });
           } finally {
             if (phaseInterval !== undefined) {
@@ -325,7 +307,8 @@ export function AiRankProvider({ children }: { children: ReactNode }) {
 
 export function useAiRank() {
   const context = useContext(AiRankContext);
-  // Shared admin modals (e.g. ViewApplicationModal) also render on the user
-  // dashboard, which has no AiRankProvider — return a safe no-op there.
-  return context ?? AI_RANK_FALLBACK;
+  if (!context) {
+    throw new Error("useAiRank must be used within AiRankProvider");
+  }
+  return context;
 }

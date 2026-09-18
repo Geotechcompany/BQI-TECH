@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
+import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { Button } from "@/components/ui/button";
 import {
   MailPlus,
@@ -163,15 +165,26 @@ export default function UserManagementPage() {
         searchPlaceholder="Search users by name, email or role"
         onSearch={setSearchQuery}
         searchValue={searchQuery}
+        tourId="user-management"
+        guideInBanner
         headerActions={
-          <Button onClick={() => setInviteOpen(true)} className="shadow-sm">
+          <Button
+            onClick={() => setInviteOpen(true)}
+            className="shadow-sm"
+            data-tour="user-management-invite"
+          >
             <MailPlus className="mr-2 h-4 w-4" />
             Invite user
           </Button>
         }
       >
+        <TourPageHelper tourId="user-management" />
         <div className="mx-auto max-w-screen-2xl space-y-6 px-4 pb-8">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <AdminPageWelcomeBanner bannerKey="user-management" tourId="user-management" />
+          <div
+            className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            data-tour="user-management-stats"
+          >
             {stats.map((stat) => (
               <div
                 key={stat.label}
@@ -266,17 +279,19 @@ export default function UserManagementPage() {
             </Button>
           </div>
 
-          <UserManagementTable
-            users={users}
-            isLoading={isLoading || deleteUser.isPending}
-            resendingUserId={resendingUserId}
-            onResendInvite={(userId) => resendInviteForUser.mutate(userId)}
-            onEdit={setEditingUser}
-            onDelete={(userId) => {
-              const target = users.find((user) => user.id === userId) ?? null;
-              setDeleteTarget(target);
-            }}
-          />
+          <div data-tour="user-management-table">
+            <UserManagementTable
+              users={users}
+              isLoading={isLoading || deleteUser.isPending}
+              resendingUserId={resendingUserId}
+              onResendInvite={(userId) => resendInviteForUser.mutate(userId)}
+              onEdit={setEditingUser}
+              onDelete={(userId) => {
+                const target = users.find((user) => user.id === userId) ?? null;
+                setDeleteTarget(target);
+              }}
+            />
+          </div>
 
           {!debouncedSearchQuery.trim() && (
             <Pagination

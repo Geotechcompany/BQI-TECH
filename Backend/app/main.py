@@ -23,6 +23,11 @@ from .database import (
 from .config import settings
 from .lib.runtime_environment import get_runtime_environment_payload
 from .lib.backup_scheduler import start_backup_scheduler, stop_backup_scheduler
+from .lib.employee_invite_scheduler import (
+    start_employee_invite_scheduler,
+    stop_employee_invite_scheduler,
+)
+from .lib.job_status_scheduler import start_job_status_scheduler, stop_job_status_scheduler
 from .lib.cors import apply_cors_headers, build_allowed_origins, is_origin_allowed
 from .lib.email_transport_settings import get_email_transport_config
 
@@ -43,6 +48,12 @@ from .routers.upload import router as upload_router
 from .routers.broadcast_lists import router as broadcast_lists_router
 from .routers.cv_vault import router as cv_vault_router
 from .routers.internal_email import router as internal_email_router
+from .routers.microsoft_integrations import router as microsoft_integrations_router
+from .routers.integrations import router as integrations_router
+from .routers.employees import router as employees_router
+from .routers.employee_portal import router as employee_portal_router
+from .routers.leave import router as leave_router
+from .routers.email_templates import router as email_templates_router
 
 # Try to import misc router if it exists
 try:
@@ -92,9 +103,41 @@ async def lifespan(app: FastAPI):
     await get_email_transport_config(force_reload=True)
     start_reconnect_task()
     start_backup_scheduler()
+    start_job_status_scheduler()
+    start_employee_invite_scheduler()
+    # Idempotent Calamari leave types (insert missing only)
+    try:
+        if is_connected() and get_database() is not None:
+            from .lib.leave import ensure_leave_types_seed
+
+            result = await ensure_leave_types_seed(get_database())
+            if result.get("inserted"):
+                logger.info(
+                    "Seeded %s leave type(s) (%s total)",
+                    result["inserted"],
+                    result["total"],
+                )
+    except Exception as exc:
+        logger.warning("Leave types seed on startup skipped: %s", exc)
+    # Idempotent pipeline email templates (insert missing only)
+    try:
+        if is_connected() and get_database() is not None:
+            from .lib.email_templates import ensure_email_templates_seed
+
+            result = await ensure_email_templates_seed(get_database())
+            if result.get("inserted"):
+                logger.info(
+                    "Seeded %s email template(s) (%s total)",
+                    result["inserted"],
+                    result["total"],
+                )
+    except Exception as exc:
+        logger.warning("Email templates seed on startup skipped: %s", exc)
     yield
     # Shutdown
     logger.info("Shutting down...")
+    await stop_employee_invite_scheduler()
+    await stop_job_status_scheduler()
     await stop_backup_scheduler()
     await stop_reconnect_task()
     await close_database_connection()
@@ -283,6 +326,8 @@ async def cors_safety_net(request: Request, call_next):
 logger.info("Registering routers...")
 logger.info("Registering auth router at /api")
 app.include_router(auth_router, prefix="/api")
+logger.info("Registering auth 2FA router at /api")
+app.include_router(admin_2fa_router, prefix="/api")
 logger.info("Registering admin router at /api/admin")
 app.include_router(admin_router, prefix="/api/admin")
 logger.info("Registering applications router at /api/applications")
@@ -311,6 +356,18 @@ logger.info("Registering cv vault router")
 app.include_router(cv_vault_router)
 logger.info("Registering internal email relay router at /api")
 app.include_router(internal_email_router, prefix="/api")
+logger.info("Registering Microsoft integrations router at /api/admin")
+app.include_router(microsoft_integrations_router, prefix="/api/admin")
+logger.info("Registering app integrations credentials router at /api/admin")
+app.include_router(integrations_router, prefix="/api/admin")
+logger.info("Registering employees / HR router at /api/admin")
+app.include_router(employees_router)
+logger.info("Registering employee portal router at /api/employee")
+app.include_router(employee_portal_router)
+logger.info("Registering leave router at /api")
+app.include_router(leave_router, prefix="/api")
+logger.info("Registering email templates router at /api/admin")
+app.include_router(email_templates_router, prefix="/api/admin")
 
 # Include misc router if available
 if HAS_MISC_ROUTER:

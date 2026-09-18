@@ -6,6 +6,7 @@ export interface User {
   name?: string;
   role: string;
   avatar?: string | null;
+  avatarUrl?: string | null;
   adminModules?: string[];
   isEmailVerified?: boolean;
   createdAt?: string;

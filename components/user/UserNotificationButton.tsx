@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface UserNotification {
@@ -210,9 +211,8 @@ export function UserNotificationButton({
         <ScrollArea className="max-h-[400px]">
           <AnimatePresence>
             {isLoading ? (
-              <div className="p-8 text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-sm text-gray-500 mt-2">Loading notifications...</p>
+              <div className="px-3 py-3">
+                <ListSkeleton items={5} />
               </div>
             ) : error ? (
               <div className="p-8 text-center">
