@@ -25,9 +25,9 @@ def format_task_document(
     application_id = str(doc.get("applicationId") or "")
     href = None
     if application_id and resolved_job_id:
-        href = f"/admin/jobs/{resolved_job_id}/candidates/{application_id}"
+        href = f"/manage/jobs/{resolved_job_id}/candidates/{application_id}"
     elif application_id:
-        href = f"/admin/applications?id={application_id}"
+        href = f"/manage/applications?id={application_id}"
 
     return {
         "id": str(doc.get("_id") or doc.get("id") or ""),
@@ -53,8 +53,8 @@ def candidate_profile_href(application_id: str, job_id: Optional[str]) -> Option
     if not application_id:
         return None
     if job_id:
-        return f"/admin/jobs/{job_id}/candidates/{application_id}"
-    return f"/admin/applications?id={application_id}"
+        return f"/manage/jobs/{job_id}/candidates/{application_id}"
+    return f"/manage/applications?id={application_id}"
 
 
 def user_identity_tokens(user: dict[str, Any]) -> set[str]:

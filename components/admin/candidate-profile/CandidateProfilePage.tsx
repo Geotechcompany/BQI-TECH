@@ -699,10 +699,11 @@ export function CandidateProfilePage({
   }, [application.id, name, rankApplicationById]);
 
   const getProfileUrl = useCallback(() => {
+    const path = `/manage/jobs/${jobId}/candidates/${applicationId}`;
     if (typeof window === "undefined") {
-      return `/manage/jobs/${jobId}/candidates/${applicationId}`;
+      return path;
     }
-    return `${window.location.origin}/admin/jobs/${jobId}/candidates/${applicationId}`;
+    return `${window.location.origin}${path}`;
   }, [applicationId, jobId]);
 
   const copyProfileUrl = useCallback(

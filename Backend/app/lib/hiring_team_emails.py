@@ -62,7 +62,7 @@ def newly_added_hiring_team_members(
 
 
 def job_pipeline_link(job_id: str) -> str:
-    return f"/admin/jobs/{job_id}/pipeline"
+    return f"/manage/jobs/{job_id}/pipeline"
 
 
 def job_pipeline_absolute_url(job_id: str) -> str:

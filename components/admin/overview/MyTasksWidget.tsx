@@ -10,6 +10,8 @@ import { candidateActionsApi } from "@/components/admin/utils/candidate-actions-
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAdminPath } from "@/contexts/AdminPathContext";
+import { rewriteLegacyAdminUiLink } from "@/lib/admin-notification-utils";
 
 export interface MyTaskItem {
   id: string;
@@ -41,6 +43,7 @@ async function fetchMyTasks(): Promise<MyTaskItem[]> {
 }
 
 export function MyTasksWidget({ className }: { className?: string }) {
+  const { adminHref } = useAdminPath();
   const queryClient = useQueryClient();
   const { data: tasks = [], isLoading, isError } = useQuery({
     queryKey: ["admin-my-tasks"],
@@ -130,7 +133,7 @@ export function MyTasksWidget({ className }: { className?: string }) {
                   <div className="min-w-0 flex-1">
                     {task.href ? (
                       <Link
-                        href={task.href}
+                        href={adminHref(rewriteLegacyAdminUiLink(task.href))}
                         className="block truncate text-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {task.title}

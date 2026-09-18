@@ -28,7 +28,7 @@ EMAIL_TYPES = frozenset(
 )
 
 _JOB_ID_IN_HREF_RE = re.compile(
-    r"/admin/jobs/([a-fA-F0-9]{24})/(?:pipeline|candidates)",
+    r"/(?:admin|manage)/jobs/([a-fA-F0-9]{24})/(?:pipeline|candidates)",
     re.IGNORECASE,
 )
 

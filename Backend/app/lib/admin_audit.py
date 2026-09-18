@@ -187,24 +187,24 @@ def actor_name(user: dict[str, Any]) -> str:
 
 def resource_path(resource_type: str, resource_id: str | None = None) -> str | None:
     paths: dict[str, str] = {
-        "blog_post": "/admin/blog-management",
-        "job_posting": "/admin/job-postings",
-        "user": "/admin/user-management",
-        "admin_invite": "/admin/user-management",
-        "application": "/admin/applications",
-        "question": "/admin/job-postings",
-        "settings": "/admin/settings",
-        "backup": "/admin/backup",
-        "email_transport": "/admin/settings",
-        "email_broadcast": "/admin/email-broadcast",
-        "notification": "/admin/notifications",
-        "recaptcha": "/admin/settings",
-        "database_sync": "/admin/settings",
-        "cv_vault": "/admin/cv-vault",
-        "survey": "/admin/surveys",
-        "broadcast_list": "/admin/email-broadcast",
-        "auth_session": "/admin/login",
-        "admin_2fa": "/admin/settings?section=security",
+        "blog_post": "/manage/blog-management",
+        "job_posting": "/manage/job-postings",
+        "user": "/manage/user-management",
+        "admin_invite": "/manage/user-management",
+        "application": "/manage/applications",
+        "question": "/manage/job-postings",
+        "settings": "/manage/settings",
+        "backup": "/manage/backup",
+        "email_transport": "/manage/settings",
+        "email_broadcast": "/manage/email-broadcast",
+        "notification": "/manage/notifications",
+        "recaptcha": "/manage/settings",
+        "database_sync": "/manage/settings",
+        "cv_vault": "/manage/cv-vault",
+        "survey": "/manage/surveys",
+        "broadcast_list": "/manage/email-broadcast",
+        "auth_session": "/manage/login",
+        "admin_2fa": "/manage/settings?section=security",
     }
     base = paths.get(resource_type)
     if not base:
@@ -601,7 +601,7 @@ async def log_blog_updated(
         resource_type="blog_post",
         resource_id=post_id,
         resource_title=title,
-        resource_path=f"/admin/blog-management/{post_id}/edit",
+        resource_path=f"/manage/blog-management/{post_id}/edit",
         changes=changes,
     )
 

@@ -237,12 +237,16 @@ export async function middleware(request: NextRequest) {
   const adminLoginPublicPath = `${publicAdminBase}/login`;
   const adminLoginInternalPath = `${INTERNAL_ADMIN_BASE}/login`;
 
-  // Never expose the internal App Router tree under /admin.
+  // Legacy /admin bookmarks, emails, and stored notification links → public base.
+  // Do not serve the internal App Router tree under /admin (URL must stay public).
   if (
     pathname === INTERNAL_ADMIN_BASE ||
     pathname.startsWith(`${INTERNAL_ADMIN_BASE}/`)
   ) {
-    return opaqueNotFound(request);
+    const rest = pathname.slice(INTERNAL_ADMIN_BASE.length) || "";
+    const url = request.nextUrl.clone();
+    url.pathname = `${publicAdminBase}${rest}`;
+    return finish(NextResponse.redirect(url));
   }
 
   // When a custom slug is active, also hide the default public base (/manage).

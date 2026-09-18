@@ -108,10 +108,10 @@ def format_comment_document(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def candidate_profile_link(job_id: str, application_id: str) -> str:
-    """Relative admin path to the candidate profile Discussion tab."""
+    """Relative public admin path to the candidate profile Discussion tab."""
     if job_id:
-        return f"/admin/jobs/{job_id}/candidates/{application_id}?tab=discussion"
-    return f"/admin/applications?highlight={application_id}"
+        return f"/manage/jobs/{job_id}/candidates/{application_id}?tab=discussion"
+    return f"/manage/applications?highlight={application_id}"
 
 
 def candidate_profile_absolute_url(job_id: str, application_id: str) -> str:

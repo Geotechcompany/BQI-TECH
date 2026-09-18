@@ -164,7 +164,7 @@ async def log_admin_auth_event(
         resource_type="auth_session",
         resource_id=str(actor.get("_id") or actor.get("id") or "") or None,
         resource_title=str(actor.get("email") or email or ""),
-        resource_path="/admin/login",
+        resource_path="/manage/login",
         changes=changes,
         summary=summary,
         meta={

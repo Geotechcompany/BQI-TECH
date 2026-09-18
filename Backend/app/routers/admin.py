@@ -1614,7 +1614,7 @@ async def invite_admin_user(
 
         previous_role = existing.get("role")
         promoted = was_promoted_to_admin(previous_role, role)
-        login_url = f"{frontend_url}/admin/login"
+        login_url = f"{frontend_url}/manage/login"
         needs_password_setup = promoted or bool(
             existing.get("invitePending")
         ) or not existing.get("password")
@@ -5584,7 +5584,7 @@ async def ai_rank_applications(
                     message=f"AI ranking complete for {len(results)} candidates",
                     notification_type="success",
                     category="ai_rank",
-                    link="/admin/applications",
+                    link="/manage/applications",
                     metadata={"rankedCount": len(results), "category": "ai_rank"},
                 )
 
@@ -5718,7 +5718,7 @@ async def create_manual_application(
             message=f"{applicant} was added to {position}",
             notification_type="application",
             category="new_application",
-            link=application_admin_link(str(app_id)) if app_id else "/admin/applications",
+            link=application_admin_link(str(app_id)) if app_id else "/manage/applications",
             priority="high",
             metadata={
                 "applicationId": app_id,
@@ -6958,7 +6958,7 @@ async def update_ai_provider_settings_endpoint(
             action="updated",
             resource_type="settings",
             resource_title="AI providers",
-            resource_path="/admin/settings",
+            resource_path="/manage/settings",
             detail=(
                 f"active provider: {active.get('label')}"
                 if active

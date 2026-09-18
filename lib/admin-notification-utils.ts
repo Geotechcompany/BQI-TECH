@@ -15,6 +15,42 @@ export interface AdminNotification {
   priority?: string;
 }
 
+/**
+ * Rewrite legacy public UI paths that used `/admin/...` to `/manage/...`.
+ * Leaves `/api/admin/...` and unrelated URLs untouched. Prefer calling
+ * `adminHref()` at click time when a custom public admin slug is active.
+ */
+export function rewriteLegacyAdminUiLink(link: string): string {
+  const raw = link.trim();
+  if (!raw || raw.startsWith("/api/")) return raw;
+
+  const rewritePath = (pathname: string): string => {
+    if (pathname === "/admin") return "/manage";
+    if (pathname.startsWith("/admin/")) {
+      return `/manage${pathname.slice("/admin".length)}`;
+    }
+    return pathname;
+  };
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const nextPath = rewritePath(url.pathname);
+      if (nextPath === url.pathname) return raw;
+      url.pathname = nextPath;
+      return url.toString();
+    } catch {
+      return raw;
+    }
+  }
+
+  // Relative path, optionally with query/hash
+  const match = raw.match(/^([^?#]*)(.*)$/);
+  if (!match) return raw;
+  const [, pathPart = "", suffix = ""] = match;
+  return `${rewritePath(pathPart)}${suffix}`;
+}
+
 function coerceBoolean(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
   if (typeof value === "string") {
@@ -80,6 +116,8 @@ export function normalizeAdminNotification(raw: Record<string, unknown>): AdminN
     (typeof raw.category === "string" && raw.category) ||
     inferCategory(title, metadata);
 
+  const rawLink = typeof raw.link === "string" ? raw.link : undefined;
+
   return {
     id: String(raw.id ?? raw._id ?? ""),
     title,
@@ -87,7 +125,7 @@ export function normalizeAdminNotification(raw: Record<string, unknown>): AdminN
     type,
     category,
     isRead,
-    link: typeof raw.link === "string" ? raw.link : undefined,
+    link: rawLink ? rewriteLegacyAdminUiLink(rawLink) : undefined,
     createdAt,
     priority: typeof raw.priority === "string" ? raw.priority : undefined,
   };

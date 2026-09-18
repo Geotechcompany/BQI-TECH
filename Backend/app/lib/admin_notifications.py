@@ -236,7 +236,8 @@ async def create_system_admin_notification(
 
 
 def application_admin_link(application_id: str) -> str:
-    return f"/admin/applications/{application_id}"
+    """Public UI deep link (address bar base is /manage, not internal /admin)."""
+    return f"/manage/applications/{application_id}"
 
 
 def applicant_display_name(application: dict[str, Any]) -> str:

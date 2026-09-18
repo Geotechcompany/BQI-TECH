@@ -32,7 +32,9 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPath } from "@/contexts/AdminPathContext";
 import { ListSkeleton } from "@/components/ui/skeleton";
+import { rewriteLegacyAdminUiLink } from "@/lib/admin-notification-utils";
 
 import {
 
@@ -482,6 +484,8 @@ function NotificationRow({
 
 }) {
 
+  const { adminHref } = useAdminPath();
+
   const content = (
 
     <div
@@ -634,9 +638,11 @@ function NotificationRow({
 
   if (notification.link) {
 
+    const href = adminHref(rewriteLegacyAdminUiLink(notification.link));
+
     return (
 
-      <Link href={notification.link} className="block">
+      <Link href={href} className="block">
 
         {content}
 
