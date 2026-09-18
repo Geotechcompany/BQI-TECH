@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import Loader from "@/components/Loader";
+import { useAdminPath } from "@/contexts/AdminPathContext";
+import {
+  DEFAULT_ADMIN_BASE,
+  isPublicAdminPath,
+} from "@/lib/admin-path";
 import { usePathname } from "next/navigation";
 
 export default function ClientLayout({
@@ -12,6 +15,7 @@ export default function ClientLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { basePath: publicAdminBase } = useAdminPath();
 
   // Exclude header/footer from auth / portal shells (match user login full-bleed look)
   const isAuthPage = [
@@ -22,7 +26,12 @@ export default function ClientLayout({
     "/auth/verify-email",
     "/employee",
   ].some((path) => pathname?.startsWith(path));
-  const isAdminPage = pathname?.startsWith("/admin");
+  // Browser URL may be `/admin/...` or a rewritten custom slug (e.g. `/manage/...`)
+  const isAdminPage = Boolean(
+    pathname &&
+      (isPublicAdminPath(pathname, DEFAULT_ADMIN_BASE) ||
+        isPublicAdminPath(pathname, publicAdminBase))
+  );
   const isDashboardPage = pathname?.startsWith("/dashboard");
   const shouldHideHeaderFooter = isAuthPage || isAdminPage || isDashboardPage;
 
