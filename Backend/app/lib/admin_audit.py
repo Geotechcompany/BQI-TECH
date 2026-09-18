@@ -58,6 +58,8 @@ RESOURCE_TYPE_LABELS: dict[str, str] = {
     "cv_vault": "CV vault",
     "survey": "survey",
     "broadcast_list": "broadcast list",
+    "auth_session": "admin login",
+    "admin_2fa": "admin 2FA",
 }
 
 FIELD_LABELS: dict[str, dict[str, str]] = {
@@ -190,7 +192,7 @@ def resource_path(resource_type: str, resource_id: str | None = None) -> str | N
         "user": "/admin/user-management",
         "admin_invite": "/admin/user-management",
         "application": "/admin/applications",
-        "question": "/admin/job-postings/questions",
+        "question": "/admin/job-postings",
         "settings": "/admin/settings",
         "backup": "/admin/backup",
         "email_transport": "/admin/settings",
@@ -201,6 +203,8 @@ def resource_path(resource_type: str, resource_id: str | None = None) -> str | N
         "cv_vault": "/admin/cv-vault",
         "survey": "/admin/surveys",
         "broadcast_list": "/admin/email-broadcast",
+        "auth_session": "/admin/login",
+        "admin_2fa": "/admin/settings?section=security",
     }
     base = paths.get(resource_type)
     if not base:
@@ -318,6 +322,22 @@ def build_activity_summary(
         return detail or f"{actor} reordered {label}"
     if action == "ranked":
         return detail or f"{actor} ran AI ranking on applications"
+    if action == "login":
+        return detail or f"{actor} signed in"
+    if action == "login_failed":
+        return detail or f"{actor} failed to sign in"
+    if action == "logout":
+        return detail or f"{actor} signed out"
+    if action == "2fa_verified":
+        return detail or f"{actor} verified a second factor"
+    if action == "2fa_failed":
+        return detail or f"{actor} failed second-factor verification"
+    if action == "2fa_enrolled":
+        return detail or f"{actor} enabled a second factor"
+    if action == "2fa_disabled":
+        return detail or f"{actor} disabled a second factor"
+    if action == "2fa_otp_sent":
+        return detail or f"{actor} was sent an email sign-in code"
 
     if changes:
         joined = ", ".join(changes)
@@ -363,6 +383,7 @@ async def record_admin_activity(
     changes: list[str] | None = None,
     summary: str | None = None,
     detail: str | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> None:
     email = actor_email(user)
     name = actor_name(user)
@@ -394,6 +415,8 @@ async def record_admin_activity(
         "summary": summary,
         "createdAt": datetime.utcnow(),
     }
+    if meta:
+        doc["meta"] = meta
     await db[COLLECTION].insert_one(doc)
 
 
@@ -523,6 +546,7 @@ async def log_custom_action(
     resource_path: str | None = None,
     changes: list[str] | None = None,
     detail: str | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> None:
     await safe_record_admin_activity(
         db,
@@ -535,6 +559,7 @@ async def log_custom_action(
         changes=changes,
         summary=summary,
         detail=detail,
+        meta=meta,
     )
 
 

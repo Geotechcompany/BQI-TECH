@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Form, Request, Body
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from app.auth import create_access_token, verify_password, get_password_hash, get_current_user, SECRET_KEY, ALGORITHM
-from app.database import get_database
+from app.database import get_active_database_name, get_database
 from app.models import User
 from typing import Dict, Any, Optional
 from datetime import timedelta, datetime
@@ -22,14 +22,27 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.utils.ip_utils import get_real_client_ip
-from app.lib.roles import normalize_role
+from app.lib.roles import ADMIN_ROLES, is_admin_role, normalize_role
 from app.lib.admin_permissions import get_effective_admin_modules
+from app.lib.employee_portal_access import (
+    find_employee_for_user,
+    user_has_employee_role,
+)
+from app.lib.user_avatar import (
+    pick_personal_avatar,
+    resolve_user_avatar_url,
+)
 from app.lib.user_verification import resolve_email_verified
+from app.lib.runtime_environment import (
+    RuntimeEnvironment,
+    detect_environment_from_database_name,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 # Rate limiter with accurate IP detection
 def get_client_ip_for_auth_rate_limit(request: Request) -> str:
@@ -189,24 +202,127 @@ async def login(
         # Verify password
         stored_password = user.get("password")
         if not stored_password or not verify_password(credentials.password, stored_password):
+            if is_admin_role(user.get("role")):
+                from app.lib.admin_2fa import log_admin_auth_event
+
+                await log_admin_auth_event(
+                    db,
+                    user,
+                    action="login_failed",
+                    request=request,
+                    summary=f"{email} failed password check",
+                    success=False,
+                    two_factor=None,
+                )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=LOGIN_ERROR_INVALID_PASSWORD,
             )
+
+        # Admin MFA challenge / enrollment gate
+        if is_admin_role(user.get("role")):
+            from app.lib.admin_2fa import (
+                create_challenge_token,
+                enrolled_factors,
+                factor_count,
+                get_admin_2fa_policy,
+                issue_full_admin_tokens,
+                log_admin_auth_event,
+                needs_enrollment_prompt,
+                policy_satisfied,
+            )
+
+            factors = enrolled_factors(user)
+            has_any_factor = factor_count(user) > 0
+            policy = await get_admin_2fa_policy(db)
+
+            # Password OK — log intermediate success when 2FA still required
+            if has_any_factor:
+                await log_admin_auth_event(
+                    db,
+                    user,
+                    action="login",
+                    request=request,
+                    summary=f"{email} password accepted; awaiting 2FA",
+                    success=True,
+                    two_factor="pending",
+                )
+                available = []
+                if factors["email"]:
+                    available.append("email")
+                if factors["totp"]:
+                    available.append("totp")
+                challenge_token = create_challenge_token(str(user["_id"]), kind="2fa_challenge")
+                origin = request.headers.get("origin", "http://localhost:3000")
+                return JSONResponse(
+                    content={
+                        "requires_2fa": True,
+                        "challenge_token": challenge_token,
+                        "methods": available,
+                        "email_hint": email,
+                        "user": {
+                            "id": str(user["_id"]),
+                            "email": user.get("email"),
+                            "name": user.get("name", ""),
+                            "role": normalize_role(user.get("role", "USER")),
+                        },
+                    },
+                    headers={
+                        "Access-Control-Allow-Origin": origin,
+                        "Access-Control-Allow-Credentials": "true",
+                        "Access-Control-Allow-Methods": "POST, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-User-Session",
+                    },
+                )
+
+            # No factors yet — issue session; frontend/backend gate via policy
+            tokens = await issue_full_admin_tokens(
+                db,
+                user,
+                access_expire_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
+                refresh_expire_days=REFRESH_TOKEN_EXPIRE_DAYS,
+            )
+            await log_admin_auth_event(
+                db,
+                user,
+                action="login",
+                request=request,
+                summary=f"{email} signed in (no 2FA enrolled yet; policy={policy})",
+                success=True,
+                two_factor=None,
+            )
+            await db.users.update_one(
+                {"_id": user["_id"]}, {"$set": {"lastLoginAt": datetime.utcnow()}}
+            )
+            origin = request.headers.get("origin", "http://localhost:3000")
+            return JSONResponse(
+                content={
+                    **tokens,
+                    "requires_2fa_setup": needs_enrollment_prompt(user, policy)
+                    or not policy_satisfied(user, policy),
+                    "admin_2fa_policy": policy,
+                },
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-User-Session",
+                },
+            )
             
-        # Create access token
+        # Create access token (short-lived) and refresh token (long-lived)
         access_token = create_access_token(
-            data={"sub": str(user["_id"])}
+            data={"sub": str(user["_id"]), "type": "access"}
         )
-        
-        # Create refresh token
         refresh_token = create_access_token(
-            data={"sub": str(user["_id"])}
+            data={"sub": str(user["_id"]), "type": "refresh"},
+            expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
         )
         
         # Get verification status (standardize on isEmailVerified)
         is_verified = await resolve_email_verified(db, user)
-        
+        avatar = await resolve_user_avatar_url(db, user)
+
         # Format user data
         user_data = {
             "id": str(user["_id"]),
@@ -215,7 +331,8 @@ async def login(
             "role": normalize_role(user.get("role", "USER")),
             "adminModules": get_effective_admin_modules(user),
             "isEmailVerified": is_verified,
-            "avatar": user.get("avatar", ""),
+            "avatar": avatar,
+            "avatarUrl": avatar,
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
         }
         
@@ -292,6 +409,87 @@ async def options_login(request: Request):
             "Access-Control-Max-Age": "3600",
         }
     )
+
+
+def _admin_login_directory_enabled() -> bool:
+    """Dev/staging picker only — production needs an explicit env override."""
+    flag = os.getenv("ALLOW_ADMIN_LOGIN_DIRECTORY", "").strip().lower()
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    if flag in {"0", "false", "no", "off"}:
+        return False
+
+    explicit_env = os.getenv("ENVIRONMENT", "").strip().lower()
+    if explicit_env == "production":
+        return False
+    if explicit_env in {"development", "dev", "staging", "test"}:
+        return True
+
+    db_name = get_active_database_name()
+    runtime = detect_environment_from_database_name(db_name)
+    return runtime != RuntimeEnvironment.PRODUCTION
+
+
+def _format_admin_login_directory_account(user: dict) -> dict:
+    avatar = pick_personal_avatar(user.get("avatar"), user.get("avatarUrl"))
+    return {
+        "id": str(user["_id"]),
+        "email": user.get("email", ""),
+        "name": (user.get("name") or "").strip() or user.get("email", ""),
+        "avatarUrl": avatar,
+    }
+
+
+@router.get("/admin-login-directory")
+@limiter.limit("30/minute")
+async def admin_login_directory(request: Request):
+    """Public list of admin accounts for the login picker (non-production by default).
+
+    Never returns password hashes or non-admin users.
+    """
+    if not _admin_login_directory_enabled():
+        return {"enabled": False, "accounts": []}
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database not connected",
+        )
+
+    try:
+        cursor = db.users.find(
+            {"role": {"$in": list(ADMIN_ROLES)}},
+            {"email": 1, "name": 1, "avatar": 1, "avatarUrl": 1, "role": 1},
+        ).sort("name", 1)
+
+        accounts = []
+        async for user in cursor:
+            if not is_admin_role(user.get("role")):
+                continue
+            email = (user.get("email") or "").strip()
+            if not email:
+                continue
+            account = _format_admin_login_directory_account(user)
+            if not account.get("avatarUrl"):
+                resolved = await resolve_user_avatar_url(db, user)
+                if resolved:
+                    account["avatarUrl"] = resolved
+            accounts.append(account)
+
+        return {"enabled": True, "accounts": accounts}
+    except (
+        ServerSelectionTimeoutError,
+        ConnectionFailure,
+        NetworkTimeout,
+        AutoReconnect,
+    ) as e:
+        logger.error("MongoDB unavailable during admin login directory: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The database is temporarily unavailable. Please try again in a few minutes.",
+        ) from e
+
 
 @router.post("/signup")
 @limiter.limit("3/minute")
@@ -395,8 +593,27 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     }
 
 @router.post("/logout")
-async def logout(current_user: Dict[str, Any] = Depends(get_current_user)):
+async def logout(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     """Logout endpoint (for consistency, JWT tokens are stateless)"""
+    try:
+        if is_admin_role(current_user.get("role")):
+            from app.lib.admin_2fa import log_admin_auth_event
+
+            db = get_database()
+            if db is not None:
+                await log_admin_auth_event(
+                    db,
+                    current_user,
+                    action="logout",
+                    request=request,
+                    summary=f"{current_user.get('email')} signed out",
+                    success=True,
+                )
+    except Exception:
+        logger.warning("Failed to record admin logout", exc_info=True)
     return {"message": "Successfully logged out"}
 
 @router.post("/refresh")
@@ -413,6 +630,14 @@ async def refresh_token(
             algorithms=[ALGORITHM]
         )
         user_id = payload.get("sub")
+        token_type = payload.get("type")
+        # Reject short-lived access tokens used as refresh (new tokens set type;
+        # legacy tokens without type remain accepted until they expire).
+        if token_type == "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -429,15 +654,15 @@ async def refresh_token(
             )
 
         is_verified = await resolve_email_verified(db, user)
+        avatar = await resolve_user_avatar_url(db, user)
 
-        # Create new access token
+        # Rotate tokens: short-lived access + long-lived refresh
         access_token = create_access_token(
-            data={"sub": str(user["_id"])}
+            data={"sub": str(user["_id"]), "type": "access"}
         )
-        
-        # Create new refresh token
         new_refresh_token = create_access_token(
-            data={"sub": str(user["_id"])}
+            data={"sub": str(user["_id"]), "type": "refresh"},
+            expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
         )
         
         # Format user data
@@ -448,7 +673,8 @@ async def refresh_token(
             "role": normalize_role(user.get("role", "USER")),
             "adminModules": get_effective_admin_modules(user),
             "isEmailVerified": is_verified,
-            "avatar": user.get("avatar", ""),
+            "avatar": avatar,
+            "avatarUrl": avatar,
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None
         }
         
@@ -830,14 +1056,52 @@ async def forgot_password(request: Request, data: ForgotPasswordRequest):
         return {"message": "If the email exists, a reset link has been sent."}
 
 
+async def _is_employee_portal_user(db, user: dict) -> bool:
+    """True for EMPLOYEE/STAFF roles or emails on the HR employee roster."""
+    if is_admin_role(user.get("role")):
+        return False
+    if user_has_employee_role(user):
+        return True
+    return await find_employee_for_user(db, user) is not None
+
+
 @router.get("/validate-reset-token")
 async def validate_reset_token(token: str):
     """Validate reset token for the frontend page guard."""
-    db = get_database()
-    rec = await db.password_resets.find_one({"token": token})
-    if not rec or rec.get("expiresAt") < datetime.utcnow():
+    if not token or not token.strip():
         raise HTTPException(status_code=400, detail="Invalid or expired token")
-    return {"valid": True, "email": rec.get("email")}
+
+    try:
+        db = get_database()
+        rec = await db.password_resets.find_one({"token": token.strip()})
+        if not rec or rec.get("expiresAt") < datetime.utcnow():
+            raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+        user = None
+        user_id = rec.get("userId")
+        if user_id:
+            try:
+                user = await db.users.find_one({"_id": ObjectId(user_id)})
+            except Exception:
+                user = None
+        if not user and rec.get("email"):
+            user = await _find_user_by_email(db, rec["email"])
+
+        is_employee = bool(user) and await _is_employee_portal_user(db, user)
+        return {
+            "valid": True,
+            "email": rec.get("email"),
+            "isEmployee": is_employee,
+            "needsPasswordSetup": bool(user.get("needsPasswordSetup")) if user else False,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"validate_reset_token error: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Could not verify reset link. Please try again.",
+        )
 
 
 @router.post("/reset-password")
@@ -861,6 +1125,8 @@ async def reset_password(data: ResetPasswordRequest):
             user = await _find_user_by_email(db, email)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+
+        is_employee = await _is_employee_portal_user(db, user)
 
         hashed = get_password_hash(data.password)
         result = await db.users.update_one(
@@ -887,7 +1153,48 @@ async def reset_password(data: ResetPasswordRequest):
         # Burn the token
         await db.password_resets.delete_one({"_id": rec["_id"]})
 
-        return {"message": "Password reset successful"}
+        # Non-employees keep prior behavior: message only, sign in again.
+        if not is_employee:
+            return {
+                "message": "Password reset successful",
+                "isEmployee": False,
+                "redirectTo": "/login?passwordReset=1",
+            }
+
+        # Employees: issue a session so they land on the portal already signed in.
+        access_token = create_access_token(
+            data={"sub": str(user["_id"]), "type": "access"}
+        )
+        refresh_token = create_access_token(
+            data={"sub": str(user["_id"]), "type": "refresh"},
+            expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+        is_verified = await resolve_email_verified(db, user)
+        avatar = await resolve_user_avatar_url(db, user)
+        raw_role = str(user.get("role") or "EMPLOYEE").strip().upper() or "EMPLOYEE"
+        user_data = {
+            "id": str(user["_id"]),
+            "email": _normalize_email(user.get("email", email)),
+            "name": user.get("name", ""),
+            "role": raw_role,
+            "adminModules": get_effective_admin_modules(user),
+            "isEmailVerified": is_verified,
+            "avatar": avatar,
+            "avatarUrl": avatar,
+            "createdAt": user.get("createdAt", "").isoformat()
+            if user.get("createdAt")
+            else None,
+        }
+
+        return {
+            "message": "Password reset successful",
+            "isEmployee": True,
+            "redirectTo": "/employee",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "user": user_data,
+        }
     except HTTPException:
         raise
     except Exception as e:

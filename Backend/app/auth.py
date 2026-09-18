@@ -99,6 +99,14 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
                     detail="User not found",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
+
+            token_type = payload.get("type")
+            if token_type in ("2fa_challenge", "2fa_setup", "refresh"):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Could not validate credentials",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
                 
             return user
             
@@ -143,4 +151,26 @@ async def get_current_admin_user(credentials: HTTPAuthorizationCredentials = Dep
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions"
             )
+        user = db_user
+
+    # Hard-gate when org policy requires factors the admin has not enrolled
+    try:
+        from app.lib.admin_2fa import get_admin_2fa_policy, policy_satisfied
+
+        db = get_database()
+        policy = await get_admin_2fa_policy(db)
+        if not policy_satisfied(user, policy):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "admin_2fa_required",
+                    "message": "Enable required security factors before using admin tools.",
+                    "policy": policy,
+                },
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Admin 2FA policy check skipped: %s", exc)
+
     return user

@@ -29,6 +29,7 @@ from .lib.email_transport_settings import get_email_transport_config
 # Import routers directly from modules
 from .routers.admin import router as admin_router
 from .routers.auth import router as auth_router
+from .routers.admin_2fa import router as admin_2fa_router
 from .routers.applications import router as applications_router
 from .routers.blog import router as blog_router
 from .routers.jobs import router as jobs_router
