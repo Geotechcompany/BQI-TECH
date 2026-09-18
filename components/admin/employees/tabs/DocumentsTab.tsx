@@ -135,7 +135,7 @@ export function DocumentsTab({ employee }: { employee: Employee }) {
             </Button>
           ) : (
             <Button size="sm" variant="outline" asChild>
-              <Link href="/admin/settings?section=integrations">
+              <Link href="/manage/settings?section=integrations">
                 Connect DocuSign
               </Link>
             </Button>

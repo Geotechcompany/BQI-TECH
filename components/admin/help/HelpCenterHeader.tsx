@@ -24,9 +24,9 @@ export function HelpCenterHeader({
     event.preventDefault();
     const trimmed = query.trim();
     if (trimmed) {
-      router.push(`/admin/help?q=${encodeURIComponent(trimmed)}`);
+      router.push(`/manage/help?q=${encodeURIComponent(trimmed)}`);
     } else {
-      router.push("/admin/help");
+      router.push("/manage/help");
     }
   };
 
@@ -52,7 +52,7 @@ export function HelpCenterHeader({
 
       <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center gap-5 text-center">
         <Link
-          href="/admin/help"
+          href="/manage/help"
           className="text-2xl font-semibold tracking-tight text-white hover:text-[#31CDFF]"
         >
           BQI HR

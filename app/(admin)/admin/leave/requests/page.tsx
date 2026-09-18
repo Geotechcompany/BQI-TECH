@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { CreateLeaveRequestDialog } from "@/components/admin/leave/CreateLeaveRequestDialog";
 import { LeavePageShell } from "@/components/admin/leave/LeavePageShell";
 import { LeaveStatusBadge } from "@/components/admin/leave/LeaveStatusBadge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ export default function LeaveRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,10 +65,7 @@ export default function LeaveRequestsPage() {
     void load();
   }, [load]);
 
-  const updateStatus = async (
-    id: string,
-    next: LeaveRequestStatus
-  ) => {
+  const updateStatus = async (id: string, next: LeaveRequestStatus) => {
     setActingId(id);
     try {
       await leaveApi.updateRequest(id, { status: next });
@@ -88,20 +87,26 @@ export default function LeaveRequestsPage() {
         <Button
           size="sm"
           className="bg-[#272156] text-white hover:bg-[#272156]/90"
-          onClick={() =>
-            toast(
-              "Create a request via the API or seed data. Full request form ships next."
-            )
-          }
+          onClick={() => setCreateOpen(true)}
         >
           <Plus className="mr-1.5 h-4 w-4" />
           Request leave
         </Button>
       }
     >
+      <CreateLeaveRequestDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={() => void load()}
+      />
+
       <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          {loading ? <Skeleton className="inline-block h-4 w-24" /> : `${total} request${total === 1 ? "" : "s"}`}
+          {loading ? (
+            <Skeleton className="inline-block h-4 w-24" />
+          ) : (
+            `${total} request${total === 1 ? "" : "s"}`
+          )}
         </p>
         <Select
           value={status}
@@ -137,8 +142,17 @@ export default function LeaveRequestsPage() {
             No leave requests yet
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Requests show here once employees submit time off.
+            Requests show here once employees submit time off, or create one
+            with Request leave.
           </p>
+          <Button
+            size="sm"
+            className="mt-4 bg-[#272156] text-white hover:bg-[#272156]/90"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Request leave
+          </Button>
         </div>
       ) : (
         <div

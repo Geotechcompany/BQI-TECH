@@ -1288,7 +1288,11 @@ async def list_admin_invites(
             detail="You do not have permission to manage users",
         )
     db = get_database()
-    cursor = db.admin_invites.find({"status": "pending"}).sort("createdAt", -1).limit(100)
+    pending_filter = {"status": "pending"}
+    total = await db.admin_invites.count_documents(pending_filter)
+    cursor = (
+        db.admin_invites.find(pending_filter).sort("createdAt", -1).limit(100)
+    )
     invites = []
     async for invite in cursor:
         invite["_id"] = str(invite["_id"])
@@ -1298,7 +1302,7 @@ async def list_admin_invites(
         if isinstance(invite.get("expiresAt"), datetime):
             invite["expiresAt"] = invite["expiresAt"].isoformat()
         invites.append(invite)
-    return {"invites": invites}
+    return {"invites": invites, "total": total}
 
 
 @router.delete("/users/invites/{invite_id}")
@@ -1748,10 +1752,41 @@ async def get_users(
 async def get_users_count(
     current_admin: dict = Depends(get_current_admin_user),
 ):
-    """Get total user count"""
+    """Aggregate user-management dashboard counts from the full collection."""
     db = get_database()
+    verified_filter = {
+        "$or": [
+            {"isEmailVerified": True},
+            {"emailVerified": True},
+            {"is_verified": True},
+            {"email_verified": True},
+        ]
+    }
+    admin_filter = {
+        "role": {
+            "$in": [
+                "ADMIN",
+                "SUPER_ADMIN",
+                "admin",
+                "super_admin",
+                "Admin",
+                "Super_Admin",
+                "SUPERADMIN",
+                "superadmin",
+            ]
+        }
+    }
     total = await db.users.count_documents({})
-    return {"count": total}
+    administrators = await db.users.count_documents(admin_filter)
+    verified = await db.users.count_documents(verified_filter)
+    pending_invites = await db.admin_invites.count_documents({"status": "pending"})
+    return {
+        "count": total,
+        "total": total,
+        "administrators": administrators,
+        "verified": verified,
+        "pendingInvites": pending_invites,
+    }
 
 @router.put("/users/{user_id}")
 async def update_user(

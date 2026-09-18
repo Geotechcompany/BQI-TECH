@@ -32,7 +32,7 @@ function OrgCard({ node }: { node: OrgNode }) {
   return (
     <div className="flex flex-col items-center">
       <Link
-        href={`/admin/employees/${node.id}`}
+        href={`/manage/employees/${node.id}`}
         className="w-52 rounded-xl border bg-card p-3 text-center shadow-sm transition hover:border-[#31CDFF]/50"
       >
         <Avatar className="mx-auto h-12 w-12">

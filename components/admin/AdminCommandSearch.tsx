@@ -46,7 +46,7 @@ type SearchDestination = {
 const PRIMARY_DESTINATIONS: SearchDestination[] = [
   {
     name: "Overview",
-    href: "/admin/overview",
+    href: "/manage/overview",
     icon: LayoutDashboard,
     group: "Pages",
     moduleKey: "overview",
@@ -54,7 +54,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Inbox",
-    href: "/admin/inbox",
+    href: "/manage/inbox",
     icon: Inbox,
     group: "Pages",
     moduleKey: "candidates",
@@ -62,7 +62,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Tasks",
-    href: "/admin/tasks",
+    href: "/manage/tasks",
     icon: ListTodo,
     group: "Pages",
     moduleKey: "candidates",
@@ -70,7 +70,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Communications",
-    href: "/admin/communications",
+    href: "/manage/communications",
     icon: MessagesSquare,
     group: "Pages",
     anyModuleKeys: ["email_broadcast", "candidates"],
@@ -78,7 +78,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Calendar",
-    href: "/admin/calendar",
+    href: "/manage/calendar",
     icon: CalendarDays,
     group: "Pages",
     moduleKey: "candidates",
@@ -86,7 +86,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Reports",
-    href: "/admin/reports",
+    href: "/manage/reports",
     icon: ChartColumnIncreasing,
     group: "Pages",
     moduleKey: "overview",
@@ -94,7 +94,7 @@ const PRIMARY_DESTINATIONS: SearchDestination[] = [
   },
   {
     name: "Help",
-    href: "/admin/help",
+    href: "/manage/help",
     icon: HelpCircle,
     group: "Pages",
     moduleKey: "help",
@@ -136,13 +136,13 @@ export function AdminCommandSearch({ className }: { className?: string }) {
   const { user } = useAuth();
   const isMac = useIsMac();
   const [open, setOpen] = useState(false);
-  const [pipelineHref, setPipelineHref] = useState("/admin/job-postings");
+  const [pipelineHref, setPipelineHref] = useState("/manage/job-postings");
 
   useEffect(() => {
     try {
       const lastJobId = localStorage.getItem(LAST_PIPELINE_JOB_KEY);
       if (lastJobId) {
-        setPipelineHref(`/admin/jobs/${lastJobId}/pipeline`);
+        setPipelineHref(`/manage/jobs/${lastJobId}/pipeline`);
       }
     } catch {
       // ignore

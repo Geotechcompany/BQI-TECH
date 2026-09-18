@@ -8,7 +8,7 @@ export default function LegacyNewBlogPostPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/admin/blog-management/wizard");
+    router.replace("/manage/blog-management/wizard");
   }, [router]);
 
   return (

@@ -158,7 +158,7 @@ export default function JobPostingsPage() {
   }, [isAuthenticated, isAdmin, fetchJobPostings]);
 
   const handleEdit = (id: string) => {
-    router.push(`/admin/job-postings/${id}/wizard`);
+    router.push(`/manage/job-postings/${id}/wizard`);
   };
 
   const confirmDelete = async (id: string) => {
@@ -546,7 +546,7 @@ export default function JobPostingsPage() {
             )}
           </div>
           <Button
-            onClick={() => router.push("/admin/job-postings/wizard")}
+            onClick={() => router.push("/manage/job-postings/wizard")}
             data-tour="job-postings-create"
           >
             Add New Position
@@ -574,7 +574,7 @@ export default function JobPostingsPage() {
               {!searchTerm && (
                 <Button
                   className="mt-5"
-                  onClick={() => router.push("/admin/job-postings/wizard")}
+                  onClick={() => router.push("/manage/job-postings/wizard")}
                 >
                   Add New Position
                 </Button>
@@ -591,7 +591,7 @@ export default function JobPostingsPage() {
                     toggleSelectOne(job.id, selected)
                   }
                   onOpenPipeline={(id) =>
-                    router.push(`/admin/jobs/${id}/pipeline`)
+                    router.push(`/manage/jobs/${id}/pipeline`)
                   }
                   onEdit={handleEdit}
                   onToggleActive={handleToggleActive}

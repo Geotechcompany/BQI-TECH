@@ -84,7 +84,7 @@ interface DashboardSidebarProps {
 type Skin = ReturnType<typeof getSidebarSkin>;
 
 function groupRailHref(group: AdminNavGroup, publicBase: string) {
-  return buildAdminHref(group.children[0]?.href ?? "/admin/overview", publicBase);
+  return buildAdminHref(group.children[0]?.href ?? "/manage/overview", publicBase);
 }
 
 export default function DashboardSidebar({
@@ -170,7 +170,7 @@ export default function DashboardSidebar({
     void updateSettings({ sidebarCollapsed: !sidebarCollapsed });
   };
 
-  if (internalPathname === "/admin/login" || internalPathname.startsWith("/admin/login/")) {
+  if (internalPathname === "/manage/login" || internalPathname.startsWith("/manage/login/")) {
     return null;
   }
 

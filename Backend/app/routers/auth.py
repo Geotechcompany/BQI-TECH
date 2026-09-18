@@ -309,6 +309,45 @@ async def login(
                     "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-User-Session",
                 },
             )
+
+        # Non-admin users: challenge when they have enrolled 2FA factors
+        from app.lib.admin_2fa import (
+            create_challenge_token,
+            enrolled_factors,
+            factor_count,
+        )
+
+        user_factors = enrolled_factors(user)
+        if factor_count(user) > 0:
+            available = []
+            if user_factors["email"]:
+                available.append("email")
+            if user_factors["totp"]:
+                available.append("totp")
+            challenge_token = create_challenge_token(
+                str(user["_id"]), kind="2fa_challenge"
+            )
+            origin = request.headers.get("origin", "http://localhost:3000")
+            return JSONResponse(
+                content={
+                    "requires_2fa": True,
+                    "challenge_token": challenge_token,
+                    "methods": available,
+                    "email_hint": email,
+                    "user": {
+                        "id": str(user["_id"]),
+                        "email": user.get("email"),
+                        "name": user.get("name", ""),
+                        "role": normalize_role(user.get("role", "USER")),
+                    },
+                },
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-User-Session",
+                },
+            )
             
         # Create access token (short-lived) and refresh token (long-lived)
         access_token = create_access_token(

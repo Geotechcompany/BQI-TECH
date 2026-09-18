@@ -16,19 +16,19 @@ export const FINISH_SETUP_TASKS: FinishSetupTask[] = [
     id: "add-position",
     title: "Add a Position",
     description: "You're here to hire someone right?",
-    href: "/admin/job-postings/wizard",
+    href: "/manage/job-postings/wizard",
   },
   {
     id: "invite-team",
     title: "Invite your Team",
     description: "Hiring is a team sport.",
-    href: "/admin/user-management",
+    href: "/manage/user-management",
   },
   {
     id: "careers-site",
     title: "Setup your Careers Site",
     description: "Share your brand & culture.",
-    href: "/admin/job-postings",
+    href: "/manage/job-postings",
   },
 ];
 

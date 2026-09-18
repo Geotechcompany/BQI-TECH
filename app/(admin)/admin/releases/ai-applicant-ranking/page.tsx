@@ -21,7 +21,7 @@ export default function AiApplicantRankingReleasePage() {
     <AdminPageLayout title={release.title} showSearch={false}>
       <div className="mx-auto max-w-5xl space-y-10 pb-10">
         <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
-          <Link href="/admin/releases">
+          <Link href="/manage/releases">
             <ArrowLeft className="mr-2 h-4 w-4" />
             All feature releases
           </Link>
@@ -45,7 +45,7 @@ export default function AiApplicantRankingReleasePage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg" className="bg-white text-violet-700 hover:bg-white/90">
-              <Link href="/admin/candidates">
+              <Link href="/manage/candidates">
                 Try on Applications
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
@@ -56,7 +56,7 @@ export default function AiApplicantRankingReleasePage() {
               variant="outline"
               className="border-white/40 bg-white/10 text-white hover:bg-white/20 hover:text-white"
             >
-              <Link href="/admin/whats-new">Changelog</Link>
+              <Link href="/manage/whats-new">Changelog</Link>
             </Button>
           </div>
 
@@ -141,7 +141,7 @@ export default function AiApplicantRankingReleasePage() {
             candidates with the sparkle icon or BQI Intelligence button in the score column.
           </p>
           <Button asChild className="mt-6 bg-violet-600 hover:bg-violet-700">
-            <Link href="/admin/candidates">
+            <Link href="/manage/candidates">
               Go to Applications
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>

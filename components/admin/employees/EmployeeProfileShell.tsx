@@ -39,7 +39,7 @@ export function EmployeeProfileShell({ employee }: { employee: Employee }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs text-muted-foreground">
-            <Link href="/admin/employees" className="hover:text-[#31CDFF]">
+            <Link href="/manage/employees" className="hover:text-[#31CDFF]">
               Employees
             </Link>
             <span className="mx-1.5">/</span>
@@ -63,7 +63,7 @@ export function EmployeeProfileShell({ employee }: { employee: Employee }) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push(`/admin/employees/${employee.id}/edit`)}
+            onClick={() => router.push(`/manage/employees/${employee.id}/edit`)}
           >
             <Pencil className="mr-1.5 h-4 w-4" />
             Edit profile
@@ -149,7 +149,7 @@ export function EmployeeProfileShell({ employee }: { employee: Employee }) {
                   <dd>
                     {employee.managerId ? (
                       <Link
-                        href={`/admin/employees/${employee.managerId}`}
+                        href={`/manage/employees/${employee.managerId}`}
                         className="font-medium text-[#272156] hover:underline dark:text-[#31CDFF]"
                       >
                         {employee.managerName}
@@ -170,7 +170,7 @@ export function EmployeeProfileShell({ employee }: { employee: Employee }) {
               size="sm"
               asChild
             >
-              <Link href={`/admin/employees/${employee.id}/edit`}>
+              <Link href={`/manage/employees/${employee.id}/edit`}>
                 Edit employee
               </Link>
             </Button>
@@ -180,7 +180,7 @@ export function EmployeeProfileShell({ employee }: { employee: Employee }) {
               size="sm"
               asChild
             >
-              <Link href="/admin/hired">View recent hires</Link>
+              <Link href="/manage/hired">View recent hires</Link>
             </Button>
           </div>
         </aside>

@@ -96,7 +96,7 @@ export function BlogSetupWizard({ postId }: BlogSetupWizardProps) {
   };
 
   const handleClose = () => {
-    router.push("/admin/blog-management");
+    router.push("/manage/blog-management");
   };
 
   const handleContinue = async () => {

@@ -124,7 +124,7 @@ export default function AttendanceOverviewPage() {
                       >
                         <td className="px-4 py-3">
                           <Link
-                            href={`/admin/employees/${row.id}`}
+                            href={`/manage/employees/${row.id}`}
                             className="font-medium hover:text-[#31CDFF]"
                           >
                             {row.name}

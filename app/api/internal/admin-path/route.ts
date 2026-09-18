@@ -30,7 +30,7 @@ export async function GET() {
         {
           admin_path_hidden: false,
           admin_path_slug: null,
-          public_base: "/admin",
+          public_base: "/manage",
         },
         { status: 200 }
       );
@@ -40,14 +40,14 @@ export async function GET() {
     return NextResponse.json({
       admin_path_hidden: Boolean(data?.admin_path_hidden),
       admin_path_slug: data?.admin_path_slug ?? null,
-      public_base: data?.public_base || "/admin",
+      public_base: data?.public_base || "/manage",
     });
   } catch {
     return NextResponse.json(
       {
         admin_path_hidden: false,
         admin_path_slug: null,
-        public_base: "/admin",
+        public_base: "/manage",
       },
       { status: 200 }
     );

@@ -10,7 +10,7 @@ export default function LegacyEditBlogPostPage() {
 
   useEffect(() => {
     if (params.id) {
-      router.replace(`/admin/blog-management/${params.id}/wizard`);
+      router.replace(`/manage/blog-management/${params.id}/wizard`);
     }
   }, [params.id, router]);
 

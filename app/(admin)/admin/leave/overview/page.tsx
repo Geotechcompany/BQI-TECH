@@ -67,7 +67,7 @@ export default function LeaveOverviewPage() {
             Export
           </Button>
           <Button asChild variant="outline" size="sm" className="border-[#272156]/20">
-            <Link href="/admin/leave/calendar">
+            <Link href="/manage/leave/calendar">
               <CalendarDays className="mr-1.5 h-4 w-4" />
               Calendar
             </Link>
@@ -77,7 +77,7 @@ export default function LeaveOverviewPage() {
             size="sm"
             className="bg-[#272156] text-white hover:bg-[#272156]/90"
           >
-            <Link href="/admin/leave/requests">
+            <Link href="/manage/leave/requests">
               <Plus className="mr-1.5 h-4 w-4" />
               Request leave
             </Link>

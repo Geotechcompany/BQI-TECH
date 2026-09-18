@@ -153,7 +153,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     if (!authLoading) {
       if (!isAuthenticated) {
-        router.replace(adminHref("/admin/login"));
+        router.replace(adminHref("/manage/login"));
         return;
       }
 
@@ -261,13 +261,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       });
       setForce2faSetup(false);
       toast.success("Security setup complete");
-      router.replace(adminHref("/admin/overview"));
+      router.replace(adminHref("/manage/overview"));
     } catch {
       // Enroll already succeeded — unlock optimistically so the user is not stuck.
       applyAdmin2faStatus({ satisfied: true, prompt: false });
       setForce2faSetup(false);
       toast.success("Security setup complete");
-      router.replace(adminHref("/admin/overview"));
+      router.replace(adminHref("/manage/overview"));
     }
   };
 
@@ -406,7 +406,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             open={showRecoveryCodes && pendingRecoveryCodes.length > 0}
             onOpenChange={(open) => {
               setShowRecoveryCodes(open);
-              if (!open) setPendingRecoveryCodes([]);
+              if (!open) {
+                setPendingRecoveryCodes([]);
+                try {
+                  sessionStorage.removeItem("admin_2fa_recovery_codes");
+                } catch {
+                  // ignore
+                }
+              }
             }}
           />
           </AiRankProvider>

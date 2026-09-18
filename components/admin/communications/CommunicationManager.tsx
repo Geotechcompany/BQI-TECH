@@ -131,14 +131,14 @@ function candidateHref(email: CommunicationEmail) {
   if (!email.applicationId) return null;
   const jobId = resolveJobId(email);
   return jobId
-    ? `/admin/jobs/${jobId}/candidates/${email.applicationId}`
-    : `/admin/candidates?highlight=${email.applicationId}`;
+    ? `/manage/jobs/${jobId}/candidates/${email.applicationId}`
+    : `/manage/candidates?highlight=${email.applicationId}`;
 }
 
 function pipelineHref(email: CommunicationEmail): string | null {
   const jobId = resolveJobId(email);
   if (!jobId) return null;
-  return `/admin/jobs/${jobId}/pipeline`;
+  return `/manage/jobs/${jobId}/pipeline`;
 }
 
 function jobActionLabel(email: CommunicationEmail): string {
@@ -149,8 +149,8 @@ function jobActionLabel(email: CommunicationEmail): string {
 
 function conversationHref(conversation: InboxConversation) {
   return conversation.jobId
-    ? `/admin/jobs/${conversation.jobId}/candidates/${conversation.applicationId}?tab=email`
-    : `/admin/inbox`;
+    ? `/manage/jobs/${conversation.jobId}/candidates/${conversation.applicationId}?tab=email`
+    : `/manage/inbox`;
 }
 
 function EmailsEmptyState({
@@ -400,7 +400,7 @@ export function CommunicationManager({ searchQuery }: { searchQuery: string }) {
       })}
       <div className="mt-3 border-t px-3 pt-3">
         <Button asChild variant="ghost" size="sm" className="h-8 w-full justify-start px-0">
-          <Link href="/admin/inbox">
+          <Link href="/manage/inbox">
             <Inbox className="mr-2 h-4 w-4" />
             Open full Inbox
           </Link>

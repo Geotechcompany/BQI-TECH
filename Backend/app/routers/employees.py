@@ -25,6 +25,8 @@ from app.lib.employees import (
     format_employee,
     next_employee_number,
     parse_oid,
+    seed_employee_docs,
+    seed_department_docs,
     tenure_years_from_start,
 )
 from app.lib.user_avatar import sync_avatar_to_user_doc
@@ -317,17 +319,62 @@ async def attendance_overview(
 async def seed_employees(
     current_user: dict = Depends(get_current_admin_user),
 ):
-    """Seed departments + employees only when both collections are empty."""
+    """Explicit demo seed — departments + employees only when employees collection is empty."""
     _require_people_module(current_user)
     db = _db()
-    ran = await ensure_hr_seed(db)
+    await ensure_hr_seed(db)
+    emp_count = await db.employees.count_documents({})
+    if emp_count > 0:
+        dept_count = await db.departments.count_documents({})
+        return {
+            "seeded": False,
+            "employeeCount": emp_count,
+            "departmentCount": dept_count,
+            "message": "Employees already exist — refusing to insert demo people",
+        }
+
+    now = datetime.utcnow()
+    dept_docs = []
+    async for d in db.departments.find({}):
+        dept_docs.append(d)
+    if not dept_docs:
+        inserted = await db.departments.insert_many(seed_department_docs(now))
+        async for d in db.departments.find({"_id": {"$in": list(inserted.inserted_ids)}}):
+            dept_docs.append(d)
+
+    by_code = {str(d.get("code")): d for d in dept_docs}
+    emp_docs = seed_employee_docs(now, by_code)
+    manager_refs: list[tuple[str, str]] = []
+    for doc in emp_docs:
+        ref = doc.pop("_managerNumber", None)
+        if ref:
+            manager_refs.append((doc["employeeNumber"], ref))
+    ins = await db.employees.insert_many(emp_docs)
+    for doc, _id in zip(emp_docs, ins.inserted_ids):
+        doc["_id"] = _id
+    by_number = {d["employeeNumber"]: d for d in emp_docs}
+    for emp_number, mgr_number in manager_refs:
+        emp = by_number.get(emp_number)
+        mgr = by_number.get(mgr_number)
+        if not emp or not mgr:
+            continue
+        await db.employees.update_one(
+            {"_id": emp["_id"]},
+            {
+                "$set": {
+                    "managerId": str(mgr["_id"]),
+                    "managerName": f"{mgr['firstName']} {mgr['lastName']}",
+                    "updatedAt": now,
+                }
+            },
+        )
     emp_count = await db.employees.count_documents({})
     dept_count = await db.departments.count_documents({})
     return {
-        "seeded": ran,
+        "seeded": True,
         "employeeCount": emp_count,
         "departmentCount": dept_count,
-        "message": "Seed inserted" if ran else "Collections already have data",
+        "message": "Demo employees inserted",
     }
 
 

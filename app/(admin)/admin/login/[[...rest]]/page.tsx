@@ -330,7 +330,7 @@ export default function AdminLoginPage() {
       setNeedsSetup(false);
       setChallenge(null);
     });
-    router.replace(adminHref("/admin/overview"));
+    router.replace(adminHref("/manage/overview"));
   };
 
   const evaluateSetupGate = async () => {

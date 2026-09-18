@@ -521,10 +521,10 @@ export default function OverviewPage() {
 
   const recentViewAllHref = useMemo(() => {
     if (visibleJobIds === null || visibleJobIds.size !== 1) {
-      return "/admin/applications";
+      return "/manage/applications";
     }
     const [onlyJobId] = Array.from(visibleJobIds);
-    return `/admin/applications?jobId=${encodeURIComponent(onlyJobId)}`;
+    return `/manage/applications?jobId=${encodeURIComponent(onlyJobId)}`;
   }, [visibleJobIds]);
 
   const applicationEventDate = (application: Application): string | Date | null =>
@@ -642,7 +642,7 @@ export default function OverviewPage() {
               value={effectiveStats.total}
               icon={FileText}
               variant="blue"
-              path="/admin/applications"
+              path="/manage/applications"
               subtitle={
                 positionsFilter === "all"
                   ? "All time applications"
@@ -657,7 +657,7 @@ export default function OverviewPage() {
               value={overviewData.jobs.active}
               icon={Briefcase}
               variant="green"
-              path="/admin/job-postings"
+              path="/manage/job-postings"
               subtitle="Currently hiring"
               mom={metricMomBadges.activeJobs}
             />
@@ -666,7 +666,7 @@ export default function OverviewPage() {
               value={effectiveStats.recent}
               icon={Activity}
               variant="brand"
-              path="/admin/applications"
+              path="/manage/applications"
               subtitle={
                 positionsFilter === "all"
                   ? "Last 7 days"
@@ -681,7 +681,7 @@ export default function OverviewPage() {
               value={overviewData.users.total}
               icon={Users}
               variant="orange"
-              path="/admin/user-management"
+              path="/manage/user-management"
               subtitle="Registered users"
               mom={metricMomBadges.totalUsers}
             />

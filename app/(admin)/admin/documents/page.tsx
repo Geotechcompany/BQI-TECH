@@ -27,7 +27,7 @@ export default function AdminDocumentsRoutePage() {
       return;
     }
     if (!canViewDocuments) {
-      router.push("/admin/overview");
+      router.push("/manage/overview");
     }
   }, [authLoading, canViewDocuments, isAdmin, isAuthenticated, router]);
 

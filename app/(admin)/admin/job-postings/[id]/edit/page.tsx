@@ -10,7 +10,7 @@ export default function LegacyEditJobPostingPage() {
 
   useEffect(() => {
     if (id) {
-      router.replace(`/admin/job-postings/${id}/wizard`);
+      router.replace(`/manage/job-postings/${id}/wizard`);
     }
   }, [id, router]);
 

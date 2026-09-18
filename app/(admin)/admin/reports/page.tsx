@@ -120,7 +120,7 @@ function SourceLegend({ items }: { items: SourceBreakdownItem[] }) {
         <li key={item.name} className="space-y-1.5">
           <div className="flex items-center justify-between gap-3 text-sm">
             <Link
-              href={`/admin/candidates?search=${encodeURIComponent(item.name)}`}
+              href={`/manage/candidates?search=${encodeURIComponent(item.name)}`}
               className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 truncate"
               title={`View applications from ${item.name}`}
             >
@@ -625,7 +625,7 @@ export default function ReportsPage() {
               value={statusCounts.total}
               icon={FileText}
               variant="blue"
-              path="/admin/candidates"
+              path="/manage/candidates"
               subtitle={scopeLabel}
             />
             {selectedJobId === ALL_POSITIONS ? (
@@ -634,12 +634,12 @@ export default function ReportsPage() {
                 value={activeJobsCount}
                 icon={Briefcase}
                 variant="green"
-                path="/admin/job-postings"
+                path="/manage/job-postings"
                 subtitle="Currently hiring"
               />
             ) : (
               <Link
-                href={`/admin/jobs/${selectedJobId}/pipeline`}
+                href={`/manage/jobs/${selectedJobId}/pipeline`}
                 className="block group"
               >
                 <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-emerald-50/90 via-white to-white dark:from-emerald-950/40 dark:via-card dark:to-card shadow-sm p-4 h-full transition-shadow group-hover:shadow-xl">
@@ -662,7 +662,7 @@ export default function ReportsPage() {
                 </div>
               </Link>
             )}
-            <Link href="/admin/hired" className="block group">
+            <Link href="/manage/hired" className="block group">
               <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-violet-50/90 via-white to-white dark:from-violet-950/40 dark:via-card dark:to-card shadow-sm p-4 h-full transition-shadow group-hover:shadow-xl">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-md shadow-violet-500/30">
@@ -684,7 +684,7 @@ export default function ReportsPage() {
                 </p>
               </div>
             </Link>
-            <Link href="/admin/hired" className="block group">
+            <Link href="/manage/hired" className="block group">
               <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-orange-50/90 via-white to-white dark:from-orange-950/40 dark:via-card dark:to-card shadow-sm p-4 h-full transition-shadow group-hover:shadow-xl">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-md shadow-orange-500/30">

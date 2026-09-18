@@ -213,7 +213,7 @@ export default function AdminPageHeader({
           <AdminNotificationDropdown />
 
           {/* Help */}
-          <Link href="/admin/help" aria-label="Help">
+          <Link href="/manage/help" aria-label="Help">
             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
               <HelpCircle className="h-5 w-5" aria-hidden="true" />
             </Button>
@@ -305,7 +305,7 @@ export default function AdminPageHeader({
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem>
-                  <Link href="/admin/settings" className="flex w-full items-center">
+                  <Link href="/manage/settings" className="flex w-full items-center">
                     <Settings className="mr-2 h-4 w-4" aria-hidden="true" />
                     Settings
                   </Link>

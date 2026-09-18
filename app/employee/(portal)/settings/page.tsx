@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { AdminSecurity2faCard } from "@/components/admin/settings/AdminSecurity2faCard";
 
 const SPRING = { type: "spring" as const, bounce: 0, duration: 0.4 };
 
@@ -580,6 +581,17 @@ export default function EmployeeSettingsPage() {
               )}
             </Button>
           </form>
+        </SettingsSection>
+
+        <SettingsSection
+          id="employee-settings-2fa"
+          data-tour="employee-settings-2fa"
+          title="Two-factor authentication"
+          description="Protect your employee portal login with an authenticator app or email codes."
+        >
+          <div className="p-4 sm:p-5">
+            <AdminSecurity2faCard canEditPolicy={false} />
+          </div>
         </SettingsSection>
 
         {/* Notifications */}

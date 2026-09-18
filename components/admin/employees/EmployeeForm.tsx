@@ -101,7 +101,7 @@ export function EmployeeForm({ mode, initial }: EmployeeFormProps) {
       queryClient.invalidateQueries({ queryKey: ["admin-employee", employee.id] });
       queryClient.invalidateQueries({ queryKey: ["admin-departments"] });
       toast.success(mode === "create" ? "Employee added" : "Employee updated");
-      router.push(`/admin/employees/${employee.id}`);
+      router.push(`/manage/employees/${employee.id}`);
     },
     onError: (err: Error) => {
       toast.error(err.message || "Save failed");
@@ -311,7 +311,7 @@ export function EmployeeForm({ mode, initial }: EmployeeFormProps) {
           variant="outline"
           onClick={() =>
             router.push(
-              initial ? `/admin/employees/${initial.id}` : "/admin/employees"
+              initial ? `/manage/employees/${initial.id}` : "/manage/employees"
             )
           }
         >

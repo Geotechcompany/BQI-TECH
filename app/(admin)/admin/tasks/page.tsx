@@ -27,7 +27,7 @@ export default function AdminTasksRoutePage() {
       return;
     }
     if (!canViewTasks) {
-      router.push("/admin/overview");
+      router.push("/manage/overview");
     }
   }, [authLoading, canViewTasks, isAdmin, isAuthenticated, router]);
 

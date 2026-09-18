@@ -8,7 +8,7 @@ export default function LegacyNewJobPostingPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/admin/job-postings/wizard");
+    router.replace("/manage/job-postings/wizard");
   }, [router]);
 
   return (

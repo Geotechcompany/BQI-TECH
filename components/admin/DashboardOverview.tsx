@@ -5,10 +5,10 @@ import { Users, FileText, CheckCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
 
 const overviewItems = [
-  { title: 'Total Applications', value: 150, icon: FileText, color: 'bg-blue-500', path: '/admin/candidates' },
-  { title: 'Shortlisted', value: 45, icon: CheckCircle, color: 'bg-green-500', path: '/admin/shortlisted' },
-  { title: 'Technical Assessment', value: 30, icon: XCircle, color: 'bg-red-500', path: '/admin/assessments' },
-  { title: 'In Review', value: 75, icon: Users, color: 'bg-yellow-500', path: '/admin/reviews' },
+  { title: 'Total Applications', value: 150, icon: FileText, color: 'bg-blue-500', path: '/manage/candidates' },
+  { title: 'Shortlisted', value: 45, icon: CheckCircle, color: 'bg-green-500', path: '/manage/shortlisted' },
+  { title: 'Technical Assessment', value: 30, icon: XCircle, color: 'bg-red-500', path: '/manage/assessments' },
+  { title: 'In Review', value: 75, icon: Users, color: 'bg-yellow-500', path: '/manage/reviews' },
 ];
 
 export default function DashboardOverview() {

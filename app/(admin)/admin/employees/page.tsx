@@ -137,7 +137,7 @@ export default function AllEmployeesPage() {
           className="bg-[#272156] hover:bg-[#272156]/90 text-white"
           data-tour="employees-add"
         >
-          <Link href="/admin/employees/new">
+          <Link href="/manage/employees/new">
             <UserPlus className="mr-1.5 h-4 w-4" />
             Add employee
           </Link>
@@ -195,7 +195,7 @@ export default function AllEmployeesPage() {
                       >
                         <td className="px-4 py-3">
                           <Link
-                            href={`/admin/employees/${e.id}`}
+                            href={`/manage/employees/${e.id}`}
                             className="flex items-center gap-3"
                           >
                             <Avatar className="h-9 w-9">

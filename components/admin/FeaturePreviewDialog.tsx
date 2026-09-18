@@ -105,7 +105,7 @@ export function FeaturePreviewDialog() {
 
   const feature = features[index];
   const Icon = feature.icon;
-  const ctaHref = feature.href ?? release.ctaHref ?? `/admin/releases/${release.slug}`;
+  const ctaHref = feature.href ?? release.ctaHref ?? `/manage/releases/${release.slug}`;
   const ctaLabel = feature.ctaLabel ?? release.ctaLabel ?? "Try it now";
   const badgeLabel =
     total > 1 ? `${total} new features` : `New in v${release.version}`;

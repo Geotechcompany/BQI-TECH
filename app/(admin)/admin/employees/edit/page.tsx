@@ -81,7 +81,7 @@ export default function EditEmployeePickerPage() {
                 </div>
                 <EmployeeStatusBadge status={e.status} />
                 <Button asChild size="sm" variant="outline">
-                  <Link href={`/admin/employees/${e.id}/edit`}>
+                  <Link href={`/manage/employees/${e.id}/edit`}>
                     <Pencil className="mr-1.5 h-3.5 w-3.5" />
                     Edit
                   </Link>

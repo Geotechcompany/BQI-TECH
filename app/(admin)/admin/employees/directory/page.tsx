@@ -75,7 +75,7 @@ export default function EmployeeDirectoryPage() {
             {people.map((e) => (
               <Link
                 key={e.id}
-                href={`/admin/employees/${e.id}`}
+                href={`/manage/employees/${e.id}`}
                 className="group rounded-xl border bg-card p-5 transition hover:border-[#31CDFF]/50 hover:shadow-sm"
               >
                 <div className="flex items-start gap-3">

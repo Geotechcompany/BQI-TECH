@@ -15,9 +15,11 @@ import { adminApi } from "@/lib/api-backend";
 import {
   ADMIN_PATH_COOKIE,
   DEFAULT_ADMIN_BASE,
+  INTERNAL_ADMIN_BASE,
   adminHref as buildAdminHref,
   clearAdminBasePathCookie,
   getPublicAdminBasePath,
+  isInternalAdminPath,
   isPublicAdminPath,
   isValidAdminPathSlug,
   normalizeAdminPathSlug,
@@ -116,9 +118,12 @@ export function AdminPathProvider({ children }: { children: ReactNode }) {
     if (!pathname) return;
     const segments = pathname.split("/").filter(Boolean);
     const first = segments[0];
+    const internalSeg = INTERNAL_ADMIN_BASE.replace(/^\//, "");
+    const defaultSeg = DEFAULT_ADMIN_BASE.replace(/^\//, "");
     if (
       first &&
-      first !== "admin" &&
+      first !== internalSeg &&
+      first !== defaultSeg &&
       isValidAdminPathSlug(first) &&
       (pathname.includes("/login") ||
         pathname.includes("/overview") ||
@@ -145,9 +150,9 @@ export function AdminPathProvider({ children }: { children: ReactNode }) {
     [basePath]
   );
 
-  // Remap <a href="/admin/..."> clicks when the public base is a custom slug.
+  // Remap stale /admin (internal) or /manage links when the live public base differs.
   useEffect(() => {
-    if (!isHidden) return;
+    if (basePath === DEFAULT_ADMIN_BASE && !isHidden) return;
 
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented) return;
@@ -167,7 +172,11 @@ export function AdminPathProvider({ children }: { children: ReactNode }) {
       try {
         const url = new URL(hrefAttr, window.location.origin);
         if (url.origin !== window.location.origin) return;
-        if (!isPublicAdminPath(url.pathname, DEFAULT_ADMIN_BASE)) return;
+        const isStaleInternal = isInternalAdminPath(url.pathname);
+        const isStaleDefault =
+          basePath !== DEFAULT_ADMIN_BASE &&
+          isPublicAdminPath(url.pathname, DEFAULT_ADMIN_BASE);
+        if (!isStaleInternal && !isStaleDefault) return;
         if (isPublicAdminPath(url.pathname, basePath)) return;
 
         event.preventDefault();

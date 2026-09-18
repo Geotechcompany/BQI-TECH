@@ -29,7 +29,7 @@ export default function AdminCommunicationsPage() {
       return;
     }
     if (!canView) {
-      router.push("/admin/overview");
+      router.push("/manage/overview");
     }
   }, [authLoading, canView, isAdmin, isAuthenticated, router]);
 

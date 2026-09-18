@@ -201,15 +201,15 @@ export function SidebarUserMenu({
     ? accountLinks.settings === false
       ? null
       : accountLinks.settings ?? null
-    : canAccessAdminPath("/admin/settings", user?.role, user?.adminModules)
-      ? { href: adminHref("/admin/settings"), label: "Settings" }
+    : canAccessAdminPath("/manage/settings", user?.role, user?.adminModules)
+      ? { href: adminHref("/manage/settings"), label: "Settings" }
       : null;
   const helpLink = useCustomLinks
     ? accountLinks.help === false
       ? null
       : accountLinks.help ?? null
-    : canAccessAdminPath("/admin/help", user?.role, user?.adminModules)
-      ? { href: adminHref("/admin/help"), label: "Help" }
+    : canAccessAdminPath("/manage/help", user?.role, user?.adminModules)
+      ? { href: adminHref("/manage/help"), label: "Help" }
       : null;
 
   // Account flyout is always a solid light card — never inherit studio cyan/navy link skins.

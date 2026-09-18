@@ -48,7 +48,7 @@ export default function WhatsNewPage() {
                   variant="secondary"
                   className="bg-white text-[#272055] hover:bg-white/90"
                 >
-                  <Link href="/admin/releases/ai-applicant-ranking">
+                  <Link href="/manage/releases/ai-applicant-ranking">
                     Read feature release
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
@@ -58,7 +58,7 @@ export default function WhatsNewPage() {
                   variant="outline"
                   className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                 >
-                  <Link href="/admin/releases">All releases</Link>
+                  <Link href="/manage/releases">All releases</Link>
                 </Button>
               </>
             }

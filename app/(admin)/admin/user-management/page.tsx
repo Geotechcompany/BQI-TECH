@@ -34,7 +34,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { isAdminRole } from "@/lib/admin-permissions";
 import {
   showInviteEmailError,
   showInviteEmailToast,
@@ -75,6 +74,25 @@ export default function UserManagementPage() {
     },
   });
 
+  const { data: userStats } = useQuery({
+    queryKey: ["admin-users-count"],
+    queryFn: async () => {
+      const res = (await adminApi.getUsersCount()) as {
+        count?: number;
+        total?: number;
+        administrators?: number;
+        verified?: number;
+        pendingInvites?: number;
+      };
+      return {
+        total: res.total ?? res.count ?? 0,
+        administrators: res.administrators ?? 0,
+        verified: res.verified ?? 0,
+        pendingInvites: res.pendingInvites ?? 0,
+      };
+    },
+  });
+
   const { data: invitesData } = useQuery({
     queryKey: ["admin-invites"],
     queryFn: () => adminApi.getAdminInvites(),
@@ -83,11 +101,16 @@ export default function UserManagementPage() {
   const queryClient = useQueryClient();
   const users = usersData?.data || [];
   const pendingInvites = (invitesData as any)?.invites ?? [];
+  const pendingInviteTotal =
+    (invitesData as any)?.total ??
+    userStats?.pendingInvites ??
+    pendingInvites.length;
 
   const deleteUser = useMutation({
     mutationFn: (userId: string) => adminApi.deleteUser(userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users-count"] });
       toast.success("User deleted successfully");
       setDeleteTarget(null);
     },
@@ -99,6 +122,7 @@ export default function UserManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-invites"] });
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users-count"] });
       toast.success("Invitation revoked");
     },
     onError: () => toast.error("Failed to revoke invitation"),
@@ -129,30 +153,28 @@ export default function UserManagementPage() {
     ? (resendInviteForUser.variables as string | undefined)
     : undefined;
 
-  const adminCount = users.filter((user) => isAdminRole(user.role)).length;
-
   const stats = [
     {
       label: "Total users",
-      value: usersData?.total ?? users.length,
+      value: userStats?.total ?? usersData?.total ?? users.length,
       icon: Users,
       tone: "text-blue-600 bg-blue-50",
     },
     {
       label: "Administrators",
-      value: adminCount,
+      value: userStats?.administrators ?? 0,
       icon: ShieldCheck,
       tone: "text-violet-600 bg-violet-50",
     },
     {
       label: "Verified",
-      value: users.filter((user) => user.isEmailVerified).length,
+      value: userStats?.verified ?? 0,
       icon: UserCheck,
       tone: "text-emerald-600 bg-emerald-50",
     },
     {
       label: "Pending invites",
-      value: pendingInvites.length,
+      value: pendingInviteTotal,
       icon: Clock3,
       tone: "text-amber-600 bg-amber-50",
     },

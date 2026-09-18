@@ -55,7 +55,7 @@ export default function BlogPostEditor() {
       }
 
       toast.success("Blog post saved successfully")
-      router.push("/admin/blog-management")
+      router.push("/manage/blog-management")
       router.refresh()
     } catch (error) {
       console.error('Save error:', error)
@@ -65,9 +65,9 @@ export default function BlogPostEditor() {
 
   useEffect(() => {
     if (id === "new") {
-      router.replace("/admin/blog-management/wizard")
+      router.replace("/manage/blog-management/wizard")
     } else {
-      router.replace(`/admin/blog-management/${id}/view`)
+      router.replace(`/manage/blog-management/${id}/view`)
     }
   }, [id, router])
 
@@ -77,7 +77,7 @@ export default function BlogPostEditor() {
       <AdminPageLayout title="Error">
         <div className="text-center py-8">
           <h2 className="text-2xl font-bold mb-4">Invalid blog post ID</h2>
-          <Button onClick={() => router.push('/admin/blog-management')}>
+          <Button onClick={() => router.push('/manage/blog-management')}>
             Back to Posts
           </Button>
         </div>
@@ -93,7 +93,7 @@ export default function BlogPostEditor() {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             {error instanceof Error ? error.message : "An error occurred"}
           </p>
-          <Button onClick={() => router.push('/admin/blog-management')}>
+          <Button onClick={() => router.push('/manage/blog-management')}>
             Back to Posts
           </Button>
         </div>
@@ -116,7 +116,7 @@ export default function BlogPostEditor() {
       <AdminPageLayout title="Not Found">
         <div className="text-center py-8">
           <h2 className="text-2xl font-bold mb-4">Post not found</h2>
-          <Button onClick={() => router.push('/admin/blog-management')}>
+          <Button onClick={() => router.push('/manage/blog-management')}>
             Back to Posts
           </Button>
         </div>
@@ -130,7 +130,7 @@ export default function BlogPostEditor() {
         <div className="flex items-center gap-4">
           <Button 
             variant="ghost" 
-            onClick={() => router.push('/admin/blog-management')}
+            onClick={() => router.push('/manage/blog-management')}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Blog Posts

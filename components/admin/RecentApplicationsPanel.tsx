@@ -98,7 +98,7 @@ export function RecentApplicationsPanel({
   applications,
   jobTitles,
   onView,
-  viewAllHref = "/admin/candidates",
+  viewAllHref = "/manage/candidates",
   maxItems = 4,
   subtitle = "Latest candidates across all positions",
   className,

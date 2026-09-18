@@ -1,14 +1,21 @@
 /**
  * Public admin base path helpers (WordPress-style hidden admin URL).
- * Internal App Router paths remain under `/admin`; the public URL may be a custom slug.
+ * Internal App Router paths remain under `/admin`; the public URL defaults to `/manage`
+ * (and may be a further custom slug when "hide admin path" is enabled).
  */
 
-export const DEFAULT_ADMIN_BASE = "/admin";
+/** App Router / filesystem base — never change without renaming `app/(admin)/admin`. */
+export const INTERNAL_ADMIN_BASE = "/admin";
+
+/** Default public URL for the admin app (what users see in the address bar). */
+export const DEFAULT_ADMIN_BASE = "/manage";
+
 export const ADMIN_PATH_COOKIE = "bqi_admin_base";
 
 /** Top-level route segments that must not be used as the admin slug. */
 export const RESERVED_ADMIN_PATH_SLUGS = new Set([
   "admin",
+  "manage",
   "api",
   "login",
   "sign-up",
@@ -109,7 +116,9 @@ export function validateAdminPathSlug(raw: unknown): {
   return { ok: true, slug };
 }
 
-export function getPublicAdminBasePath(config: Partial<AdminPathConfig> | null | undefined): string {
+export function getPublicAdminBasePath(
+  config: Partial<AdminPathConfig> | null | undefined
+): string {
   const hidden = Boolean(config?.admin_path_hidden);
   const slug = normalizeAdminPathSlug(config?.admin_path_slug);
   if (hidden && slug && isValidAdminPathSlug(slug)) {
@@ -118,17 +127,27 @@ export function getPublicAdminBasePath(config: Partial<AdminPathConfig> | null |
   return DEFAULT_ADMIN_BASE;
 }
 
-/** Build a public admin URL from an internal `/admin/...` path (or bare segment). */
+function stripKnownAdminPrefix(path: string): string {
+  let rest = path;
+  for (const prefix of [INTERNAL_ADMIN_BASE, DEFAULT_ADMIN_BASE]) {
+    if (rest === prefix || rest.startsWith(`${prefix}/`)) {
+      rest = rest.slice(prefix.length);
+      break;
+    }
+  }
+  return rest;
+}
+
+/** Build a public admin URL from an internal `/admin/...` or `/manage/...` path. */
 export function adminHref(
   path: string = "",
   publicBase: string = DEFAULT_ADMIN_BASE
 ): string {
-  const base = (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
+  const base =
+    (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
   let rest = (path || "").trim();
   if (!rest || rest === "/") return base;
-  if (rest.startsWith(DEFAULT_ADMIN_BASE + "/") || rest === DEFAULT_ADMIN_BASE) {
-    rest = rest.slice(DEFAULT_ADMIN_BASE.length);
-  }
+  rest = stripKnownAdminPrefix(rest);
   if (!rest.startsWith("/")) rest = `/${rest}`;
   return `${base}${rest === "/" ? "" : rest}`;
 }
@@ -139,12 +158,20 @@ export function toInternalAdminPath(
   publicBase: string = DEFAULT_ADMIN_BASE
 ): string {
   if (!pathname) return pathname;
-  const base = (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
-  if (base !== DEFAULT_ADMIN_BASE) {
-    if (pathname === base) return DEFAULT_ADMIN_BASE;
+  const base =
+    (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
+  if (pathname === INTERNAL_ADMIN_BASE || pathname.startsWith(`${INTERNAL_ADMIN_BASE}/`)) {
+    return pathname;
+  }
+  if (base !== INTERNAL_ADMIN_BASE) {
+    if (pathname === base) return INTERNAL_ADMIN_BASE;
     if (pathname.startsWith(`${base}/`)) {
-      return `${DEFAULT_ADMIN_BASE}${pathname.slice(base.length)}`;
+      return `${INTERNAL_ADMIN_BASE}${pathname.slice(base.length)}`;
     }
+  }
+  if (pathname === DEFAULT_ADMIN_BASE) return INTERNAL_ADMIN_BASE;
+  if (pathname.startsWith(`${DEFAULT_ADMIN_BASE}/`)) {
+    return `${INTERNAL_ADMIN_BASE}${pathname.slice(DEFAULT_ADMIN_BASE.length)}`;
   }
   return pathname;
 }
@@ -153,8 +180,16 @@ export function isPublicAdminPath(
   pathname: string,
   publicBase: string = DEFAULT_ADMIN_BASE
 ): boolean {
-  const base = (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
+  const base =
+    (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
   return pathname === base || pathname.startsWith(`${base}/`);
+}
+
+export function isInternalAdminPath(pathname: string): boolean {
+  return (
+    pathname === INTERNAL_ADMIN_BASE ||
+    pathname.startsWith(`${INTERNAL_ADMIN_BASE}/`)
+  );
 }
 
 export function readAdminBasePathCookie(): string | null {
@@ -167,6 +202,7 @@ export function readAdminBasePathCookie(): string | null {
     const value = decodeURIComponent(match.split("=").slice(1).join("="));
     if (!value.startsWith("/")) return null;
     if (value === DEFAULT_ADMIN_BASE) return DEFAULT_ADMIN_BASE;
+    if (value === INTERNAL_ADMIN_BASE) return DEFAULT_ADMIN_BASE;
     const slug = value.slice(1);
     if (!isValidAdminPathSlug(slug)) return null;
     return `/${slug}`;
@@ -177,7 +213,8 @@ export function readAdminBasePathCookie(): string | null {
 
 export function writeAdminBasePathCookie(publicBase: string) {
   if (typeof document === "undefined") return;
-  const base = (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
+  const base =
+    (publicBase || DEFAULT_ADMIN_BASE).replace(/\/+$/, "") || DEFAULT_ADMIN_BASE;
   const maxAge = 60 * 60 * 24 * 365;
   document.cookie = `${ADMIN_PATH_COOKIE}=${encodeURIComponent(base)}; path=/; max-age=${maxAge}; samesite=lax`;
 }

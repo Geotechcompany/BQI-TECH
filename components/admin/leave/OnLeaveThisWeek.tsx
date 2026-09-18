@@ -45,7 +45,7 @@ export function OnLeaveThisWeek({ entries, className }: OnLeaveThisWeekProps) {
           >
             <div className="min-w-0">
               <Link
-                href={`/admin/employees/${entry.employeeId}`}
+                href={`/manage/employees/${entry.employeeId}`}
                 className="truncate text-sm font-medium text-[#272156] hover:underline dark:text-foreground"
               >
                 {entry.employeeName}

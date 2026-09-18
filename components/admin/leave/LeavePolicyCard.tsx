@@ -82,7 +82,7 @@ export function LeavePolicyCard({ policy, className }: LeavePolicyCardProps) {
           variant="outline"
           className="border-[#272156]/20 text-[#272156] hover:bg-[#31CDFF]/10 dark:text-foreground"
         >
-          <Link href={`/admin/leave/policies?id=${policy.id}`}>Open</Link>
+          <Link href={`/manage/leave/policies?id=${policy.id}`}>Open</Link>
         </Button>
       </div>
     </article>

@@ -181,7 +181,7 @@ export function OverviewWelcomeBanner({
                   "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
                 )}
               >
-                <Link href="/admin/candidates">
+                <Link href="/manage/candidates">
                   <FileText className="h-3.5 w-3.5" aria-hidden />
                   Candidates
                 </Link>
@@ -200,7 +200,7 @@ export function OverviewWelcomeBanner({
                   "active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
                 )}
               >
-                <Link href="/admin/job-postings/wizard">
+                <Link href="/manage/job-postings/wizard">
                   Post a position
                   <ArrowRight className="h-3.5 w-3.5" aria-hidden />
                 </Link>

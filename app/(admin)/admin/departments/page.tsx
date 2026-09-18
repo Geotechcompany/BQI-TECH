@@ -334,7 +334,7 @@ export default function DepartmentsPage() {
                             Head:{" "}
                             {d.headEmployeeId ? (
                               <Link
-                                href={`/admin/employees/${d.headEmployeeId}`}
+                                href={`/manage/employees/${d.headEmployeeId}`}
                                 className="text-[#272156] hover:underline dark:text-[#31CDFF]"
                               >
                                 {d.headName}
@@ -354,7 +354,7 @@ export default function DepartmentsPage() {
                           size="sm"
                           className="mt-3"
                         >
-                          <Link href={`/admin/employees?department=${d.id}`}>
+                          <Link href={`/manage/employees?department=${d.id}`}>
                             View employees
                           </Link>
                         </Button>
@@ -479,7 +479,7 @@ export default function DepartmentsPage() {
             {deleteBlockedByEmployees ? (
               <AlertDialogAction asChild>
                 <Link
-                  href={`/admin/employees?department=${deleteTarget?.id ?? ""}`}
+                  href={`/manage/employees?department=${deleteTarget?.id ?? ""}`}
                 >
                   View employees
                 </Link>

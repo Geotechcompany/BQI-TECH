@@ -39,7 +39,7 @@ export default function EditEmployeePage() {
             {(error as Error)?.message}
           </p>
           <Button asChild className="mt-6 bg-[#272156] text-white">
-            <Link href="/admin/employees">Back to employees</Link>
+            <Link href="/manage/employees">Back to employees</Link>
           </Button>
         </div>
       </AdminPageLayout>

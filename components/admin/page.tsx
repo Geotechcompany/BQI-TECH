@@ -59,7 +59,7 @@ export default function ApplicationsPage() {
 
       // Redirect based on the new status
       if (updatedApplication.status !== "Application") {
-        router.push(`/admin/${updatedApplication.status.toLowerCase().replace(' ', '-')}`);
+        router.push(`/manage/${updatedApplication.status.toLowerCase().replace(' ', '-')}`);
       }
     } catch (error) {
       console.error("Failed to update application:", error);

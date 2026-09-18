@@ -24,13 +24,13 @@ export default function EmployeeProfileEntryPage() {
             asChild
             className="bg-[#272156] text-white hover:bg-[#272156]/90"
           >
-            <Link href="/admin/employees/directory">
+            <Link href="/manage/employees/directory">
               <Users className="mr-1.5 h-4 w-4" />
               Directory
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/admin/employees">All Employees</Link>
+            <Link href="/manage/employees">All Employees</Link>
           </Button>
         </div>
       </div>

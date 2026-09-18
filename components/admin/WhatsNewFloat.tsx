@@ -147,13 +147,13 @@ export function WhatsNewFloat() {
 
               <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-800">
                 <Button size="sm" variant="ghost" asChild>
-                  <Link href="/admin/releases/ai-applicant-ranking" onClick={dismiss}>
+                  <Link href="/manage/releases/ai-applicant-ranking" onClick={dismiss}>
                     Full release
                   </Link>
                 </Button>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" asChild>
-                    <Link href="/admin/candidates" onClick={dismiss}>
+                    <Link href="/manage/candidates" onClick={dismiss}>
                       Try it
                       <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                     </Link>

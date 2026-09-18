@@ -51,7 +51,7 @@ export default function HelpPageClient() {
                 </p>
               </div>
               <Link
-                href="/admin/help"
+                href="/manage/help"
                 className="text-sm font-medium text-[#2563eb] hover:underline"
               >
                 Clear filters
@@ -107,7 +107,7 @@ export default function HelpPageClient() {
                       </span>
                       <div className="min-w-0">
                         <Link
-                          href={`/admin/help?collection=${collection.slug}`}
+                          href={`/manage/help?collection=${collection.slug}`}
                           className="text-lg font-semibold text-[#272055] hover:text-[#2563eb]"
                         >
                           {collection.title}

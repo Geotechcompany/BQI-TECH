@@ -471,7 +471,7 @@ export function ApplicantsWorkspace() {
     if (selectedJobId) params.set("jobId", selectedJobId);
     if (selectedApplicationId) params.set("applicationId", selectedApplicationId);
     const qs = params.toString();
-    router.replace(qs ? `/admin/applicants?${qs}` : "/admin/applicants", {
+    router.replace(qs ? `/manage/applicants?${qs}` : "/manage/applicants", {
       scroll: false,
     });
   }, [selectedJobId, selectedApplicationId, searchParams, router]);
@@ -642,7 +642,7 @@ export function ApplicantsWorkspace() {
     : null;
   const profileHref =
     selectedApplication && selectedJobId
-      ? `/admin/jobs/${selectedJobId}/candidates/${selectedApplication.id}`
+      ? `/manage/jobs/${selectedJobId}/candidates/${selectedApplication.id}`
       : null;
   const appliedRelative = selectedApplication?.appliedDate
     ? (() => {

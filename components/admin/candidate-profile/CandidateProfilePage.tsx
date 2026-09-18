@@ -553,7 +553,7 @@ export function CandidateProfilePage({
     return () => window.clearTimeout(timer);
   }, [applicationId, quickNote]);
 
-  const pipelineHref = `/admin/jobs/${jobId}/pipeline`;
+  const pipelineHref = `/manage/jobs/${jobId}/pipeline`;
 
   const leaveProfile = useCallback(() => {
     if (onClose) {
@@ -569,7 +569,7 @@ export function CandidateProfilePage({
         onNavigateSibling(targetId);
         return;
       }
-      router.push(`/admin/jobs/${jobId}/candidates/${targetId}`);
+      router.push(`/manage/jobs/${jobId}/candidates/${targetId}`);
     },
     [jobId, onNavigateSibling, router]
   );
@@ -700,7 +700,7 @@ export function CandidateProfilePage({
 
   const getProfileUrl = useCallback(() => {
     if (typeof window === "undefined") {
-      return `/admin/jobs/${jobId}/candidates/${applicationId}`;
+      return `/manage/jobs/${jobId}/candidates/${applicationId}`;
     }
     return `${window.location.origin}/admin/jobs/${jobId}/candidates/${applicationId}`;
   }, [applicationId, jobId]);
@@ -1001,7 +1001,7 @@ export function CandidateProfilePage({
             variant="ghost"
             size="icon"
             className="text-white hover:bg-white/10"
-            onClick={() => router.push("/admin/calendar")}
+            onClick={() => router.push("/manage/calendar")}
             aria-label="Open calendar"
             title="Calendar"
           >
@@ -1358,7 +1358,7 @@ export function CandidateProfilePage({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => router.push("/admin/calendar")}
+                    onClick={() => router.push("/manage/calendar")}
                   >
                     Open calendar
                   </Button>
@@ -1447,7 +1447,7 @@ export function CandidateProfilePage({
                 className="h-9 w-9 text-[#272055] hover:bg-white"
                 aria-label="Open calendar"
                 title="Calendar"
-                onClick={() => router.push("/admin/calendar")}
+                onClick={() => router.push("/manage/calendar")}
               >
                 <Calendar className="h-4 w-4" />
               </Button>
@@ -1492,7 +1492,7 @@ export function CandidateProfilePage({
                 icon={Briefcase}
                 label="Job position"
                 value={position}
-                href={`/admin/jobs/${jobId}/pipeline`}
+                href={`/manage/jobs/${jobId}/pipeline`}
               />
               <SidebarRow
                 icon={Calendar}

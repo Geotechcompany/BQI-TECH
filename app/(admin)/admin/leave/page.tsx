@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function LeaveIndexPage() {
-  redirect("/admin/leave/overview");
+  redirect("/manage/leave/overview");
 }

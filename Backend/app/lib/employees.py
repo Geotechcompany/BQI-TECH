@@ -670,13 +670,14 @@ def seed_employee_docs(
 
 
 async def ensure_hr_seed(db: Any) -> bool:
-    """Insert default departments + employees when both collections are empty.
+    """Ensure baseline department rows exist when the departments collection is empty.
 
-    Returns True if seed ran. Seed lives in Mongo; UI never embeds this array.
+    Does **not** insert demo employees. Fake people (Sarah Chen, Fatuma Hassan, etc.)
+    are only created via the explicit `/api/admin/employees/seed` endpoint.
+    Returns True if departments were inserted.
     """
-    emp_count = await db.employees.count_documents({})
     dept_count = await db.departments.count_documents({})
-    if emp_count > 0 or dept_count > 0:
+    if dept_count > 0:
         return False
 
     now = datetime.utcnow()
@@ -684,62 +685,6 @@ async def ensure_hr_seed(db: Any) -> bool:
     result = await db.departments.insert_many(dept_docs)
     for doc, _id in zip(dept_docs, result.inserted_ids):
         doc["_id"] = _id
-
-    by_code = {d["code"]: d for d in dept_docs}
-    emp_docs = seed_employee_docs(now, by_code)
-
-    # Strip private manager refs before insert
-    manager_refs: list[tuple[str, str]] = []
-    for doc in emp_docs:
-        ref = doc.pop("_managerNumber", None)
-        if ref:
-            manager_refs.append((doc["employeeNumber"], ref))
-
-    ins = await db.employees.insert_many(emp_docs)
-    for doc, _id in zip(emp_docs, ins.inserted_ids):
-        doc["_id"] = _id
-
-    by_number = {d["employeeNumber"]: d for d in emp_docs}
-    for emp_number, mgr_number in manager_refs:
-        emp = by_number.get(emp_number)
-        mgr = by_number.get(mgr_number)
-        if not emp or not mgr:
-            continue
-        await db.employees.update_one(
-            {"_id": emp["_id"]},
-            {
-                "$set": {
-                    "managerId": str(mgr["_id"]),
-                    "managerName": f"{mgr['firstName']} {mgr['lastName']}",
-                    "updatedAt": now,
-                }
-            },
-        )
-
-    # Department heads
-    heads = {
-        "ENG": "BQI-1001",
-        "HR": "BQI-1004",
-        "OPS": "BQI-1006",
-        "FIN": "BQI-1008",
-        "CS": "BQI-1009",
-    }
-    for code, number in heads.items():
-        dept = by_code.get(code)
-        emp = by_number.get(number)
-        if not dept or not emp:
-            continue
-        await db.departments.update_one(
-            {"_id": dept["_id"]},
-            {
-                "$set": {
-                    "headEmployeeId": str(emp["_id"]),
-                    "headName": f"{emp['firstName']} {emp['lastName']}",
-                    "updatedAt": now,
-                }
-            },
-        )
-
     return True
 
 

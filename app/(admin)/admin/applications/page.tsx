@@ -11,7 +11,7 @@ export default function ApplicationsRedirectPage() {
 
   useEffect(() => {
     const qs = searchParams.toString();
-    router.replace(`/admin/candidates${qs ? `?${qs}` : ""}`);
+    router.replace(`/manage/candidates${qs ? `?${qs}` : ""}`);
   }, [router, searchParams]);
 
   return (

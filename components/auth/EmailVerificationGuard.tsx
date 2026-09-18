@@ -17,7 +17,7 @@ interface EmailVerificationGuardProps {
 const noVerificationPaths = [
   '/auth/verify-email',
   '/login',
-  '/admin/login',
+  '/manage/login',
   '/sign-up',
   '/forgot-password',
   '/reset-password',

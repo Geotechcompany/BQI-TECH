@@ -59,49 +59,49 @@ function ShortcutList({ items }: { items: Shortcut[] }) {
 
 const appsShortcuts: Shortcut[] = [
   {
-    href: "/admin/candidates",
+    href: "/manage/candidates",
     label: "Candidates",
     description: "Browse candidate pool",
     icon: Users,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/admin/job-postings",
+    href: "/manage/job-postings",
     label: "Positions",
     description: "Open roles & postings",
     icon: Briefcase,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/admin/employees",
+    href: "/manage/employees",
     label: "Employees",
     description: "Workforce records",
     icon: Users,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/admin/leave",
+    href: "/manage/leave",
     label: "Leave",
     description: "Policies & requests",
     icon: CalendarDays,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/admin/documents",
+    href: "/manage/documents",
     label: "Documents",
     description: "Files & vault",
     icon: FolderOpen,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/admin/calendar",
+    href: "/manage/calendar",
     label: "Calendar",
     description: "Schedule & events",
     icon: Calendar,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/admin/reports",
+    href: "/manage/reports",
     label: "Reports",
     description: "Hiring analytics",
     icon: FileText,
@@ -111,28 +111,28 @@ const appsShortcuts: Shortcut[] = [
 
 const peopleShortcuts: Shortcut[] = [
   {
-    href: "/admin/employees/directory",
+    href: "/manage/employees/directory",
     label: "Directory",
     description: "Find people",
     icon: Users,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/admin/employees/new",
+    href: "/manage/employees/new",
     label: "Add Employee",
     description: "Create a record",
     icon: UserPlus,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/admin/departments",
+    href: "/manage/departments",
     label: "Departments",
     description: "Org structure",
     icon: Building2,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/admin/employees/org-chart",
+    href: "/manage/employees/org-chart",
     label: "Org Chart",
     description: "Reporting lines",
     icon: Network,
@@ -142,28 +142,28 @@ const peopleShortcuts: Shortcut[] = [
 
 const recruitShortcuts: Shortcut[] = [
   {
-    href: "/admin/applicants",
+    href: "/manage/applicants",
     label: "Applicants",
     description: "Incoming applications",
     icon: UserSearch,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/admin/job-postings",
+    href: "/manage/job-postings",
     label: "Pipeline",
     description: "Open a posting to board",
     icon: Briefcase,
     tone: "bg-[#272156]/10 text-[#272156]",
   },
   {
-    href: "/admin/inbox",
+    href: "/manage/inbox",
     label: "Inbox",
     description: "Messages & mail",
     icon: Inbox,
     tone: "bg-[#31CDFF]/15 text-[#272156]",
   },
   {
-    href: "/admin/tasks",
+    href: "/manage/tasks",
     label: "Tasks",
     description: "Your follow-ups",
     icon: ListTodo,

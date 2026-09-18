@@ -15,7 +15,7 @@ const OPTIONS: {
   label: string;
   href: string;
 }[] = [
-  { id: "admin", label: "Admin", href: "/admin/login" },
+  { id: "admin", label: "Admin", href: "/manage/login" },
   { id: "employee", label: "Employee", href: "/employee/login" },
 ];
 

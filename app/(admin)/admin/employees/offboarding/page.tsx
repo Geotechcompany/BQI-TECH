@@ -200,7 +200,7 @@ export default function OffboardingPage() {
                               </td>
                               <td className="px-3 py-2.5 text-right">
                                 <Button asChild size="sm" variant="ghost">
-                                  <Link href={`/admin/employees/${e.id}`}>
+                                  <Link href={`/manage/employees/${e.id}`}>
                                     View
                                   </Link>
                                 </Button>
@@ -263,7 +263,7 @@ export default function OffboardingPage() {
                         {column.map((e) => (
                           <li key={e.id}>
                             <Link
-                              href={`/admin/employees/${e.id}`}
+                              href={`/manage/employees/${e.id}`}
                               className="block rounded-lg border border-border/60 p-2 hover:border-[#31CDFF]/40"
                             >
                               <p className="text-sm font-medium">

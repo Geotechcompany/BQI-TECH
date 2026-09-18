@@ -110,7 +110,7 @@ export function PipelineStep({ state, onChange, jobId }: PipelineStepProps) {
     setEditingStageId(null);
   };
 
-  const previewHref = jobId ? `/admin/jobs/${jobId}/pipeline` : undefined;
+  const previewHref = jobId ? `/manage/jobs/${jobId}/pipeline` : undefined;
 
   return (
     <div className="space-y-8">

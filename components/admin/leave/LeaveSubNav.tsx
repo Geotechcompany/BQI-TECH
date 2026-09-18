@@ -5,12 +5,12 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const LEAVE_NAV = [
-  { name: "Overview", href: "/admin/leave/overview" },
-  { name: "Requests", href: "/admin/leave/requests" },
-  { name: "Balances", href: "/admin/leave/balances" },
-  { name: "Calendar", href: "/admin/leave/calendar" },
-  { name: "Leave Types", href: "/admin/leave/types" },
-  { name: "Policies", href: "/admin/leave/policies" },
+  { name: "Overview", href: "/manage/leave/overview" },
+  { name: "Requests", href: "/manage/leave/requests" },
+  { name: "Balances", href: "/manage/leave/balances" },
+  { name: "Calendar", href: "/manage/leave/calendar" },
+  { name: "Leave Types", href: "/manage/leave/types" },
+  { name: "Policies", href: "/manage/leave/policies" },
 ] as const;
 
 export function LeaveSubNav() {
@@ -25,8 +25,8 @@ export function LeaveSubNav() {
       {LEAVE_NAV.map((item) => {
         const active =
           pathname === item.href ||
-          (item.href === "/admin/leave/overview" &&
-            (pathname === "/admin/leave" || pathname === "/admin/leave/"));
+          (item.href === "/manage/leave/overview" &&
+            (pathname === "/manage/leave" || pathname === "/manage/leave/"));
         return (
           <Link
             key={item.href}

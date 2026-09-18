@@ -412,13 +412,13 @@ function SettingsPageContent() {
     }[] = [];
     if (
       canAccessAdminPath(
-        "/admin/user-management",
+        "/manage/user-management",
         user?.role,
         user?.adminModules
       )
     ) {
       links.push({
-        href: "/admin/user-management",
+        href: "/manage/user-management",
         label: "User Management",
         description: "Invite admins and manage roles",
         icon: Users,
@@ -426,29 +426,29 @@ function SettingsPageContent() {
     }
     if (
       canAccessAdminPath(
-        "/admin/email-broadcast",
+        "/manage/email-broadcast",
         user?.role,
         user?.adminModules
       )
     ) {
       links.push({
-        href: "/admin/email-broadcast",
+        href: "/manage/email-broadcast",
         label: "Email Broadcast",
         description: "Send announcements to recipients",
         icon: Mail,
       });
     }
-    if (canAccessAdminPath("/admin/audit-logs", user?.role, user?.adminModules)) {
+    if (canAccessAdminPath("/manage/audit-logs", user?.role, user?.adminModules)) {
       links.push({
-        href: "/admin/audit-logs",
+        href: "/manage/audit-logs",
         label: "Admin Activity",
         description: "Review admin actions and audit history",
         icon: ScrollText,
       });
     }
-    if (canAccessAdminPath("/admin/backup", user?.role, user?.adminModules)) {
+    if (canAccessAdminPath("/manage/backup", user?.role, user?.adminModules)) {
       links.push({
-        href: "/admin/backup",
+        href: "/manage/backup",
         label: "Backup",
         description: "Schedules, runs, and off-site exports",
         icon: HardDrive,
@@ -969,7 +969,7 @@ function SettingsPageContent() {
         admin_path_slug: next.admin_path_slug ?? payload.admin_path_slug,
       });
       toast.success(
-        nextBase === "/admin"
+        nextBase === "/manage"
           ? "Admin URL restored to /admin"
           : `Admin URL updated. Use ${nextBase} from now on.`
       );
@@ -1353,14 +1353,14 @@ function SettingsPageContent() {
                     </span>
                   </p>
                 ) : null}
-                {basePath !== "/admin" ? (
+                {basePath !== "/manage" ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Current live base path (admins only):{" "}
                     <span className="font-mono">{basePath}</span>
                     {" · "}
                     <a
                       className="underline underline-offset-2"
-                      href={adminHref("/admin/settings")}
+                      href={adminHref("/manage/settings")}
                     >
                       Open settings
                     </a>

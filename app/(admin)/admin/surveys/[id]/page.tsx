@@ -75,7 +75,7 @@ export default function SurveyAnalyticsPage() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => router.push("/admin/surveys")}
+                onClick={() => router.push("/manage/surveys")}
               >
                 Back to Surveys
               </Button>

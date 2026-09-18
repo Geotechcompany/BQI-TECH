@@ -225,7 +225,7 @@ export default function JobPipelinePage() {
 
   const handleCardClick = useCallback(
     (application: Application) => {
-      router.push(`/admin/jobs/${id}/candidates/${application.id}`);
+      router.push(`/manage/jobs/${id}/candidates/${application.id}`);
     },
     [id, router]
   );
@@ -233,7 +233,7 @@ export default function JobPipelinePage() {
   const handleOpenDiscussion = useCallback(
     (application: Application) => {
       router.push(
-        `/admin/jobs/${id}/candidates/${application.id}?tab=discussion`
+        `/manage/jobs/${id}/candidates/${application.id}?tab=discussion`
       );
     },
     [id, router]
@@ -481,12 +481,12 @@ export default function JobPipelinePage() {
           <GenerateButton
             label="Source Candidates"
             isGenerating={false}
-            onClick={() => router.push("/admin/applicants")}
+            onClick={() => router.push("/manage/applicants")}
             className="text-sm"
           />
           <Button variant="outline" size="sm" asChild>
             <Link
-              href={`/admin/jobs/${id}/pipeline/settings`}
+              href={`/manage/jobs/${id}/pipeline/settings`}
               data-tour="pipeline-settings"
             >
               <Settings2 className="mr-2 h-4 w-4" />
@@ -495,7 +495,7 @@ export default function JobPipelinePage() {
           </Button>
           <Button variant="outline" size="sm" asChild>
             <Link
-              href={`/admin/candidates?jobId=${id}`}
+              href={`/manage/candidates?jobId=${id}`}
               data-tour="pipeline-list-view"
             >
               <LayoutList className="mr-2 h-4 w-4" />
@@ -503,7 +503,7 @@ export default function JobPipelinePage() {
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/job-postings">
+            <Link href="/manage/job-postings">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Positions
             </Link>

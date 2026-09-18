@@ -181,13 +181,13 @@ export default function JobPipelineSettingsPage() {
       headerActions={
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/admin/jobs/${id}/pipeline`}>
+            <Link href={`/manage/jobs/${id}/pipeline`}>
               <Columns3 className="mr-2 h-4 w-4" />
               Pipeline board
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <Link href="/admin/job-postings">
+            <Link href="/manage/job-postings">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Positions
             </Link>
@@ -206,7 +206,7 @@ export default function JobPipelineSettingsPage() {
         pipelineStages={job.pipelineStages}
         questionnaires={job.questionnaires}
         hiringTeam={job.hiringTeam}
-        previewHref={`/admin/jobs/${id}/pipeline`}
+        previewHref={`/manage/jobs/${id}/pipeline`}
         onSave={handleSave}
         isSaving={isSaving}
       />

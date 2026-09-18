@@ -426,7 +426,7 @@ export function AdminNotificationDropdown() {
 
           >
 
-            <Link href="/admin/notifications">
+            <Link href="/manage/notifications">
 
               View all
 

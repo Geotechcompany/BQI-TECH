@@ -163,7 +163,7 @@ export function EmployeeSetupWizard() {
       if (docusignSent) {
         toast.success("Offer letter sent via DocuSign");
       }
-      router.push(`/admin/employees/${employee.id}`);
+      router.push(`/manage/employees/${employee.id}`);
     },
     onError: (err: Error) => {
       toast.error(err.message || "Could not add employee");
@@ -171,7 +171,7 @@ export function EmployeeSetupWizard() {
   });
 
   const handleClose = () => {
-    router.push("/admin/employees");
+    router.push("/manage/employees");
   };
 
   const handleContinue = () => {

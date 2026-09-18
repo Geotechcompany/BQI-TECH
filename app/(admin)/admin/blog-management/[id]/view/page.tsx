@@ -124,7 +124,7 @@ export default function ViewBlogPost() {
             Back
           </Button>
           <Button
-            onClick={() => router.push(`/admin/blog-management/${postId}/wizard`)}
+            onClick={() => router.push(`/manage/blog-management/${postId}/wizard`)}
           >
             <Pencil className="mr-2 h-4 w-4" />
             Edit Post

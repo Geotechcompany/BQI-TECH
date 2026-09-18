@@ -12,7 +12,7 @@ from slowapi import Limiter
 
 from app.auth import get_current_user, security, verify_password
 from app.database import get_database
-from app.lib.admin_2fa_deps import get_admin_for_2fa_setup
+from app.lib.admin_2fa_deps import get_user_for_2fa_setup
 from app.lib.admin_2fa import (
     build_user_payload_extras,
     can_send_admin_email_otp,
@@ -113,7 +113,7 @@ def _cors_headers(request: Request) -> dict:
 async def _load_user_from_challenge(db, token: str, allowed: Optional[Set[str]] = None):
     payload = decode_challenge_token(token, allowed_types=allowed)
     user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
-    if not user or not is_admin_role(user.get("role")):
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_2fa_token", "message": "Invalid security session."},
@@ -250,7 +250,7 @@ async def send_email_otp(
         user, _ = await _load_user_from_challenge(
             db, body.challenge_token, {"2fa_challenge", "2fa_setup"}
         )
-    elif current_user and is_admin_role(current_user.get("role")):
+    elif current_user:
         user = current_user
     else:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -398,16 +398,17 @@ async def totp_disable(
         raise HTTPException(status_code=401, detail="Incorrect password")
 
     policy = await get_admin_2fa_policy(db)
-    # Simulate disable to check policy
-    simulated = {**user, "totpEnabled": False, "totpSecret": None}
-    if not policy_satisfied(simulated, policy) and policy != "prompt":
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "policy_blocks_disable",
-                "message": "Security policy requires this factor. Enable another factor first, or ask a super admin to change policy.",
-            },
-        )
+    # Org admin policy only applies to admins — regular users may freely disable.
+    if is_admin_role(user.get("role")):
+        simulated = {**user, "totpEnabled": False, "totpSecret": None}
+        if not policy_satisfied(simulated, policy) and policy != "prompt":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "policy_blocks_disable",
+                    "message": "Security policy requires this factor. Enable another factor first, or ask a super admin to change policy.",
+                },
+            )
 
     ok, _ = await verify_user_totp_or_recovery(db, user, body.code)
     if not ok:
@@ -510,15 +511,16 @@ async def email_2fa_disable(
         raise HTTPException(status_code=401, detail="Incorrect password")
 
     policy = await get_admin_2fa_policy(db)
-    simulated = {**user, "email2faEnabled": False}
-    if not policy_satisfied(simulated, policy) and policy != "prompt":
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "policy_blocks_disable",
-                "message": "Security policy requires this factor. Enable another factor first.",
-            },
-        )
+    if is_admin_role(user.get("role")):
+        simulated = {**user, "email2faEnabled": False}
+        if not policy_satisfied(simulated, policy) and policy != "prompt":
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "policy_blocks_disable",
+                    "message": "Security policy requires this factor. Enable another factor first.",
+                },
+            )
 
     if body.code:
         email = str(user.get("email") or "").lower()

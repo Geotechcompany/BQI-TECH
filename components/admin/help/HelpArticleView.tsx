@@ -22,10 +22,10 @@ export function HelpArticleView({ article }: HelpArticleViewProps) {
       <HelpHashScroll />
       <HelpBreadcrumbs
         items={[
-          { label: "All Collections", href: "/admin/help" },
+          { label: "All Collections", href: "/manage/help" },
           {
             label: collection?.title ?? article.collection,
-            href: `/admin/help?collection=${article.collection}`,
+            href: `/manage/help?collection=${article.collection}`,
           },
           { label: article.title },
         ]}

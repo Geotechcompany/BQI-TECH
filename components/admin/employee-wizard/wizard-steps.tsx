@@ -862,7 +862,7 @@ export function DocumentsStep({ state, onChange }: StepProps) {
               <p className="text-xs text-muted-foreground">
                 Connect DocuSign in{" "}
                 <Link
-                  href="/admin/settings?section=integrations"
+                  href="/manage/settings?section=integrations"
                   className="font-medium text-[#31CDFF] hover:underline"
                 >
                   Settings → Integrations

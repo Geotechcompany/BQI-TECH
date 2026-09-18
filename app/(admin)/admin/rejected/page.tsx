@@ -8,7 +8,7 @@ export default function RejectedPage() {
 
   useEffect(() => {
     // Redirect to disqualified page
-    router.replace('/admin/disqualified');
+    router.replace('/manage/disqualified');
   }, [router]);
 
   return null;

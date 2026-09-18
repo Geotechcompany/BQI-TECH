@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import {
   ADMIN_PATH_COOKIE,
   DEFAULT_ADMIN_BASE,
+  INTERNAL_ADMIN_BASE,
   isValidAdminPathSlug,
   normalizeAdminPathSlug,
 } from "@/lib/admin-path";
@@ -15,7 +16,8 @@ const publicPaths = [
   "/forgot-password",
   "/reset-password",
   "/auth/verify-email",
-  "/admin/login",
+  `${INTERNAL_ADMIN_BASE}/login`,
+  `${DEFAULT_ADMIN_BASE}/login`,
   "/employee/login",
   "/about",
   "/contact-us",
@@ -23,12 +25,14 @@ const publicPaths = [
   "/blog",
   "/careers",
   "/offline",
+  "/__app-not-found",
 ];
 
 // Paths that don't require email verification
 const noVerificationPaths = [
   "/auth/verify-email",
-  "/admin/login",
+  `${INTERNAL_ADMIN_BASE}/login`,
+  `${DEFAULT_ADMIN_BASE}/login`,
   "/employee/login",
   "/login",
   "/sign-up",
@@ -128,7 +132,10 @@ async function loadAdminPathGate(request: NextRequest): Promise<AdminPathGate> {
 
 function isPublicPath(pathname: string, adminLoginPublicPath: string): boolean {
   const paths = [...publicPaths];
-  if (adminLoginPublicPath !== "/admin/login") {
+  if (
+    adminLoginPublicPath !== `${INTERNAL_ADMIN_BASE}/login` &&
+    adminLoginPublicPath !== `${DEFAULT_ADMIN_BASE}/login`
+  ) {
     paths.push(adminLoginPublicPath);
   }
   return paths.some((path) => {
@@ -142,7 +149,10 @@ function isNoVerificationPath(
   adminLoginPublicPath: string
 ): boolean {
   const paths = [...noVerificationPaths];
-  if (adminLoginPublicPath !== "/admin/login") {
+  if (
+    adminLoginPublicPath !== `${INTERNAL_ADMIN_BASE}/login` &&
+    adminLoginPublicPath !== `${DEFAULT_ADMIN_BASE}/login`
+  ) {
     paths.push(adminLoginPublicPath);
   }
   return paths.some(
@@ -177,16 +187,18 @@ function clearAdminBaseCookie(response: NextResponse): NextResponse {
   return response;
 }
 
-/** Generic 404 — do not reveal that an admin panel exists. */
-function opaqueNotFound(): NextResponse {
-  return new NextResponse("Not Found", {
-    status: 404,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Robots-Tag": "noindex, nofollow",
-    },
-  });
+/**
+ * Custom app 404 UI — used when hiding the internal `/admin` tree (or an
+ * obsolete public base) so we never leak that an admin panel exists via a
+ * bare text response.
+ */
+function opaqueNotFound(request: NextRequest): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = "/__app-not-found";
+  const response = NextResponse.rewrite(url);
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  return response;
 }
 
 export async function middleware(request: NextRequest) {
@@ -194,6 +206,11 @@ export async function middleware(request: NextRequest) {
 
   // Allow internal gate + other Next API routes without auth redirects
   if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
+  // Dedicated opaque 404 surface (rewrite target)
+  if (pathname === "/__app-not-found") {
     return NextResponse.next();
   }
 
@@ -218,28 +235,36 @@ export async function middleware(request: NextRequest) {
   const gate = await loadAdminPathGate(request);
   const publicAdminBase = gate.publicBase;
   const adminLoginPublicPath = `${publicAdminBase}/login`;
+  const adminLoginInternalPath = `${INTERNAL_ADMIN_BASE}/login`;
 
-  // When hidden, never expose the default /admin tree.
+  // Never expose the internal App Router tree under /admin.
+  if (
+    pathname === INTERNAL_ADMIN_BASE ||
+    pathname.startsWith(`${INTERNAL_ADMIN_BASE}/`)
+  ) {
+    return opaqueNotFound(request);
+  }
+
+  // When a custom slug is active, also hide the default public base (/manage).
   if (
     gate.hidden &&
+    publicAdminBase !== DEFAULT_ADMIN_BASE &&
     (pathname === DEFAULT_ADMIN_BASE ||
       pathname.startsWith(`${DEFAULT_ADMIN_BASE}/`))
   ) {
-    return opaqueNotFound();
+    return opaqueNotFound(request);
   }
 
-  // Rewrite custom slug → internal /admin routes (URL bar keeps the secret path).
+  // Rewrite public base → internal /admin routes (URL bar keeps the public path).
   let effectivePathname = pathname;
   let rewriteUrl: URL | null = null;
 
   if (
-    gate.hidden &&
-    gate.slug &&
-    (pathname === publicAdminBase ||
-      pathname.startsWith(`${publicAdminBase}/`))
+    pathname === publicAdminBase ||
+    pathname.startsWith(`${publicAdminBase}/`)
   ) {
     const rest = pathname.slice(publicAdminBase.length) || "";
-    effectivePathname = `${DEFAULT_ADMIN_BASE}${rest}`;
+    effectivePathname = `${INTERNAL_ADMIN_BASE}${rest}`;
     rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = effectivePathname;
   }
@@ -248,11 +273,8 @@ export async function middleware(request: NextRequest) {
     if (gate.hidden && gate.slug) {
       return withAdminBaseCookie(response, publicAdminBase);
     }
-    // Keep cookie in sync when feature is off so clients don't stick to a stale slug.
-    if (request.cookies.get(ADMIN_PATH_COOKIE)?.value) {
-      return clearAdminBaseCookie(response);
-    }
-    return response;
+    // Always publish the active public base so client href helpers stay in sync.
+    return withAdminBaseCookie(response, publicAdminBase);
   };
 
   const nextOrRewrite = () => {
@@ -268,8 +290,8 @@ export async function middleware(request: NextRequest) {
   }
   // Also treat rewritten internal login as public
   if (
-    effectivePathname === "/admin/login" ||
-    effectivePathname.startsWith("/admin/login/")
+    effectivePathname === adminLoginInternalPath ||
+    effectivePathname.startsWith(`${adminLoginInternalPath}/`)
   ) {
     return nextOrRewrite();
   }
@@ -281,8 +303,8 @@ export async function middleware(request: NextRequest) {
   const isEmployeeLogin =
     pathname === "/employee/login" || pathname.startsWith("/employee/login/");
   const isAdminRoute =
-    effectivePathname === DEFAULT_ADMIN_BASE ||
-    effectivePathname.startsWith(`${DEFAULT_ADMIN_BASE}/`);
+    effectivePathname === INTERNAL_ADMIN_BASE ||
+    effectivePathname.startsWith(`${INTERNAL_ADMIN_BASE}/`);
 
   // If no session, redirect to the matching login
   if (!authSession) {
@@ -311,8 +333,8 @@ export async function middleware(request: NextRequest) {
       !isEmailVerified &&
       !isNoVerificationPath(pathname, adminLoginPublicPath) &&
       !(
-        effectivePathname === "/admin/login" ||
-        effectivePathname.startsWith("/admin/login/")
+        effectivePathname === adminLoginInternalPath ||
+        effectivePathname.startsWith(`${adminLoginInternalPath}/`)
       )
     ) {
       const verifyUrl = new URL("/auth/verify-email", request.url);

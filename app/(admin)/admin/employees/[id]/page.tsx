@@ -46,7 +46,7 @@ export default function EmployeeProfilePage() {
               Retry
             </Button>
             <Button asChild className="bg-[#272156] text-white">
-              <Link href="/admin/employees">Back to employees</Link>
+              <Link href="/manage/employees">Back to employees</Link>
             </Button>
           </div>
         </div>

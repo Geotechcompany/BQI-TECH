@@ -123,7 +123,7 @@ export function useJobWizard(jobId?: string) {
       } catch (error) {
         console.error(error);
         toast.error("Failed to load position");
-        router.push("/admin/job-postings");
+        router.push("/manage/job-postings");
       } finally {
         if (!cancelled) setIsLoading(false);
       }

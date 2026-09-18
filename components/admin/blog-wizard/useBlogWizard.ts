@@ -91,7 +91,7 @@ export function useBlogWizard(postId?: string) {
       } catch (error) {
         console.error(error);
         toast.error("Failed to load blog post");
-        router.push("/admin/blog-management");
+        router.push("/manage/blog-management");
       } finally {
         if (!cancelled) setIsLoading(false);
       }

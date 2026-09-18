@@ -600,7 +600,7 @@ export default function SurveysPage() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => router.push(`/admin/surveys/${s.id}`)}
+                onClick={() => router.push(`/manage/surveys/${s.id}`)}
                 className="border-[#31CDFF] text-[#31CDFF] hover:bg-[#31CDFF]/5"
               >
                 Analytics

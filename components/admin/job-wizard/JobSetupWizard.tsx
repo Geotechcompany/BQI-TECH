@@ -90,7 +90,7 @@ export function JobSetupWizard({ jobId }: JobSetupWizardProps) {
   };
 
   const handleClose = () => {
-    router.push("/admin/job-postings");
+    router.push("/manage/job-postings");
   };
 
   const openCareersPreview = async (): Promise<boolean> => {
@@ -161,7 +161,7 @@ export function JobSetupWizard({ jobId }: JobSetupWizardProps) {
   }
 
   const handleFinishModalClose = () => {
-    router.push("/admin/job-postings");
+    router.push("/manage/job-postings");
   };
 
   return (

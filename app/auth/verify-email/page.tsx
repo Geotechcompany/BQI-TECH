@@ -245,7 +245,7 @@ function EmailVerificationContent() {
             toast.success("Email already verified. Redirecting...");
             hasShownAlreadyVerifiedToastRef.current = true;
           }
-          router.replace(isAdmin ? "/admin/overview" : "/dashboard");
+          router.replace(isAdmin ? "/manage/overview" : "/dashboard");
           return true;
         }
       } catch (error) {

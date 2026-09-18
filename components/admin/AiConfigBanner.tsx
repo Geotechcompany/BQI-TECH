@@ -32,7 +32,7 @@ export function AiConfigBanner() {
           BQI Intelligence features are turned off because no provider API key is
           set. Add one in{" "}
           <Link
-            href="/admin/settings?section=ai"
+            href="/manage/settings?section=ai"
             className="font-semibold underline underline-offset-2 hover:opacity-80"
           >
             Settings → AI providers

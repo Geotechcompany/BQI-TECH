@@ -677,7 +677,7 @@ export default function CandidatesPage() {
       }
       const jobId = resolveJobId(app);
       if (jobId && id) {
-        router.push(`/admin/jobs/${jobId}/candidates/${id}`);
+        router.push(`/manage/jobs/${jobId}/candidates/${id}`);
         return;
       }
       toast.message("Open from pipeline after linking this candidate to a position.");
@@ -1030,11 +1030,11 @@ export default function CandidatesPage() {
       const id = resolveApplicationId(app);
       const jobId = resolveJobId(app);
       if (jobId && id) {
-        router.push(`/admin/jobs/${jobId}/candidates/${id}?tab=email`);
+        router.push(`/manage/jobs/${jobId}/candidates/${id}?tab=email`);
         return;
       }
     }
-    router.push("/admin/inbox");
+    router.push("/manage/inbox");
   };
 
   const handleCandidateEmail = () => {
@@ -1335,7 +1335,7 @@ export default function CandidatesPage() {
               <button
                 type="button"
                 className="text-[#272055] underline-offset-2 hover:underline"
-                onClick={() => router.push("/admin/candidates")}
+                onClick={() => router.push("/manage/candidates")}
               >
                 Clear job filter
               </button>

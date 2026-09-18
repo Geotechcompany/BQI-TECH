@@ -30,7 +30,7 @@ export default function AdminInboxPage() {
       return;
     }
     if (!canViewInbox) {
-      router.push("/admin/overview");
+      router.push("/manage/overview");
     }
   }, [authLoading, canViewInbox, isAdmin, isAuthenticated, router]);
 

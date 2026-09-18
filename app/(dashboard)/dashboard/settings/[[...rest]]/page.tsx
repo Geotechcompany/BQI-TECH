@@ -32,6 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AdminSecurity2faCard } from "@/components/admin/settings/AdminSecurity2faCard";
 import { z } from "zod";
 import {
   Select,
@@ -765,6 +766,15 @@ export default function SettingsPage() {
                 )}
               </Button>
             </div>
+          </SettingsPanel>
+
+          <SettingsPanel
+            id="user-settings-2fa"
+            data-tour="user-settings-2fa"
+            title="Two-factor authentication"
+            description="Add an authenticator app or email codes to protect your account."
+          >
+            <AdminSecurity2faCard canEditPolicy={false} />
           </SettingsPanel>
 
           <SettingsPanel
