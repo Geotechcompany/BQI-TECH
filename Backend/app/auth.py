@@ -171,6 +171,13 @@ async def get_current_admin_user(credentials: HTTPAuthorizationCredentials = Dep
     except HTTPException:
         raise
     except Exception as exc:
-        logger.warning("Admin 2FA policy check skipped: %s", exc)
+        logger.error("Admin 2FA policy check failed closed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "admin_2fa_required",
+                "message": "Could not verify security policy. Try again or contact a super admin.",
+            },
+        )
 
     return user

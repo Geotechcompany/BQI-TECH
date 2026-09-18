@@ -41,6 +41,7 @@ import { PremiumDashboardLoader } from "@/components/admin/PremiumDashboardLoade
 import { usePremiumLoaderGate } from "@/hooks/usePremiumLoaderGate";
 import { AdminLockScreenProvider } from "@/contexts/AdminLockScreenContext";
 import { AdminLockScreen } from "@/components/admin/AdminLockScreen";
+import { useAdminPath } from "@/contexts/AdminPathContext";
 
 function AdminFullscreenProviders({ children }: { children: ReactNode }) {
   const {
@@ -102,6 +103,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const { adminHref } = useAdminPath();
   const shellOffset = adminShellOffset(sidebarCollapsed);
   const shellSpring = adminSidebarSpring(!!reducedMotion);
   const showPremiumLoader = usePremiumLoaderGate({
@@ -121,13 +123,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
     if (!authLoading) {
       if (!isAuthenticated) {
-        router.replace("/admin/login");
+        router.replace(adminHref("/admin/login"));
         return;
       }
 
       if (isAuthenticated && !isAdmin) {
         toast.error("Access denied. Admin privileges required.");
         router.replace("/dashboard");
+        return;
+      }
+
+      // Fail closed: required 2FA not enrolled → force setup on login
+      if (
+        isAuthenticated &&
+        isAdmin &&
+        user?.admin2faSatisfied === false
+      ) {
+        router.replace(adminHref("/admin/login"));
         return;
       }
     }
@@ -138,6 +150,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     pathname,
     router,
     isExtendingSession,
+    user?.admin2faSatisfied,
+    adminHref,
   ]);
 
   if (showPremiumLoader) {
