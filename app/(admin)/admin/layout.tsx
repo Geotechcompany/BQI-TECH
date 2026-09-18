@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useEffect, useCallback } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -10,7 +10,7 @@ import DashboardSidebar, {
 } from "@/components/admin/DashboardSidebar";
 import MobileDashboardSidebar from "@/components/admin/MobileDashboardSidebar";
 import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
-import { Menu, Shield } from "lucide-react";
+import { Menu } from "lucide-react";
 import { AdminThemeProvider } from "@/contexts/AdminThemeContext";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
@@ -42,11 +42,6 @@ import { usePremiumLoaderGate } from "@/hooks/usePremiumLoaderGate";
 import { AdminLockScreenProvider } from "@/contexts/AdminLockScreenContext";
 import { AdminLockScreen } from "@/components/admin/AdminLockScreen";
 import { useAdminPath } from "@/contexts/AdminPathContext";
-import { AdminTwoFactorSetup } from "@/components/admin/auth/AdminTwoFactorSetup";
-import {
-  fetchAdmin2faStatus,
-  type Admin2faPolicy,
-} from "@/lib/admin-2fa";
 import { AdminTwoFactorSetup } from "@/components/admin/auth/AdminTwoFactorSetup";
 import { fetchAdmin2faStatus } from "@/lib/admin-2fa";
 
