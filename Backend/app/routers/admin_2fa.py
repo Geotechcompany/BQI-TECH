@@ -1,10 +1,8 @@
 """Admin 2FA endpoints: challenge verify, email OTP, TOTP enroll/disable, status."""
 
-from __future__ import annotations
-
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from bson import ObjectId
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
@@ -112,7 +110,7 @@ def _cors_headers(request: Request) -> dict:
     }
 
 
-async def _load_user_from_challenge(db, token: str, allowed: set[str] | None = None):
+async def _load_user_from_challenge(db, token: str, allowed: Optional[Set[str]] = None):
     payload = decode_challenge_token(token, allowed_types=allowed)
     user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
     if not user or not is_admin_role(user.get("role")):
