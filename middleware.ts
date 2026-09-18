@@ -237,6 +237,14 @@ export async function middleware(request: NextRequest) {
   const adminLoginPublicPath = `${publicAdminBase}/login`;
   const adminLoginInternalPath = `${INTERNAL_ADMIN_BASE}/login`;
 
+  const finish = (response: NextResponse) => {
+    if (gate.hidden && gate.slug) {
+      return withAdminBaseCookie(response, publicAdminBase);
+    }
+    // Always publish the active public base so client href helpers stay in sync.
+    return withAdminBaseCookie(response, publicAdminBase);
+  };
+
   // Legacy /admin bookmarks, emails, and stored notification links → public base.
   // Do not serve the internal App Router tree under /admin (URL must stay public).
   if (
@@ -272,14 +280,6 @@ export async function middleware(request: NextRequest) {
     rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = effectivePathname;
   }
-
-  const finish = (response: NextResponse) => {
-    if (gate.hidden && gate.slug) {
-      return withAdminBaseCookie(response, publicAdminBase);
-    }
-    // Always publish the active public base so client href helpers stay in sync.
-    return withAdminBaseCookie(response, publicAdminBase);
-  };
 
   const nextOrRewrite = () => {
     if (rewriteUrl) {
