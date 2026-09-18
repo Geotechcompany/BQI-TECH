@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isProtectedRoute = (path: string) =>
     path.startsWith("/dashboard") ||
-    path.startsWith("/admin") ||
+    path.startsWith("/manage") ||
     path.startsWith("/login");
 
   // Session timeout configuration (in minutes)
@@ -190,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         typeof window !== "undefined" ? window.location.pathname : "";
       const requiresVerification =
         currentPath.startsWith("/dashboard") ||
-        currentPath.startsWith("/admin");
+        currentPath.startsWith("/manage");
 
       if (requiresVerification && !authState.user.isEmailVerified) {
         console.log("User not verified, redirecting from:", currentPath);

@@ -109,8 +109,8 @@ const nextConfig = {
     },
     async redirects() {
         return [{
-                source: '/admin',
-                destination: '/admin/overview',
+                source: '/manage',
+                destination: '/manage/overview',
                 permanent: true,
             },
             {
@@ -119,8 +119,8 @@ const nextConfig = {
                 permanent: true,
             },
             {
-                source: '/admin/cv-vault',
-                destination: '/admin/applicants',
+                source: '/manage/cv-vault',
+                destination: '/manage/applicants',
                 permanent: false,
             },
         ];

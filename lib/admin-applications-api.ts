@@ -43,7 +43,7 @@ class AdminApplicationsApi {
     }
 
     const url = `${this.baseUrl}/api${
-      useAdminEndpoint ? "/admin" : ""
+      useAdminEndpoint ? "/manage" : ""
     }${endpoint}`;
 
     const defaultHeaders = {

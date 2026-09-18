@@ -138,7 +138,7 @@ export function NotificationButton({
         <Button 
           variant="outline" 
           className="w-full justify-center hover:bg-gray-50"
-          onClick={() => router.push('/admin/notifications')}
+          onClick={() => router.push('/manage/notifications')}
         >
           View All Notifications
         </Button>

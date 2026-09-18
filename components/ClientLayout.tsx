@@ -26,7 +26,7 @@ export default function ClientLayout({
     "/auth/verify-email",
     "/employee",
   ].some((path) => pathname?.startsWith(path));
-  // Browser URL may be `/admin/...` or a rewritten custom slug (e.g. `/manage/...`)
+  // Browser URL may be `/manage/...` or a rewritten custom slug (e.g. `/manage/...`)
   const isAdminPage = Boolean(
     pathname &&
       (isPublicAdminPath(pathname, DEFAULT_ADMIN_BASE) ||
