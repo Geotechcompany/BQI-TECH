@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mail, ShieldCheck, Smartphone } from "lucide-react";
+import { Check, Loader2, Mail, ShieldCheck, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   sendAdmin2faEmailOtp,
   verifyAdmin2faChallenge,
@@ -25,6 +31,32 @@ interface AdminTwoFactorChallengeProps {
   }) => Promise<void> | void;
   onCancel: () => void;
 }
+
+const METHOD_OPTIONS: {
+  id: Admin2faMethod;
+  label: string;
+  description: string;
+  icon: typeof Smartphone;
+}[] = [
+  {
+    id: "totp",
+    label: "Authenticator",
+    description: "Code from your authenticator app",
+    icon: Smartphone,
+  },
+  {
+    id: "email",
+    label: "Email code",
+    description: "One-time code sent to your email",
+    icon: Mail,
+  },
+  {
+    id: "recovery",
+    label: "Recovery code",
+    description: "One of your saved backup codes",
+    icon: ShieldCheck,
+  },
+];
 
 export function AdminTwoFactorChallenge({
   challengeToken,
@@ -51,6 +83,13 @@ export function AdminTwoFactorChallenge({
   const [isSending, setIsSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
+  const methodOptions = useMemo(
+    () => METHOD_OPTIONS.filter((option) => available.includes(option.id)),
+    [available]
+  );
+
+  const canSwitchMethod = methodOptions.length > 1;
+
   useEffect(() => {
     setMethod(defaultMethod);
   }, [defaultMethod]);
@@ -61,6 +100,12 @@ export function AdminTwoFactorChallenge({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [method]);
+
+  const selectMethod = (next: Admin2faMethod) => {
+    if (next === method) return;
+    setMethod(next);
+    setCode("");
+  };
 
   const handleSendEmail = async () => {
     setIsSending(true);
@@ -102,18 +147,6 @@ export function AdminTwoFactorChallenge({
     }
   };
 
-  const methodTabs: { id: Admin2faMethod; label: string; icon: typeof Smartphone }[] =
-    [];
-  if (available.includes("totp")) {
-    methodTabs.push({ id: "totp", label: "Authenticator", icon: Smartphone });
-  }
-  if (available.includes("email")) {
-    methodTabs.push({ id: "email", label: "Email code", icon: Mail });
-  }
-  if (available.includes("totp")) {
-    methodTabs.push({ id: "recovery", label: "Recovery", icon: ShieldCheck });
-  }
-
   return (
     <div className="space-y-6">
       <div className="space-y-1.5">
@@ -125,34 +158,6 @@ export function AdminTwoFactorChallenge({
           {emailHint ? ` as ${emailHint}` : ""}.
         </p>
       </div>
-
-      {methodTabs.length > 1 ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {methodTabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = method === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setMethod(tab.id);
-                  setCode("");
-                }}
-                className={cn(
-                  "flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition",
-                  active
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-border/70 text-muted-foreground hover:bg-muted/40"
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
 
       <form onSubmit={handleVerify} className="space-y-4">
         <div className="space-y-2">
@@ -193,6 +198,51 @@ export function AdminTwoFactorChallenge({
               "Resend email code"
             )}
           </Button>
+        ) : null}
+
+        {canSwitchMethod ? (
+          <div className="flex justify-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto px-0 text-sm font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Method unavailable? Use another
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-64">
+                {methodOptions.map((option) => {
+                  const Icon = option.icon;
+                  const isActive = method === option.id;
+                  return (
+                    <DropdownMenuItem
+                      key={option.id}
+                      onSelect={() => selectMethod(option.id)}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-2.5 py-2.5",
+                        isActive && "bg-accent/60"
+                      )}
+                    >
+                      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium leading-none">
+                          {option.label}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {option.description}
+                        </span>
+                      </span>
+                      {isActive ? (
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      ) : null}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ) : null}
 
         <Button
