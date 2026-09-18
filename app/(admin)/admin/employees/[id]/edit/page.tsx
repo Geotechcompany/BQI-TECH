@@ -57,9 +57,7 @@ export default function EditEmployeePage() {
             Updates apply when you save.
           </p>
         </div>
-        <div className="rounded-xl border bg-card p-6">
-          <EmployeeForm mode="edit" initial={employee} />
-        </div>
+        <EmployeeForm mode="edit" initial={employee} />
       </div>
     </AdminPageLayout>
   );
