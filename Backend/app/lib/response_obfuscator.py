@@ -81,11 +81,14 @@ class ResponseObfuscator:
 # Convenience functions
 def obfuscate_user_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
     """Obfuscate user profile data"""
-    # Only return essential fields
+    # Only return essential fields (include admin 2FA gate fields so the
+    # frontend can force enrollment instead of dead-end 403 pages).
     essential_fields = [
         'id', 'email', 'name', 'firstName', 'lastName',
         'role', 'avatar', 'avatarUrl', 'isEmailVerified', 'createdAt',
         'adminModules',
+        'totpEnabled', 'email2faEnabled',
+        'admin2faPolicy', 'admin2faSatisfied', 'admin2faPrompt', 'admin2faFactors',
     ]
     
     minimal_data = ResponseObfuscator.create_minimal_response(profile_data, essential_fields)

@@ -926,6 +926,11 @@ class AuthService {
             currentSession.user.avatar ||
             currentSession.user.avatarUrl ||
             "";
+          // Prefer fresh profile 2FA fields; keep session values if obfuscation omitted them
+          const admin2faSatisfied =
+            typeof profileData.admin2faSatisfied === "boolean"
+              ? profileData.admin2faSatisfied
+              : currentSession.user.admin2faSatisfied;
           const updatedSession = {
             ...currentSession,
             user: {
@@ -941,6 +946,23 @@ class AuthService {
               avatarUrl: resolvedAvatar,
               isEmailVerified,
               adminModules: profileData.adminModules || currentSession.user.adminModules,
+              admin2faSatisfied,
+              admin2faPrompt:
+                typeof profileData.admin2faPrompt === "boolean"
+                  ? profileData.admin2faPrompt
+                  : currentSession.user.admin2faPrompt,
+              admin2faPolicy:
+                profileData.admin2faPolicy ?? currentSession.user.admin2faPolicy,
+              admin2faFactors:
+                profileData.admin2faFactors ?? currentSession.user.admin2faFactors,
+              totpEnabled:
+                typeof profileData.totpEnabled === "boolean"
+                  ? profileData.totpEnabled
+                  : currentSession.user.totpEnabled,
+              email2faEnabled:
+                typeof profileData.email2faEnabled === "boolean"
+                  ? profileData.email2faEnabled
+                  : currentSession.user.email2faEnabled,
             },
           };
           this.setSession(updatedSession);

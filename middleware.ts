@@ -164,16 +164,6 @@ function withAdminBaseCookie(
   });
   return response;
 }
-  response.cookies.set({
-    name: ADMIN_PATH_COOKIE,
-    value: publicBase,
-    path: "/",
-    sameSite: "lax",
-    httpOnly: false,
-    maxAge: 60 * 60 * 24 * 365,
-  });
-  return response;
-}
 
 function clearAdminBaseCookie(response: NextResponse): NextResponse {
   response.cookies.set({

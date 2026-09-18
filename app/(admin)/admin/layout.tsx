@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useCallback } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -10,7 +10,7 @@ import DashboardSidebar, {
 } from "@/components/admin/DashboardSidebar";
 import MobileDashboardSidebar from "@/components/admin/MobileDashboardSidebar";
 import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
-import { Menu } from "lucide-react";
+import { Menu, Shield } from "lucide-react";
 import { AdminThemeProvider } from "@/contexts/AdminThemeContext";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
@@ -42,6 +42,13 @@ import { usePremiumLoaderGate } from "@/hooks/usePremiumLoaderGate";
 import { AdminLockScreenProvider } from "@/contexts/AdminLockScreenContext";
 import { AdminLockScreen } from "@/components/admin/AdminLockScreen";
 import { useAdminPath } from "@/contexts/AdminPathContext";
+import { AdminTwoFactorSetup } from "@/components/admin/auth/AdminTwoFactorSetup";
+import {
+  fetchAdmin2faStatus,
+  type Admin2faPolicy,
+} from "@/lib/admin-2fa";
+import { AdminTwoFactorSetup } from "@/components/admin/auth/AdminTwoFactorSetup";
+import { fetchAdmin2faStatus } from "@/lib/admin-2fa";
 
 function AdminFullscreenProviders({ children }: { children: ReactNode }) {
   const {
@@ -88,6 +95,8 @@ function AdminFullscreenProviders({ children }: { children: ReactNode }) {
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [force2faSetup, setForce2faSetup] = useState(false);
+  const [checking2fa, setChecking2fa] = useState(false);
   const { sidebarCollapsed } = useSettings();
   const reducedMotion = useReducedMotion();
   const {
@@ -100,6 +109,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     refreshSession,
     logout,
     isExtendingSession,
+    refreshUserProfile,
   } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
@@ -110,6 +120,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     isLoginRoute: isAdminLoginRoute(pathname),
     authLoading,
   });
+
+  const needs2faSetup =
+    Boolean(isAuthenticated && isAdmin) &&
+    (user?.admin2faSatisfied === false || force2faSetup);
 
   // Soft client navigation only — never window.location (that nukes the SPA
   // mid Stay Logged In / token refresh). Skip while session is being extended.
@@ -132,16 +146,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         router.replace("/dashboard");
         return;
       }
-
-      // Fail closed: required 2FA not enrolled → force setup on login
-      if (
-        isAuthenticated &&
-        isAdmin &&
-        user?.admin2faSatisfied === false
-      ) {
-        router.replace(adminHref("/admin/login"));
-        return;
-      }
     }
   }, [
     authLoading,
@@ -150,12 +154,98 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     pathname,
     router,
     isExtendingSession,
-    user?.admin2faSatisfied,
     adminHref,
   ]);
 
+  // Failsafe: if profile omitted admin2faSatisfied, ask /auth/2fa/status
+  useEffect(() => {
+    if (authLoading || !isAuthenticated || !isAdmin) return;
+    if (isAdminLoginRoute(pathname)) return;
+    if (user?.admin2faSatisfied === false) {
+      setForce2faSetup(true);
+      return;
+    }
+    if (user?.admin2faSatisfied === true) {
+      setForce2faSetup(false);
+      return;
+    }
+
+    let cancelled = false;
+    setChecking2fa(true);
+    void (async () => {
+      try {
+        const status = await fetchAdmin2faStatus();
+        if (cancelled) return;
+        setForce2faSetup(!status.satisfied);
+      } catch {
+        // Keep existing gate; admin APIs will still 403 until enrolled
+      } finally {
+        if (!cancelled) setChecking2fa(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authLoading,
+    isAuthenticated,
+    isAdmin,
+    pathname,
+    user?.admin2faSatisfied,
+  ]);
+
+  const handle2faSetupComplete = async () => {
+    await refreshUserProfile();
+    try {
+      const status = await fetchAdmin2faStatus();
+      if (!status.satisfied) {
+        setForce2faSetup(true);
+        toast.error("Additional security factors are still required");
+        return;
+      }
+      setForce2faSetup(false);
+      toast.success("Security setup complete");
+    } catch {
+      setForce2faSetup(false);
+    }
+  };
+
   if (showPremiumLoader) {
     return <PremiumDashboardLoader />;
+  }
+
+  // Hard gate: block all admin tools until required factors are enrolled
+  // (runs before fullscreen shells so wizards cannot bypass enrollment)
+  if (
+    !authLoading &&
+    isAuthenticated &&
+    isAdmin &&
+    !isAdminLoginRoute(pathname) &&
+    (needs2faSetup || checking2fa)
+  ) {
+    if (checking2fa && !needs2faSetup) {
+      return <PremiumDashboardLoader />;
+    }
+    return (
+      <EmailVerificationGuard requireVerification={true}>
+        <div
+          id="admin-root"
+          data-admin-page
+          data-admin-2fa-setup
+          className="flex min-h-dvh w-screen items-center justify-center bg-[#f4f5f7] px-4 py-10"
+        >
+          <div className="w-full max-w-md rounded-3xl border border-border/60 bg-card p-8 shadow-[0_24px_70px_-30px_hsl(222_47%_30%/0.35)] sm:p-10">
+            <AdminTwoFactorSetup
+              policy={user?.admin2faPolicy || "require_one"}
+              emailHint={user?.email}
+              required
+              onComplete={() => void handle2faSetupComplete()}
+            />
+          </div>
+        </div>
+      </EmailVerificationGuard>
+    );
   }
 
   if (isBareFullscreenAdminRoute(pathname)) {

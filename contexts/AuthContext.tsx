@@ -334,9 +334,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const updatedSession = await authService.refreshUserProfile();
-      const activeUser = updatedSession?.user ?? response.user;
+      const refreshed = updatedSession?.user;
+      const loginUser = response.user;
+      // Profile obfuscation historically stripped 2FA fields — merge carefully
+      const activeUser = {
+        ...loginUser,
+        ...(refreshed ?? {}),
+        admin2faSatisfied:
+          typeof refreshed?.admin2faSatisfied === "boolean"
+            ? refreshed.admin2faSatisfied
+            : typeof loginUser.admin2faSatisfied === "boolean"
+              ? loginUser.admin2faSatisfied
+              : response.requires_2fa_setup
+                ? false
+                : undefined,
+        admin2faPrompt:
+          typeof refreshed?.admin2faPrompt === "boolean"
+            ? refreshed.admin2faPrompt
+            : loginUser.admin2faPrompt ?? Boolean(response.requires_2fa_setup),
+        admin2faPolicy:
+          refreshed?.admin2faPolicy ??
+          loginUser.admin2faPolicy ??
+          response.admin_2fa_policy,
+      };
       if (updatedSession) {
-        authService.setSession(updatedSession);
+        authService.setSession({ ...updatedSession, user: activeUser });
       }
       const resolvedRole = activeUser.role;
 
