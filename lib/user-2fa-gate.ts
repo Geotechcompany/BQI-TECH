@@ -38,7 +38,10 @@ export function userHasEnrolledTwoFactor(user?: {
 }
 
 /**
- * True when a normal user has verified email but has not enrolled any 2FA factor.
+ * True when a normal user must enroll 2FA before using the app:
+ * - Post-verify gate: email verified and no factor enrolled
+ * - Admin force: `require2fa` set even for long-verified accounts
+ *
  * Admins are excluded — they use admin 2FA policy on /manage.
  */
 export function needsUserTwoFactorSetup(user?: {
@@ -46,12 +49,15 @@ export function needsUserTwoFactorSetup(user?: {
   isEmailVerified?: boolean;
   totpEnabled?: boolean;
   email2faEnabled?: boolean;
+  require2fa?: boolean;
   admin2faFactors?: { email?: boolean; totp?: boolean };
 } | null): boolean {
   if (!user) return false;
   if (isAdminRole(user.role)) return false;
+  if (userHasEnrolledTwoFactor(user)) return false;
+  if (user.require2fa) return true;
   if (!user.isEmailVerified) return false;
-  return !userHasEnrolledTwoFactor(user);
+  return true;
 }
 
 export function isUser2faSetupExemptPath(pathname: string): boolean {

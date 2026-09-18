@@ -128,6 +128,7 @@ async def twofa_status(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=503, detail="Database not connected")
     policy = await get_admin_2fa_policy(db)
     factors = enrolled_factors(current_user)
+    enrolled = factors["totp"] or factors["email"]
     return {
         "policy": policy,
         "factors": factors,
@@ -135,6 +136,7 @@ async def twofa_status(current_user: dict = Depends(get_current_user)):
         "prompt": needs_enrollment_prompt(current_user, policy),
         "totpEnabled": factors["totp"],
         "email2faEnabled": factors["email"],
+        "require2fa": bool(current_user.get("require2fa")) and not enrolled,
         "recoveryCodesRemaining": len(current_user.get("totpRecoveryCodes") or []),
     }
 
@@ -359,8 +361,13 @@ async def totp_setup_confirm(
                 "totpEnabled": True,
                 "totpRecoveryCodes": hashes,
                 "totpEnabledAt": datetime.utcnow(),
+                "require2fa": False,
             },
-            "$unset": {"totpPendingSecret": "", "totpPendingCreatedAt": ""},
+            "$unset": {
+                "totpPendingSecret": "",
+                "totpPendingCreatedAt": "",
+                "require2faAt": "",
+            },
         },
     )
 
@@ -481,7 +488,14 @@ async def email_2fa_enable(
 
     await db.users.update_one(
         {"_id": user["_id"]},
-        {"$set": {"email2faEnabled": True, "email2faEnabledAt": datetime.utcnow()}},
+        {
+            "$set": {
+                "email2faEnabled": True,
+                "email2faEnabledAt": datetime.utcnow(),
+                "require2fa": False,
+            },
+            "$unset": {"require2faAt": ""},
+        },
     )
     await log_admin_auth_event(
         db,

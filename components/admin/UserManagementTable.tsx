@@ -9,6 +9,9 @@ import {
   Pencil,
   Send,
   Shield,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -16,6 +19,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -35,8 +39,11 @@ interface UserManagementTableProps {
   noDataMessage?: string;
   resendingUserId?: string;
   sendingResetUserId?: string;
+  forcing2faUserId?: string;
   onResendInvite?: (userId: string) => void;
   onSendPasswordReset?: (user: UserType) => void;
+  onRequire2fa?: (user: UserType) => void;
+  onClearRequire2fa?: (user: UserType) => void;
   onEdit?: (user: UserType) => void;
   onDelete?: (userId: string) => void;
 }
@@ -87,19 +94,81 @@ function ModuleBadges({ user }: { user: UserType }) {
   );
 }
 
+function TwoFactorBadges({ user }: { user: UserType }) {
+  const totpOn = Boolean(user.totpEnabled);
+  const emailOn = Boolean(user.email2faEnabled);
+  const enrolled = totpOn || emailOn;
+  const forced = Boolean(user.require2fa) && !enrolled;
+
+  if (enrolled) {
+    return (
+      <div className="flex flex-col gap-1">
+        <Badge
+          variant="outline"
+          className="w-fit border-emerald-200 text-xs text-emerald-700"
+        >
+          <ShieldCheck className="mr-1 h-3 w-3" />
+          2FA on
+        </Badge>
+        <div className="flex flex-wrap gap-1">
+          {totpOn && (
+            <Badge variant="secondary" className="text-[10px] font-normal">
+              Authenticator
+            </Badge>
+          )}
+          {emailOn && (
+            <Badge variant="secondary" className="text-[10px] font-normal">
+              Email
+            </Badge>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Badge
+        variant="outline"
+        className={cn(
+          "w-fit text-xs",
+          forced
+            ? "border-orange-300 text-orange-700"
+            : "border-rose-200 text-rose-700"
+        )}
+      >
+        {forced ? (
+          <>
+            <ShieldAlert className="mr-1 h-3 w-3" />
+            Required
+          </>
+        ) : (
+          <>
+            <ShieldOff className="mr-1 h-3 w-3" />
+            Missing
+          </>
+        )}
+      </Badge>
+    </div>
+  );
+}
+
 export function UserManagementTable({
   users,
   isLoading,
   noDataMessage = "No users found",
   resendingUserId,
   sendingResetUserId,
+  forcing2faUserId,
   onResendInvite,
   onSendPasswordReset,
+  onRequire2fa,
+  onClearRequire2fa,
   onEdit,
   onDelete,
 }: UserManagementTableProps) {
   if (isLoading) {
-    return <TableSkeleton rows={6} columns={5} />;
+    return <TableSkeleton rows={6} columns={6} />;
   }
 
   if (!users?.length) {
@@ -132,146 +201,200 @@ export function UserManagementTable({
               <th className="hidden px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground md:table-cell">
                 Status
               </th>
+              <th className="hidden px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground sm:table-cell">
+                2FA
+              </th>
               <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Actions
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {users.map((user) => (
-              <tr
-                key={user.id}
-                className="transition-colors hover:bg-muted/20"
-              >
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10 border">
-                      <AvatarImage src={user.avatarUrl} />
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        {(user.name || user.email || "?")[0]?.toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-foreground">
-                        {user.name}
-                      </p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {user.email}
-                      </p>
-                      <div className="mt-1 lg:hidden">
-                        <RoleBadge role={user.role} />
+            {users.map((user) => {
+              const enrolled =
+                Boolean(user.totpEnabled) || Boolean(user.email2faEnabled);
+              const canForce2fa =
+                !isAdminRole(user.role) && !enrolled && onRequire2fa;
+              const canClearForce =
+                !isAdminRole(user.role) &&
+                Boolean(user.require2fa) &&
+                !enrolled &&
+                onClearRequire2fa;
+
+              return (
+                <tr
+                  key={user.id}
+                  className="transition-colors hover:bg-muted/20"
+                >
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10 border">
+                        <AvatarImage src={user.avatarUrl} />
+                        <AvatarFallback className="bg-primary/10 text-primary">
+                          {(user.name || user.email || "?")[0]?.toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-foreground">
+                          {user.name}
+                        </p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {user.email}
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-1 lg:hidden">
+                          <RoleBadge role={user.role} />
+                        </div>
+                        <div className="mt-1 sm:hidden">
+                          <TwoFactorBadges user={user} />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                <td className="hidden px-5 py-4 lg:table-cell">
-                  <RoleBadge role={user.role} />
-                </td>
-                <td className="hidden px-5 py-4 xl:table-cell">
-                  <ModuleBadges user={user} />
-                </td>
-                <td className="hidden px-5 py-4 md:table-cell">
-                  <div className="flex flex-col gap-1">
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "w-fit text-xs",
-                        user.isEmailVerified
-                          ? "border-emerald-200 text-emerald-700"
-                          : "border-amber-200 text-amber-700"
-                      )}
-                    >
-                      {user.isEmailVerified ? "Verified" : "Unverified"}
-                    </Badge>
-                    {user.invitePending && (
+                  </td>
+                  <td className="hidden px-5 py-4 lg:table-cell">
+                    <RoleBadge role={user.role} />
+                  </td>
+                  <td className="hidden px-5 py-4 xl:table-cell">
+                    <ModuleBadges user={user} />
+                  </td>
+                  <td className="hidden px-5 py-4 md:table-cell">
+                    <div className="flex flex-col gap-1">
                       <Badge
                         variant="outline"
-                        className="w-fit border-sky-200 text-xs text-sky-700"
+                        className={cn(
+                          "w-fit text-xs",
+                          user.isEmailVerified
+                            ? "border-emerald-200 text-emerald-700"
+                            : "border-amber-200 text-amber-700"
+                        )}
                       >
-                        Invite pending
+                        {user.isEmailVerified ? "Verified" : "Unverified"}
                       </Badge>
-                    )}
-                  </div>
-                </td>
-                <td className="px-5 py-4 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    {user.invitePending && onResendInvite && (
+                      {user.invitePending && (
+                        <Badge
+                          variant="outline"
+                          className="w-fit border-sky-200 text-xs text-sky-700"
+                        >
+                          Invite pending
+                        </Badge>
+                      )}
+                    </div>
+                  </td>
+                  <td className="hidden px-5 py-4 sm:table-cell">
+                    <TwoFactorBadges user={user} />
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      {user.invitePending && onResendInvite && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="hidden sm:inline-flex"
+                          disabled={resendingUserId === user.id}
+                          onClick={() => onResendInvite(user.id)}
+                        >
+                          {resendingUserId === user.id ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="mr-2 h-4 w-4" />
+                          )}
+                          Resend invite
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
                         className="hidden sm:inline-flex"
-                        disabled={resendingUserId === user.id}
-                        onClick={() => onResendInvite(user.id)}
+                        onClick={() => onEdit?.(user)}
                       >
-                        {resendingUserId === user.id ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="mr-2 h-4 w-4" />
-                        )}
-                        Resend invite
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Edit permissions
                       </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="hidden sm:inline-flex"
-                      onClick={() => onEdit?.(user)}
-                    >
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Edit permissions
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {user.invitePending && onResendInvite && (
-                          <DropdownMenuItem
-                            onSelect={() => onResendInvite(user.id)}
-                            disabled={resendingUserId === user.id}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
                           >
-                            <Send className="mr-2 h-4 w-4" />
-                            Resend invite email
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {user.invitePending && onResendInvite && (
+                            <DropdownMenuItem
+                              onSelect={() => onResendInvite(user.id)}
+                              disabled={resendingUserId === user.id}
+                            >
+                              <Send className="mr-2 h-4 w-4" />
+                              Resend invite email
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onSelect={() => onEdit?.(user)}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit permissions
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onSelect={() => onEdit?.(user)}>
-                          <Pencil className="mr-2 h-4 w-4" />
-                          Edit permissions
-                        </DropdownMenuItem>
-                        {onSendPasswordReset && (
+                          {onSendPasswordReset && (
+                            <DropdownMenuItem
+                              onSelect={() => onSendPasswordReset(user)}
+                              disabled={sendingResetUserId === user.id}
+                            >
+                              {sendingResetUserId === user.id ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <KeyRound className="mr-2 h-4 w-4" />
+                              )}
+                              Send password reset link
+                            </DropdownMenuItem>
+                          )}
+                          {(canForce2fa || canClearForce) && (
+                            <DropdownMenuSeparator />
+                          )}
+                          {canForce2fa && (
+                            <DropdownMenuItem
+                              onSelect={() => onRequire2fa?.(user)}
+                              disabled={forcing2faUserId === user.id}
+                            >
+                              {forcing2faUserId === user.id ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <ShieldAlert className="mr-2 h-4 w-4" />
+                              )}
+                              Require 2FA setup
+                            </DropdownMenuItem>
+                          )}
+                          {canClearForce && (
+                            <DropdownMenuItem
+                              onSelect={() => onClearRequire2fa?.(user)}
+                              disabled={forcing2faUserId === user.id}
+                            >
+                              {forcing2faUserId === user.id ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <ShieldOff className="mr-2 h-4 w-4" />
+                              )}
+                              Clear 2FA requirement
+                            </DropdownMenuItem>
+                          )}
+                          {isAdminRole(user.role) && (
+                            <DropdownMenuItem disabled>
+                              <Shield className="mr-2 h-4 w-4" />
+                              Uses org 2FA policy
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
-                            onSelect={() => onSendPasswordReset(user)}
-                            disabled={sendingResetUserId === user.id}
+                            onSelect={() => onDelete?.(user.id)}
+                            className="text-destructive focus:text-destructive"
                           >
-                            {sendingResetUserId === user.id ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <KeyRound className="mr-2 h-4 w-4" />
-                            )}
-                            Send password reset link
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete user
                           </DropdownMenuItem>
-                        )}
-                        {isAdminRole(user.role) && (
-                          <DropdownMenuItem disabled>
-                            <Shield className="mr-2 h-4 w-4" />
-                            Admin access
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem
-                          onSelect={() => onDelete?.(user.id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete user
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

@@ -61,6 +61,7 @@ interface AuthContextType {
     factors?: User["admin2faFactors"];
     totpEnabled?: boolean;
     email2faEnabled?: boolean;
+    require2fa?: boolean;
     prompt?: boolean;
   }) => void;
   refreshUserProfile: () => Promise<void>;
@@ -555,6 +556,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       factors?: User["admin2faFactors"];
       totpEnabled?: boolean;
       email2faEnabled?: boolean;
+      require2fa?: boolean;
       prompt?: boolean;
     }) => {
       const currentSession = authService.getSession();
@@ -564,6 +566,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthState((prev) => {
         const fromPrev = prev.user || baseUser;
         if (!fromPrev) return prev;
+
+        const enrolled =
+          (typeof status.totpEnabled === "boolean"
+            ? status.totpEnabled
+            : fromPrev.totpEnabled) ||
+          (typeof status.email2faEnabled === "boolean"
+            ? status.email2faEnabled
+            : fromPrev.email2faEnabled) ||
+          status.satisfied;
 
         const updatedUser: User = {
           ...fromPrev,
@@ -584,6 +595,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             typeof status.email2faEnabled === "boolean"
               ? status.email2faEnabled
               : fromPrev.email2faEnabled,
+          require2fa: enrolled
+            ? false
+            : typeof status.require2fa === "boolean"
+              ? status.require2fa
+              : fromPrev.require2fa,
         };
 
         return {
@@ -597,6 +613,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (currentSession?.user) {
+        const enrolled =
+          (typeof status.totpEnabled === "boolean"
+            ? status.totpEnabled
+            : currentSession.user.totpEnabled) ||
+          (typeof status.email2faEnabled === "boolean"
+            ? status.email2faEnabled
+            : currentSession.user.email2faEnabled) ||
+          status.satisfied;
         const mergedUser = {
           ...currentSession.user,
           admin2faSatisfied: status.satisfied,
@@ -617,6 +641,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             typeof status.email2faEnabled === "boolean"
               ? status.email2faEnabled
               : currentSession.user.email2faEnabled,
+          require2fa: enrolled
+            ? false
+            : typeof status.require2fa === "boolean"
+              ? status.require2fa
+              : currentSession.user.require2fa,
         };
         authService.setSession({
           ...currentSession,

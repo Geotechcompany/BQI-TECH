@@ -87,7 +87,7 @@ def obfuscate_user_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
         'id', 'email', 'name', 'firstName', 'lastName',
         'role', 'avatar', 'avatarUrl', 'isEmailVerified', 'createdAt',
         'adminModules',
-        'totpEnabled', 'email2faEnabled',
+        'totpEnabled', 'email2faEnabled', 'require2fa',
         'admin2faPolicy', 'admin2faSatisfied', 'admin2faPrompt', 'admin2faFactors',
     ]
     

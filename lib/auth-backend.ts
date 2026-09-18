@@ -14,6 +14,7 @@ interface User {
   isEmailVerified: boolean;
   totpEnabled?: boolean;
   email2faEnabled?: boolean;
+  require2fa?: boolean;
   admin2faPolicy?: "prompt" | "require_one" | "require_both";
   admin2faSatisfied?: boolean;
   admin2faPrompt?: boolean;
@@ -963,6 +964,10 @@ class AuthService {
                 typeof profileData.email2faEnabled === "boolean"
                   ? profileData.email2faEnabled
                   : currentSession.user.email2faEnabled,
+              require2fa:
+                typeof profileData.require2fa === "boolean"
+                  ? profileData.require2fa
+                  : currentSession.user.require2fa,
             },
           };
           this.setSession(updatedSession);

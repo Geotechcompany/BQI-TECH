@@ -8,6 +8,7 @@ import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { Button } from "@/components/ui/button";
 import {
   MailPlus,
+  ShieldAlert,
   ShieldCheck,
   UserCheck,
   Users,
@@ -38,6 +39,7 @@ import {
   showInviteEmailError,
   showInviteEmailToast,
 } from "@/lib/admin-invite-toast";
+import { cn } from "@/lib/utils";
 
 export default function UserManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,6 +49,12 @@ export default function UserManagementPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<UserType | null>(null);
   const [resetTarget, setResetTarget] = useState<UserType | null>(null);
+  const [require2faTarget, setRequire2faTarget] = useState<UserType | null>(
+    null
+  );
+  const [clearRequire2faTarget, setClearRequire2faTarget] =
+    useState<UserType | null>(null);
+  const [missing2faOnly, setMissing2faOnly] = useState(false);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
@@ -55,19 +63,35 @@ export default function UserManagementPage() {
     setCurrentPage(1);
   }, [debouncedSearchQuery, searchQuery]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [missing2faOnly]);
+
   const { data: usersData, isLoading } = useQuery({
-    queryKey: ["admin-users", currentPage, debouncedSearchQuery],
+    queryKey: [
+      "admin-users",
+      currentPage,
+      debouncedSearchQuery,
+      missing2faOnly,
+    ],
     queryFn: async () => {
       if (debouncedSearchQuery.trim()) {
         const res = await adminApi.searchUsers({
           q: debouncedSearchQuery.trim(),
         });
-        const users = (res as any).users ?? [];
-        return { data: users as UserType[], total: users.length };
+        let users = ((res as any).users ?? []) as UserType[];
+        if (missing2faOnly) {
+          users = users.filter((u) => !u.totpEnabled && !u.email2faEnabled);
+        }
+        return { data: users, total: users.length };
       }
 
       const skip = (currentPage - 1) * itemsPerPage;
-      const res = await adminApi.getUsers({ skip, limit: itemsPerPage });
+      const res = await adminApi.getUsers({
+        skip,
+        limit: itemsPerPage,
+        missing_2fa: missing2faOnly || undefined,
+      });
       return {
         data: ((res as any).users ?? []) as UserType[],
         total: (res as any).total ?? 0,
@@ -83,12 +107,14 @@ export default function UserManagementPage() {
         total?: number;
         administrators?: number;
         verified?: number;
+        missing2fa?: number;
         pendingInvites?: number;
       };
       return {
         total: res.total ?? res.count ?? 0,
         administrators: res.administrators ?? 0,
         verified: res.verified ?? 0,
+        missing2fa: res.missing2fa ?? 0,
         pendingInvites: res.pendingInvites ?? 0,
       };
     },
@@ -163,6 +189,31 @@ export default function UserManagementPage() {
     },
   });
 
+  const setRequire2fa = useMutation({
+    mutationFn: ({
+      userId,
+      require2fa,
+    }: {
+      userId: string;
+      require2fa: boolean;
+    }) => adminApi.setUserRequire2fa(userId, require2fa),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users-count"] });
+      toast.success(
+        (data as { message?: string })?.message ||
+          (variables.require2fa
+            ? "User must set up 2FA on next sign-in"
+            : "2FA requirement cleared")
+      );
+      setRequire2faTarget(null);
+      setClearRequire2faTarget(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update 2FA requirement");
+    },
+  });
+
   const resendingInviteId = resendInvite.isPending
     ? (resendInvite.variables as string | undefined)
     : undefined;
@@ -171,6 +222,9 @@ export default function UserManagementPage() {
     : undefined;
   const sendingResetUserId = sendPasswordReset.isPending
     ? (sendPasswordReset.variables as string | undefined)
+    : undefined;
+  const forcing2faUserId = setRequire2fa.isPending
+    ? setRequire2fa.variables?.userId
     : undefined;
 
   const stats = [
@@ -191,6 +245,13 @@ export default function UserManagementPage() {
       value: userStats?.verified ?? 0,
       icon: UserCheck,
       tone: "text-emerald-600 bg-emerald-50",
+    },
+    {
+      label: "Missing 2FA",
+      value: userStats?.missing2fa ?? 0,
+      icon: ShieldAlert,
+      tone: "text-rose-600 bg-rose-50",
+      filterable: true,
     },
     {
       label: "Pending invites",
@@ -222,19 +283,34 @@ export default function UserManagementPage() {
       >
         <TourPageHelper tourId="user-management" />
         <div className="mx-auto max-w-screen-2xl space-y-6 px-4 pb-8">
-          <AdminPageWelcomeBanner bannerKey="user-management" tourId="user-management" />
+          <AdminPageWelcomeBanner
+            bannerKey="user-management"
+            tourId="user-management"
+          />
           <div
-            className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"
             data-tour="user-management-stats"
           >
-            {stats.map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm"
-              >
+            {stats.map((stat) => {
+              const isActiveFilter =
+                Boolean(stat.filterable) && missing2faOnly;
+              const cardClass = cn(
+                "rounded-2xl border border-border/70 bg-card p-5 text-left shadow-sm transition-colors",
+                stat.filterable &&
+                  "cursor-pointer hover:border-rose-300/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/40 active:scale-[0.99]",
+                isActiveFilter && "border-rose-300 bg-rose-50/40"
+              );
+              const body = (
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {stat.label}
+                      {stat.filterable && (
+                        <span className="ml-1 text-xs text-rose-600">
+                          {isActiveFilter ? "(filtered)" : "(filter)"}
+                        </span>
+                      )}
+                    </p>
                     <p className="mt-2 text-3xl font-semibold tracking-tight">
                       {stat.value}
                     </p>
@@ -245,8 +321,25 @@ export default function UserManagementPage() {
                     <stat.icon className="h-5 w-5" />
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+              if (stat.filterable) {
+                return (
+                  <button
+                    key={stat.label}
+                    type="button"
+                    onClick={() => setMissing2faOnly((prev) => !prev)}
+                    className={cardClass}
+                  >
+                    {body}
+                  </button>
+                );
+              }
+              return (
+                <div key={stat.label} className={cardClass}>
+                  {body}
+                </div>
+              );
+            })}
           </div>
 
           {pendingInvites.length > 0 && (
@@ -310,25 +403,48 @@ export default function UserManagementPage() {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Team members</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                Team members
+              </h2>
               <p className="text-sm text-muted-foreground">
-                Invite admins or edit a user to change role and module permissions.
+                Invite admins, review 2FA status, or edit role and module
+                permissions.
               </p>
             </div>
-            <Button onClick={() => setInviteOpen(true)} className="shrink-0 shadow-sm">
-              <MailPlus className="mr-2 h-4 w-4" />
-              Invite user
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant={missing2faOnly ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMissing2faOnly((prev) => !prev)}
+                className="shrink-0"
+              >
+                <ShieldAlert className="mr-2 h-4 w-4" />
+                {missing2faOnly ? "Showing missing 2FA" : "Missing 2FA"}
+              </Button>
+              <Button
+                onClick={() => setInviteOpen(true)}
+                className="shrink-0 shadow-sm"
+              >
+                <MailPlus className="mr-2 h-4 w-4" />
+                Invite user
+              </Button>
+            </div>
           </div>
 
           <div data-tour="user-management-table">
             <UserManagementTable
               users={users}
               isLoading={isLoading || deleteUser.isPending}
+              noDataMessage={
+                missing2faOnly ? "No users missing 2FA" : "No users found"
+              }
               resendingUserId={resendingUserId}
               sendingResetUserId={sendingResetUserId}
+              forcing2faUserId={forcing2faUserId}
               onResendInvite={(userId) => resendInviteForUser.mutate(userId)}
               onSendPasswordReset={setResetTarget}
+              onRequire2fa={setRequire2faTarget}
+              onClearRequire2fa={setClearRequire2faTarget}
               onEdit={setEditingUser}
               onDelete={(userId) => {
                 const target = users.find((user) => user.id === userId) ?? null;
@@ -416,6 +532,98 @@ export default function UserManagementPage() {
                 </>
               ) : (
                 "Send reset link"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!require2faTarget}
+        onOpenChange={(open) => !open && setRequire2faTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Require 2FA setup?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>
+                {require2faTarget?.name || require2faTarget?.email}
+              </strong>{" "}
+              will be redirected to set up authenticator or email 2FA on their
+              next sign-in (or immediately if already signed in). They cannot
+              use the dashboard until enrolled.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={setRequire2fa.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={setRequire2fa.isPending || !require2faTarget}
+              onClick={(event) => {
+                event.preventDefault();
+                if (require2faTarget) {
+                  setRequire2fa.mutate({
+                    userId: require2faTarget.id,
+                    require2fa: true,
+                  });
+                }
+              }}
+            >
+              {setRequire2fa.isPending &&
+              setRequire2fa.variables?.require2fa ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Require 2FA"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!clearRequire2faTarget}
+        onOpenChange={(open) => !open && setClearRequire2faTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear 2FA requirement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove the forced 2FA flag for{" "}
+              <strong>
+                {clearRequire2faTarget?.name || clearRequire2faTarget?.email}
+              </strong>
+              . Email-verified users without 2FA may still be gated by the
+              default post-verify enrollment flow.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={setRequire2fa.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={setRequire2fa.isPending || !clearRequire2faTarget}
+              onClick={(event) => {
+                event.preventDefault();
+                if (clearRequire2faTarget) {
+                  setRequire2fa.mutate({
+                    userId: clearRequire2faTarget.id,
+                    require2fa: false,
+                  });
+                }
+              }}
+            >
+              {setRequire2fa.isPending &&
+              setRequire2fa.variables?.require2fa === false ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Clearing…
+                </>
+              ) : (
+                "Clear requirement"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

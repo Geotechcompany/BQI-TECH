@@ -20,8 +20,8 @@ interface TwoFactorSetupGuardProps {
 }
 
 /**
- * Client-side gate: email-verified normal users must enroll at least one
- * 2FA factor before using dashboard / employee routes.
+ * Client-side gate: email-verified normal users (and admin-forced require2fa)
+ * must enroll at least one 2FA factor before using dashboard / employee routes.
  * Admins are skipped (handled by admin layout + org policy).
  */
 export function TwoFactorSetupGuard({
@@ -60,18 +60,24 @@ export function TwoFactorSetupGuard({
         return;
       }
 
-      let enrolled = userHasEnrolledTwoFactor(user);
+      let liveUser = user;
+      let enrolled = userHasEnrolledTwoFactor(liveUser);
 
-      if (!enrolled) {
+      // Always refresh when forced or missing factors so a mid-session
+      // admin require2fa flag is picked up.
+      if (!enrolled || liveUser.require2fa) {
         try {
           const refreshed = await authService.refreshUserProfile();
-          enrolled = userHasEnrolledTwoFactor(refreshed?.user ?? user);
+          if (refreshed?.user) {
+            liveUser = refreshed.user as typeof user;
+            enrolled = userHasEnrolledTwoFactor(liveUser);
+          }
         } catch {
           // fall through to status API
         }
       }
 
-      if (!enrolled) {
+      if (!enrolled || liveUser.require2fa) {
         try {
           const status = await fetchAdmin2faStatus();
           applyAdmin2faStatus({
@@ -79,16 +85,26 @@ export function TwoFactorSetupGuard({
             factors: status.factors,
             totpEnabled: status.totpEnabled,
             email2faEnabled: status.email2faEnabled,
+            require2fa: status.require2fa,
             policy: status.policy,
             prompt: status.prompt,
           });
           enrolled = Boolean(status.totpEnabled || status.email2faEnabled);
+          liveUser = {
+            ...liveUser,
+            totpEnabled: status.totpEnabled,
+            email2faEnabled: status.email2faEnabled,
+            require2fa: status.require2fa,
+          };
         } catch (error) {
           console.error("Failed to confirm 2FA enrollment status:", error);
         }
       }
 
-      if (!enrolled && !(pathname || "").startsWith(USER_2FA_SETUP_PATH)) {
+      if (
+        needsUserTwoFactorSetup(liveUser) &&
+        !(pathname || "").startsWith(USER_2FA_SETUP_PATH)
+      ) {
         router.replace(buildUser2faSetupUrl(pathname));
         return;
       }

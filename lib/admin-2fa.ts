@@ -11,6 +11,7 @@ export interface Admin2faStatus {
   prompt: boolean;
   totpEnabled: boolean;
   email2faEnabled: boolean;
+  require2fa?: boolean;
   recoveryCodesRemaining: number;
 }
 

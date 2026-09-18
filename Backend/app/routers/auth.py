@@ -360,6 +360,9 @@ async def login(
             "createdAt": user.get("createdAt", "").isoformat() if user.get("createdAt") else None,
             "totpEnabled": login_factors["totp"],
             "email2faEnabled": login_factors["email"],
+            "require2fa": bool(user.get("require2fa")) and not (
+                login_factors["totp"] or login_factors["email"]
+            ),
         }
         
         # Get origin from request headers

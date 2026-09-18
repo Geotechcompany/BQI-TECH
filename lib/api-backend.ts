@@ -478,8 +478,11 @@ export const adminApi = {
     backendApi.patch(`/api/admin/job-postings/${id}/toggle-status`, data),
 
   // Users
-  getUsers: (params?: { skip?: number; limit?: number }) =>
-    backendApi.get("/api/admin/users", params),
+  getUsers: (params?: {
+    skip?: number;
+    limit?: number;
+    missing_2fa?: boolean;
+  }) => backendApi.get("/api/admin/users", params),
 
   searchUsers: (params: { q: string }) =>
     backendApi.get("/api/admin/users/search", params),
@@ -504,6 +507,9 @@ export const adminApi = {
 
   sendPasswordReset: (userId: string) =>
     backendApi.post(`/api/admin/users/${userId}/send-password-reset`),
+
+  setUserRequire2fa: (userId: string, require2fa: boolean) =>
+    backendApi.put(`/api/admin/users/${userId}/require-2fa`, { require2fa }),
 
   revokeAdminInvite: (inviteId: string) =>
     backendApi.delete(`/api/admin/users/invites/${inviteId}`),

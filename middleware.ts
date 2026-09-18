@@ -371,18 +371,15 @@ export async function middleware(request: NextRequest) {
         isEmailVerified: Boolean(isEmailVerified),
         totpEnabled: user?.totpEnabled,
         email2faEnabled: user?.email2faEnabled,
+        require2fa: Boolean(user?.require2fa),
         admin2faFactors: user?.admin2faFactors,
       })
     ) {
-      // Soft middleware gate: only redirect when session clearly lacks factors.
-      // Client guard still confirms via /auth/2fa/status for stale sessions.
-      if (!userHasEnrolledTwoFactor(user)) {
-        const setupUrl = new URL(
-          buildUser2faSetupUrl(pathname),
-          request.url
-        );
-        return finish(NextResponse.redirect(setupUrl));
-      }
+      // Soft middleware gate from session flags. Client guard re-checks
+      // /profile and /auth/2fa/status for stale sessions (e.g. require2fa set
+      // after login).
+      const setupUrl = new URL(buildUser2faSetupUrl(pathname), request.url);
+      return finish(NextResponse.redirect(setupUrl));
     }
 
     // Authenticated users who already enrolled should leave the setup page

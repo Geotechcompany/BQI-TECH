@@ -8,6 +8,9 @@ export interface User {
   adminModules?: string[];
   invitePending?: boolean;
   isEmailVerified?: boolean;
+  totpEnabled?: boolean;
+  email2faEnabled?: boolean;
+  require2fa?: boolean;
   createdAt?: string;
 }
 

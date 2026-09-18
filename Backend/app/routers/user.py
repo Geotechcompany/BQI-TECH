@@ -89,6 +89,9 @@ async def get_user_profile(
             factors = enrolled_factors(user)
             profile["totpEnabled"] = factors["totp"]
             profile["email2faEnabled"] = factors["email"]
+            profile["require2fa"] = bool(user.get("require2fa")) and not (
+                factors["totp"] or factors["email"]
+            )
 
             if is_admin_role(user.get("role")):
                 policy = await get_admin_2fa_policy(db)
@@ -140,6 +143,13 @@ async def update_user_profile(
             "emailVerified",
             "verifiedAt",
             "adminModules",
+            "require2fa",
+            "require2faAt",
+            "totpEnabled",
+            "email2faEnabled",
+            "totpSecret",
+            "totpPendingSecret",
+            "totpRecoveryCodes",
         ):
             profile_data.pop(protected, None)
         

@@ -98,6 +98,7 @@ function Setup2faContent() {
           factors: status.factors,
           totpEnabled: status.totpEnabled,
           email2faEnabled: status.email2faEnabled,
+          require2fa: status.require2fa,
           policy: status.policy,
           prompt: status.prompt,
         });
@@ -139,6 +140,7 @@ function Setup2faContent() {
         factors: status.factors,
         totpEnabled: status.totpEnabled,
         email2faEnabled: status.email2faEnabled,
+        require2fa: false,
         policy: status.policy,
         prompt: false,
       });
@@ -147,6 +149,7 @@ function Setup2faContent() {
       applyAdmin2faStatus({
         satisfied: true,
         totpEnabled: true,
+        require2fa: false,
         prompt: false,
       });
     }

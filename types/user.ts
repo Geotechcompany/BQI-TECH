@@ -22,6 +22,7 @@ export interface User {
   socialLinks?: Record<string, string>;
   totpEnabled?: boolean;
   email2faEnabled?: boolean;
+  require2fa?: boolean;
   admin2faPolicy?: "prompt" | "require_one" | "require_both";
   admin2faSatisfied?: boolean;
   admin2faPrompt?: boolean;

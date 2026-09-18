@@ -1179,11 +1179,51 @@ def _format_admin_user(user: dict) -> dict:
     user["isEmailVerified"] = bool(
         user.get("isEmailVerified") or user.get("emailVerified")
     )
-    for field in ["createdAt", "updatedAt", "lastLoginAt"]:
+    try:
+        from app.lib.admin_2fa import enrolled_factors
+
+        factors = enrolled_factors(user)
+        user["totpEnabled"] = factors["totp"]
+        user["email2faEnabled"] = factors["email"]
+    except Exception:
+        user["totpEnabled"] = bool(user.get("totpEnabled"))
+        user["email2faEnabled"] = bool(user.get("email2faEnabled"))
+    user["require2fa"] = bool(user.get("require2fa")) and not (
+        user["totpEnabled"] or user["email2faEnabled"]
+    )
+    for field in ["createdAt", "updatedAt", "lastLoginAt", "require2faAt"]:
         if field in user and isinstance(user[field], datetime):
             user[field] = user[field].isoformat()
-    user.pop("password", None)
+    # Never leak credentials / 2FA secrets in admin list responses
+    for secret_field in (
+        "password",
+        "totpSecret",
+        "totpPendingSecret",
+        "totpRecoveryCodes",
+        "totpPendingCreatedAt",
+    ):
+        user.pop(secret_field, None)
     return user
+
+
+def _missing_2fa_mongo_filter() -> dict:
+    """Users with neither TOTP nor email 2FA enrolled."""
+    return {
+        "$and": [
+            {
+                "$or": [
+                    {"totpEnabled": {"$ne": True}},
+                    {"totpEnabled": {"$exists": False}},
+                ]
+            },
+            {
+                "$or": [
+                    {"email2faEnabled": {"$ne": True}},
+                    {"email2faEnabled": {"$exists": False}},
+                ]
+            },
+        ]
+    }
 
 
 def _generate_invite_token() -> str:
@@ -1570,6 +1610,97 @@ async def send_user_password_reset(
     }
 
 
+@router.put("/users/{user_id}/require-2fa")
+@admin_limiter.limit("20/minute")
+async def set_user_require_2fa(
+    user_id: str,
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Force (or clear) a non-admin user to enroll 2FA before using the app."""
+    if not can_manage_admin_users(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to manage users",
+        )
+
+    try:
+        ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+
+    require_2fa = bool(payload.get("require2fa", True))
+    db = get_database()
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if is_admin_role(user.get("role")):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Admin accounts follow organization 2FA policy under Manage → Settings. "
+                "Use that policy instead of per-user force enrollment."
+            ),
+        )
+
+    from app.lib.admin_2fa import enrolled_factors
+
+    factors = enrolled_factors(user)
+    already_enrolled = factors["totp"] or factors["email"]
+
+    if require_2fa and already_enrolled:
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"require2fa": False}, "$unset": {"require2faAt": ""}},
+        )
+        return {
+            "message": "User already has 2FA enabled",
+            "require2fa": False,
+            "totpEnabled": factors["totp"],
+            "email2faEnabled": factors["email"],
+        }
+
+    now = datetime.utcnow()
+    if require_2fa:
+        update = {
+            "$set": {
+                "require2fa": True,
+                "require2faAt": now,
+                "updatedAt": now,
+            }
+        }
+    else:
+        update = {
+            "$set": {"require2fa": False, "updatedAt": now},
+            "$unset": {"require2faAt": ""},
+        }
+
+    await db.users.update_one({"_id": user["_id"]}, update)
+
+    await log_custom_action(
+        db,
+        current_user,
+        action="require_2fa_set" if require_2fa else "require_2fa_cleared",
+        resource_type="user",
+        resource_id=user_id,
+        resource_title=str(user.get("email") or user_id),
+        detail=f"require2fa={require_2fa}",
+    )
+
+    return {
+        "message": (
+            "User will be required to set up 2FA on next sign-in"
+            if require_2fa
+            else "2FA requirement cleared"
+        ),
+        "require2fa": require_2fa,
+        "totpEnabled": factors["totp"],
+        "email2faEnabled": factors["email"],
+    }
+
+
 @router.post("/users/invite")
 async def invite_admin_user(
     request: Request,
@@ -1824,14 +1955,24 @@ async def invite_admin_user(
 async def get_users(
     current_user: dict = Depends(get_current_admin_user),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100)
+    limit: int = Query(50, ge=1, le=100),
+    missing_2fa: bool = Query(False, description="Only users without TOTP or email 2FA"),
 ):
     """Get all users"""
     db = get_database()
-    
-    users_cursor = db.users.find({}, {"password": 0}).skip(skip).limit(limit).sort("createdAt", -1)
+
+    query: Dict[str, Any] = {}
+    if missing_2fa:
+        query = _missing_2fa_mongo_filter()
+
+    users_cursor = (
+        db.users.find(query, {"password": 0})
+        .skip(skip)
+        .limit(limit)
+        .sort("createdAt", -1)
+    )
     users = await users_cursor.to_list(length=limit)
-    total = await db.users.count_documents({})
+    total = await db.users.count_documents(query)
 
     formatted = [_format_admin_user(user) for user in users]
 
@@ -1868,12 +2009,14 @@ async def get_users_count(
     total = await db.users.count_documents({})
     administrators = await db.users.count_documents(admin_filter)
     verified = await db.users.count_documents(verified_filter)
+    missing_2fa = await db.users.count_documents(_missing_2fa_mongo_filter())
     pending_invites = await db.admin_invites.count_documents({"status": "pending"})
     return {
         "count": total,
         "total": total,
         "administrators": administrators,
         "verified": verified,
+        "missing2fa": missing_2fa,
         "pendingInvites": pending_invites,
     }
 
@@ -1897,6 +2040,16 @@ async def update_user(
         previous_role = existing_user.get("role")
         # Remove sensitive fields that shouldn't be updated this way
         update_data.pop("password", None)
+        for protected in (
+            "totpSecret",
+            "totpPendingSecret",
+            "totpRecoveryCodes",
+            "totpEnabled",
+            "email2faEnabled",
+            "require2fa",
+            "require2faAt",
+        ):
+            update_data.pop(protected, None)
         if "role" in update_data and update_data["role"] is not None:
             update_data["role"] = normalize_role(str(update_data["role"]))
         if "adminModules" in update_data:
