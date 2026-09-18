@@ -15,6 +15,9 @@ router = APIRouter(tags=["misc"])
 
 
 def _admin_path_gate_authorized(provided: Optional[str]) -> bool:
+    # Local/dev: allow middleware without configuring a shared secret.
+    if not settings.is_production:
+        return True
     expected = (
         os.getenv("ADMIN_PATH_GATE_SECRET")
         or settings.SECRET_KEY

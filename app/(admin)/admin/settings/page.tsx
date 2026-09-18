@@ -163,7 +163,7 @@ const NAV_ITEMS: {
   {
     id: "security",
     label: "Security",
-    description: "Session, access & admin URL",
+    description: "2FA, session & admin URL",
     icon: Shield,
   },
   {

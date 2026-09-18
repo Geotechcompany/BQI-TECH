@@ -45,10 +45,19 @@ type AdminPathGate = {
 };
 
 let adminPathCache: { at: number; value: AdminPathGate } | null = null;
-const ADMIN_PATH_CACHE_MS = 30_000;
+const ADMIN_PATH_CACHE_MS = 5_000;
 
 async function loadAdminPathGate(request: NextRequest): Promise<AdminPathGate> {
   const now = Date.now();
+  const cookieBase = request.cookies.get(ADMIN_PATH_COOKIE)?.value;
+  if (
+    adminPathCache &&
+    cookieBase &&
+    cookieBase !== adminPathCache.value.publicBase
+  ) {
+    // Client just changed the public base — force refresh.
+    adminPathCache = null;
+  }
   if (adminPathCache && now - adminPathCache.at < ADMIN_PATH_CACHE_MS) {
     return adminPathCache.value;
   }

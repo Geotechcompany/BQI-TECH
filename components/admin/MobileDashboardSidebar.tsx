@@ -12,6 +12,7 @@ import {
 import { SidebarUserMenu } from "@/components/admin/SidebarUserMenu";
 import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminPath } from "@/contexts/AdminPathContext";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdminTheme } from "@/contexts/AdminThemeContext";
 import { getSidebarSkin } from "@/lib/admin-sidebar-skin";
@@ -44,6 +45,8 @@ export default function MobileDashboardSidebar({
   onClose,
 }: MobileDashboardSidebarProps) {
   const pathname = usePathname();
+  const { toInternal, adminHref } = useAdminPath();
+  const internalPathname = toInternal(pathname || "");
   const { user } = useAuth();
   const { theme } = useAdminTheme();
   const skin = useMemo(() => getSidebarSkin(theme), [theme]);
@@ -71,16 +74,16 @@ export default function MobileDashboardSidebar({
 
   useEffect(() => {
     setExpandedOverrides({});
-  }, [pathname]);
+  }, [internalPathname]);
 
   const isGroupExpanded = useCallback(
     (group: AdminNavGroup) => {
       if (expandedOverrides[group.id] !== undefined) {
         return expandedOverrides[group.id];
       }
-      return isNavGroupDefaultExpanded(group, pathname);
+      return isNavGroupDefaultExpanded(group, internalPathname);
     },
-    [expandedOverrides, pathname]
+    [expandedOverrides, internalPathname]
   );
 
   const toggleGroup = (group: AdminNavGroup) => {
@@ -169,19 +172,21 @@ export default function MobileDashboardSidebar({
                         <MobileNavGroup
                           key={item.id}
                           group={item}
-                          pathname={pathname}
+                          pathname={internalPathname}
                           skin={skin}
                           expanded={isGroupExpanded(item)}
                           onToggle={() => toggleGroup(item)}
                           onNavigate={onClose}
+                          resolveHref={adminHref}
                         />
                       ) : (
                         <MobileFlatLink
                           key={item.id}
                           item={item}
-                          pathname={pathname}
+                          pathname={internalPathname}
                           skin={skin}
                           onNavigate={onClose}
+                          resolveHref={adminHref}
                         />
                       )
                     )}
@@ -217,16 +222,18 @@ function MobileFlatLink({
   pathname,
   skin,
   onNavigate,
+  resolveHref,
 }: {
   item: AdminNavLink;
   pathname: string;
   skin: Skin;
   onNavigate: () => void;
+  resolveHref: (href: string) => string;
 }) {
   const active = isNavLinkActive(item, pathname);
   return (
     <Link
-      href={item.href}
+      href={resolveHref(item.href)}
       className={skin.navLink(active)}
       data-tour={item.tourAttr}
       aria-current={active ? "page" : undefined}
@@ -248,6 +255,7 @@ function MobileNavGroup({
   expanded,
   onToggle,
   onNavigate,
+  resolveHref,
 }: {
   group: AdminNavGroup;
   pathname: string;
@@ -255,6 +263,7 @@ function MobileNavGroup({
   expanded: boolean;
   onToggle: () => void;
   onNavigate: () => void;
+  resolveHref: (href: string) => string;
 }) {
   const parentActive = isNavGroupPathActive(group, pathname);
   const Chevron = expanded ? ChevronDown : ChevronRight;
@@ -287,7 +296,7 @@ function MobileNavGroup({
             return (
               <Link
                 key={child.id}
-                href={child.href}
+                href={resolveHref(child.href)}
                 className={skin.subLink(active)}
                 data-tour={child.tourAttr}
                 aria-current={active ? "page" : undefined}

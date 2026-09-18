@@ -245,7 +245,15 @@ const TechLoadingScreen = ({ message = "Loading..." }) => {
 export default function AdminLoginPage() {
   const router = useRouter();
   const { adminHref } = useAdminPath();
-  const { login, isAuthenticated, isAdmin, authLoading, user } = useAuth();
+  const {
+    login,
+    completeAdmin2faLogin,
+    isAuthenticated,
+    isAdmin,
+    authLoading,
+    user,
+    refreshUserProfile,
+  } = useAuth();
   const {
     register,
     handleSubmit,
@@ -266,6 +274,13 @@ export default function AdminLoginPage() {
   >([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [useManualEmail, setUseManualEmail] = useState(false);
+  const [challenge, setChallenge] = useState<{
+    challenge_token: string;
+    methods: Array<"email" | "totp" | "recovery">;
+    email_hint?: string;
+  } | null>(null);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [setupRequired, setSetupRequired] = useState(true);
   const reduce = useReducedMotion();
   const emailValue = watch("email");
   const emailField = register("email", { required: true });
@@ -308,12 +323,37 @@ export default function AdminLoginPage() {
   }, [setValue]);
 
   const goToDashboardWithLoader = () => {
-    // Paint the premium loader before navigating — hard href skips React paint.
     flushSync(() => {
       markPostLoginLoader();
       setShowPostLoginLoader(true);
+      setNeedsSetup(false);
+      setChallenge(null);
     });
     router.replace(adminHref("/admin/overview"));
+  };
+
+  const evaluateSetupGate = async () => {
+    try {
+      const status = await fetchAdmin2faStatus();
+      // Block dashboard when unsatisfied; soft-prompt when policy is "prompt".
+      if (!status.satisfied) {
+        setNeedsSetup(true);
+        setSetupRequired(true);
+        return true;
+      }
+      if (status.prompt) {
+        setNeedsSetup(true);
+        setSetupRequired(false);
+        return true;
+      }
+    } catch {
+      if (user?.admin2faSatisfied === false) {
+        setNeedsSetup(true);
+        setSetupRequired(true);
+        return true;
+      }
+    }
+    return false;
   };
 
   useEffect(() => {
@@ -321,12 +361,17 @@ export default function AdminLoginPage() {
       setHasCheckedAuth(true);
 
       if (isAuthenticated && isAdmin) {
-        toast.success("Already logged in!", {
-          description: "Redirecting to dashboard...",
-        });
-        goToDashboardWithLoader();
+        void (async () => {
+          const blocked = await evaluateSetupGate();
+          if (blocked) return;
+          toast.success("Already logged in!", {
+            description: "Redirecting to dashboard...",
+          });
+          goToDashboardWithLoader();
+        })();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, isAuthenticated, isAdmin, hasCheckedAuth]);
 
   const onAccountSelect = (value: string) => {
@@ -358,7 +403,30 @@ export default function AdminLoginPage() {
 
     setIsLoading(true);
     try {
-      await login(email, formValues.password);
+      const result = await login(email, formValues.password);
+
+      if (result.kind === "challenge") {
+        setChallenge({
+          challenge_token: result.challenge_token,
+          methods: result.methods,
+          email_hint: result.email_hint || email,
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (result.requiresSetup) {
+        setNeedsSetup(true);
+        setSetupRequired(true);
+        setIsLoading(false);
+        return;
+      }
+
+      const blocked = await evaluateSetupGate();
+      if (blocked) {
+        setIsLoading(false);
+        return;
+      }
 
       toast.success("Welcome back!", {
         description: "Redirecting to dashboard...",
@@ -373,11 +441,42 @@ export default function AdminLoginPage() {
     }
   };
 
-  if (showPostLoginLoader || authLoading || (isAuthenticated && isAdmin)) {
+  const handleChallengeVerified = async (tokens: {
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    user: any;
+  }) => {
+    await completeAdmin2faLogin(tokens);
+    setChallenge(null);
+    const blocked = await evaluateSetupGate();
+    if (blocked) return;
+    toast.success("Verified", { description: "Redirecting to dashboard..." });
+    goToDashboardWithLoader();
+  };
+
+  const handleSetupComplete = async () => {
+    await refreshUserProfile();
+    try {
+      const status = await fetchAdmin2faStatus();
+      if (!status.satisfied) {
+        toast.error("Additional security factors are still required");
+        setNeedsSetup(true);
+        setSetupRequired(true);
+        return;
+      }
+    } catch {
+      // Backend admin gate still enforces policy.
+    }
+    toast.success("Security setup complete");
+    goToDashboardWithLoader();
+  };
+
+  if (showPostLoginLoader || (authLoading && !challenge && !needsSetup)) {
     return <PremiumDashboardLoader />;
   }
 
-  if (isAuthenticated && !isAdmin) {
+  if (isAuthenticated && !isAdmin && !challenge && !needsSetup) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-background px-6">
         <div className="w-full max-w-md rounded-3xl border border-border/60 bg-card p-8 text-center shadow-[0_24px_70px_-30px_hsl(222_47%_30%/0.35)] sm:p-10">
@@ -408,6 +507,7 @@ export default function AdminLoginPage() {
     (account) => account.id === selectedAccountId
   );
   const showEmailTextField = !showAccountPicker || useManualEmail;
+  const showMfaPanel = Boolean(challenge) || needsSetup;
 
   return (
     <div className="grid min-h-[100dvh] lg:grid-cols-[1.05fr_1fr]">
@@ -427,21 +527,54 @@ export default function AdminLoginPage() {
           className="relative z-10 my-auto w-full max-w-md"
         >
           <div className="rounded-3xl border border-border/60 bg-card/80 p-8 shadow-[0_24px_70px_-30px_hsl(222_47%_30%/0.35)] backdrop-blur-sm sm:p-10">
-            <div className="mb-8 flex flex-col gap-4">
-              <div className="lg:hidden">
+            {!showMfaPanel ? (
+              <div className="mb-8 flex flex-col gap-4">
+                <div className="lg:hidden">
+                  <AdminLoginBrand size="md" showBadge={false} showCard={false} />
+                </div>
+                <PortalAudienceSwitcher active="admin" />
+                <div className="space-y-1.5">
+                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                    Admin login
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Sign in to manage your organization
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-6 lg:hidden">
                 <AdminLoginBrand size="md" showBadge={false} showCard={false} />
               </div>
-              <PortalAudienceSwitcher active="admin" />
-              <div className="space-y-1.5">
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                  Admin login
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Sign in to manage your organization
-                </p>
-              </div>
-            </div>
+            )}
 
+            {challenge ? (
+              <AdminTwoFactorChallenge
+                challengeToken={challenge.challenge_token}
+                methods={challenge.methods}
+                emailHint={challenge.email_hint}
+                onVerified={handleChallengeVerified}
+                onCancel={() => {
+                  setChallenge(null);
+                  setIsLoading(false);
+                }}
+              />
+            ) : needsSetup ? (
+              <AdminTwoFactorSetup
+                policy={user?.admin2faPolicy || "require_one"}
+                emailHint={user?.email}
+                required={setupRequired}
+                onComplete={() => void handleSetupComplete()}
+                onSkip={
+                  setupRequired
+                    ? undefined
+                    : () => {
+                        goToDashboardWithLoader();
+                      }
+                }
+              />
+            ) : (
+              <>
             <style>{`
               .auth-form input:-webkit-autofill,
               .auth-form input:-webkit-autofill:hover,
@@ -631,6 +764,8 @@ export default function AdminLoginPage() {
                 )}
               </Button>
             </form>
+              </>
+            )}
           </div>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
