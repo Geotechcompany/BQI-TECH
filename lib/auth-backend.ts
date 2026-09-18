@@ -982,7 +982,7 @@ class AuthService {
 const authService = AuthService.getInstance();
 
 export { authService };
-export type { User, AuthResponse, SessionData };
+export type { User, SessionData };
 
 export type AdminLoginDirectoryAccount = {
   id: string;

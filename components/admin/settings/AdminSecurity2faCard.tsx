@@ -215,8 +215,28 @@ export function AdminSecurity2faCard({
     );
   }
 
-  const totpOn = Boolean(status?.totpEnabled);
-  const emailOn = Boolean(status?.email2faEnabled);
+  if (!status) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="mt-0.5 h-5 w-5 text-amber-600" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">Could not load 2FA status</p>
+            <p className="text-sm text-muted-foreground">
+              Enrollment endpoints stay available even when other admin tools are
+              gated. Retry, or complete setup from the security overlay.
+            </p>
+          </div>
+        </div>
+        <Button type="button" variant="outline" onClick={() => void load()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  const totpOn = Boolean(status.totpEnabled);
+  const emailOn = Boolean(status.email2faEnabled);
 
   return (
     <div className="space-y-6">
