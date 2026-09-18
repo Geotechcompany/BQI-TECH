@@ -290,7 +290,7 @@ async def send_email_otp(
 @limiter.limit("10/minute")
 async def totp_setup_start(
     request: Request,
-    current_user: dict = Depends(get_admin_for_2fa_setup),
+    current_user: dict = Depends(get_user_for_2fa_setup),
 ):
     db = get_database()
     if db is None:
@@ -319,7 +319,7 @@ async def totp_setup_start(
 async def totp_setup_confirm(
     request: Request,
     body: TotpSetupConfirmBody,
-    current_user: dict = Depends(get_admin_for_2fa_setup),
+    current_user: dict = Depends(get_user_for_2fa_setup),
 ):
     db = get_database()
     if db is None:
@@ -387,7 +387,7 @@ async def totp_setup_confirm(
 async def totp_disable(
     request: Request,
     body: TotpDisableBody,
-    current_user: dict = Depends(get_admin_for_2fa_setup),
+    current_user: dict = Depends(get_user_for_2fa_setup),
 ):
     db = get_database()
     if db is None:
@@ -452,7 +452,7 @@ async def totp_disable(
 async def email_2fa_enable(
     request: Request,
     body: Email2faEnableBody,
-    current_user: dict = Depends(get_admin_for_2fa_setup),
+    current_user: dict = Depends(get_user_for_2fa_setup),
 ):
     """Enable email OTP factor after password + code confirmation."""
     db = get_database()
@@ -500,7 +500,7 @@ async def email_2fa_enable(
 async def email_2fa_disable(
     request: Request,
     body: Email2faDisableBody,
-    current_user: dict = Depends(get_admin_for_2fa_setup),
+    current_user: dict = Depends(get_user_for_2fa_setup),
 ):
     db = get_database()
     if db is None:
