@@ -21,7 +21,6 @@ import {
   UserMinus,
 } from "lucide-react";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
-import { publicAdminHref } from "@/lib/admin-path";
 import { AdminPageWelcomeBanner } from "@/components/admin/AdminPageWelcomeBanner";
 import { TourPageHelper } from "@/components/admin/tour/TourPageHelper";
 import { ResumeCvPanel } from "@/components/admin/candidate-profile/ResumeCvPanel";
@@ -93,6 +92,7 @@ import {
   type ApplicantsPositionTab,
 } from "./applicants-utils";
 import { ApplicantsEmptyState } from "./ApplicantsEmptyState";
+import { publicAdminHref } from "@/lib/admin-path";
 
 const BRAND_NAVY = "#272156";
 const BRAND_CYAN = "#31CDFF";

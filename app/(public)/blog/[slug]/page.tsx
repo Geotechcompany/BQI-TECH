@@ -7,6 +7,7 @@ import useSWR from 'swr'
 import { ArrowLeft, Twitter, Linkedin, Facebook, Share2, Mail, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { BACKEND_URL } from "@/lib/config"
 
 interface BlogPost {
   id: string;
@@ -293,8 +294,6 @@ const AuthorProfile = ({ post }: { post: BlogPost }) => {
     </div>
   )
 }
-
-import { BACKEND_URL } from "@/lib/config";
 
 const fetcher = async (url: string) => {
   const response = await fetch(`${BACKEND_URL}/api${url}`)

@@ -5,6 +5,7 @@
  */
 
 import { authService } from "@/lib/auth-backend";
+import { BACKEND_URL } from "./config";
 
 export interface ApplicationFilters {
   position?: string;
@@ -26,8 +27,6 @@ export interface BulkUpdateRequest {
   ids: string[];
   status: string;
 }
-
-import { BACKEND_URL } from "./config";
 
 class AdminApplicationsApi {
   private baseUrl = BACKEND_URL;

@@ -74,16 +74,16 @@ export default function MobileDashboardSidebar({
 
   useEffect(() => {
     setExpandedOverrides({});
-  }, [internalPathname]);
+  }, [canonicalPathname]);
 
   const isGroupExpanded = useCallback(
     (group: AdminNavGroup) => {
       if (expandedOverrides[group.id] !== undefined) {
         return expandedOverrides[group.id];
       }
-      return isNavGroupDefaultExpanded(group, internalPathname);
+      return isNavGroupDefaultExpanded(group, canonicalPathname);
     },
-    [expandedOverrides, internalPathname]
+    [expandedOverrides, canonicalPathname]
   );
 
   const toggleGroup = (group: AdminNavGroup) => {
@@ -172,7 +172,7 @@ export default function MobileDashboardSidebar({
                         <MobileNavGroup
                           key={item.id}
                           group={item}
-                          pathname={internalPathname}
+                          pathname={canonicalPathname}
                           skin={skin}
                           expanded={isGroupExpanded(item)}
                           onToggle={() => toggleGroup(item)}
@@ -183,7 +183,7 @@ export default function MobileDashboardSidebar({
                         <MobileFlatLink
                           key={item.id}
                           item={item}
-                          pathname={internalPathname}
+                          pathname={canonicalPathname}
                           skin={skin}
                           onNavigate={onClose}
                           resolveHref={adminHref}

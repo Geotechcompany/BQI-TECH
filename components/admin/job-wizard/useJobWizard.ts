@@ -3,12 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-
-export interface FinishWizardResult {
-  jobId: string;
-  title: string;
-  isActive: boolean;
-}
+import { publicAdminHref } from "@/lib/admin-path";
 import { authService } from "@/lib/auth-backend";
 import { adminApi } from "@/lib/api-backend";
 import { JobWizardState } from "@/types/job-wizard";
@@ -19,7 +14,12 @@ import {
   questionnairesFromQuestions,
   wizardStateToPayload,
 } from "./job-wizard-config";
-import { publicAdminHref } from "@/lib/admin-path";
+
+export interface FinishWizardResult {
+  jobId: string;
+  title: string;
+  isActive: boolean;
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_PYTHON_API_URL;
 

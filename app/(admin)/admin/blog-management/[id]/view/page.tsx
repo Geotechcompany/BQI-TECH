@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { authService } from "@/lib/auth-backend"
 import { useEffect } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
+import { publicAdminHref } from "@/lib/admin-path"
 
 export default function ViewBlogPost() {
   const params = useParams()
@@ -195,4 +196,3 @@ export default function ViewBlogPost() {
     </AdminPageLayout>
   )
 } 
-import { publicAdminHref } from "@/lib/admin-path";

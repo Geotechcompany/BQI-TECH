@@ -2,6 +2,7 @@ import {
   DEFAULT_ADMIN_BASE,
   INTERNAL_ADMIN_BASE,
   adminHref,
+  publicAdminHref,
 } from "@/lib/admin-path";
 
 export type AdminNotificationCategory =

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { motion, AnimatePresence } from "framer-motion"
 import { Calendar, Check, AlertCircle, Info, X } from "lucide-react"
+import { publicAdminHref } from "@/lib/admin-path"
 
 interface NotificationButtonProps {
   variant?: "default" | "ghost" | "outline"
@@ -146,4 +147,3 @@ export function NotificationButton({
     </DropdownMenu>
   )
 } 
-import { publicAdminHref } from "@/lib/admin-path";

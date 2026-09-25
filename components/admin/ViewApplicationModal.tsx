@@ -30,6 +30,13 @@ import { CVPreviewFrame } from "./CVPreviewFrame";
 import { StatusHistoryTimeline } from "./StatusHistoryTimeline";
 import { useAiStatus, AI_UNCONFIGURED_MESSAGE } from "@/contexts/AiStatusContext";
 import { useBqiIntelligence } from "@/contexts/BqiIntelligenceContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function aiMatchLabel(match: AiRankRequirement["match"]): string {
   const labels: Record<AiRankRequirement["match"], string> = {
@@ -52,13 +59,6 @@ function aiMatchBadgeClass(match: AiRankRequirement["match"]): string {
   };
   return styles[match] ?? "bg-gray-100 text-gray-700 border-gray-200";
 }
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 interface ViewApplicationModalProps {
   application: Application | null;

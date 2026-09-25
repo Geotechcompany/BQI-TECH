@@ -25,6 +25,7 @@ import {
 import type { BlogPost } from "@/types/blog"
 import { format } from "date-fns"
 import { TableSkeleton } from "@/components/ui/skeleton"
+import { publicAdminHref } from "@/lib/admin-path"
 
 export default function BlogManagementPage() {
   const router = useRouter()
@@ -152,7 +153,6 @@ export default function BlogManagementPage() {
 
   const togglePublishMutation = useMutation({
     mutationFn: async ({ id, published }: { id: string; published: boolean }) => {
-import { publicAdminHref } from "@/lib/admin-path";
       setIsUpdating(id)
       try {
         const session = authService.getSession()

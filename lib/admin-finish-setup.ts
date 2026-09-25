@@ -1,4 +1,4 @@
-import { publicAdminHref } from "@/lib/admin-path";
+import { publicAdminHref } from "@/lib/admin-path"
 export const FINISH_SETUP_SKIPPED_KEY = "admin_finish_setup_skipped_v1";
 export const FINISH_SETUP_MINIMIZED_KEY = "admin_finish_setup_minimized_v1";
 

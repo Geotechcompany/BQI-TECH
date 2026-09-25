@@ -2,14 +2,13 @@
 
 import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { BACKEND_URL } from "@/lib/config"
 
 type BackendHealthResponse = {
   status?: string
   database?: string
   message?: string
 }
-
-import { BACKEND_URL } from "@/lib/config";
 
 export function useBackendHealth({ refetchIntervalMs = 15000 } = {}) {
   const baseUrl = BACKEND_URL

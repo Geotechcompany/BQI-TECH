@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { FormSkeleton } from "@/components/ui/skeleton"
 import type { BlogPost } from "@/types/blog"
 import { useEffect } from "react"
+import { publicAdminHref } from "@/lib/admin-path"
 
 export default function BlogPostEditor() {
   const params = useParams()
@@ -147,4 +148,3 @@ export default function BlogPostEditor() {
     </AdminPageLayout>
   )
 } 
-import { publicAdminHref } from "@/lib/admin-path";

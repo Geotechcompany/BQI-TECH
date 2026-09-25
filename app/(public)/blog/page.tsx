@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, Sparkles, BookOpen, Clock, Calendar, Trendin
 import { Button } from "@/components/ui/button"
 import { BlogCard } from "@/components/blog/blog-card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { BACKEND_URL } from "@/lib/config"
 
 interface BlogPost {
   id: string;
@@ -159,8 +160,6 @@ const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   console.warn('Image failed to load:', target.src)
   target.src = '/images/placeholder.jpg'
 }
-
-import { BACKEND_URL } from "@/lib/config";
 
 const fetcher = async (url: string) => {
   const response = await fetch(`${BACKEND_URL}/api${url}`)

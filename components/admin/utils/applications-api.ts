@@ -6,6 +6,7 @@
 
 import { authService } from "../../../lib/auth-backend";
 import type { Application } from "@/types/application";
+import { BACKEND_URL } from "@/lib/config";
 
 export interface ApplicationFilters {
   position?: string;
@@ -48,8 +49,6 @@ export function sanitizeApplicationUpdate(
   } = updateData;
   return rest;
 }
-
-import { BACKEND_URL } from "@/lib/config";
 
 /**
  * CV download + detailed LLM scoring can exceed normal API latency.

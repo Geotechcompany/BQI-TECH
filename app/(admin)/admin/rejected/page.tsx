@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { publicAdminHref } from "@/lib/admin-path";
+import { publicAdminHref } from '@/lib/admin-path';
 
 export default function RejectedPage() {
   const router = useRouter();

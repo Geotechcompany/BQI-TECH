@@ -54,7 +54,7 @@ import {
   sumTrendCountsLast7VsPriorMonth,
   type TrendDay,
 } from "@/lib/mom-delta";
-import { publicAdminHref } from "@/lib/admin-path";
+import { publicAdminHref } from '@/lib/admin-path';
 
 interface OverviewData {
   applications: {

@@ -1,6 +1,7 @@
 import { ResponseDecoder } from "./response-decoder";
 import { ResponseDecryption } from "./encryption-decoder";
 import { resolveEmailVerified } from "./resolve-email-verified";
+import { BACKEND_URL } from "./config";
 
 interface User {
   id: string;
@@ -61,8 +62,6 @@ interface SessionData {
   token: string;
   refreshToken: string;
 }
-
-import { BACKEND_URL } from "./config";
 
 const AUTH_FETCH_TIMEOUT_MS = 15_000;
 

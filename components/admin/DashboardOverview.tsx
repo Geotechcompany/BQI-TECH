@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { Users, FileText, CheckCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
-import { publicAdminHref } from "@/lib/admin-path";
+import { publicAdminHref } from '@/lib/admin-path';
 
 const overviewItems = [
   { title: 'Total Applications', value: 150, icon: FileText, color: 'bg-blue-500', path: publicAdminHref('/manage/candidates') },
