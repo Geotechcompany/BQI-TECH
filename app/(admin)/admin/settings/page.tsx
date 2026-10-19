@@ -1761,7 +1761,7 @@ function SettingsPageContent() {
           <div className="space-y-6">
           <SettingsPanel
             title="Email delivery"
-            description="Configure outbound email for invites and notifications without SMTP on Render"
+            description="Outbound mail uses Microsoft Graph. Optional relay/SendGrid for non-Graph environments."
             badge={
               emailTransport.configured || graphMail.configured ? (
                 <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
@@ -1776,9 +1776,16 @@ function SettingsPageContent() {
               )
             }
           >
-            <SettingsField label="Provider">
+            <SettingsField
+              label="Provider"
+              hint="Microsoft Graph is the default. SMTP (Office 365) has been removed."
+            >
               <Select
-                value={emailTransport.provider}
+                value={
+                  emailTransport.provider === "smtp"
+                    ? "microsoft_graph"
+                    : emailTransport.provider
+                }
                 onValueChange={(value) =>
                   setEmailTransport((current) => {
                     const next = { ...current, provider: value };
@@ -1794,11 +1801,13 @@ function SettingsPageContent() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="microsoft_graph">
+                    Microsoft Graph (recommended)
+                  </SelectItem>
                   <SelectItem value="netlify_relay">
-                    BQI API relay (api.bqitech.com — recommended)
+                    BQI API relay (api.bqitech.com)
                   </SelectItem>
                   <SelectItem value="sendgrid">SendGrid API (direct)</SelectItem>
-                  <SelectItem value="smtp">SMTP (Office 365)</SelectItem>
                 </SelectContent>
               </Select>
             </SettingsField>
@@ -1810,7 +1819,7 @@ function SettingsPageContent() {
                   label="Relay URL"
                   hint={
                     isBqitechApiRelayUrl(emailTransport.relayUrl)
-                      ? "Production API on paid Render — sends via Office 365 SMTP"
+                      ? "Production API on paid Render — sends via Microsoft Graph"
                       : isLegacyNetlifyRelayUrl(emailTransport.relayUrl)
                         ? "Legacy Netlify relay — requires SendGrid API key below"
                         : "HTTP relay endpoint"
@@ -1929,7 +1938,7 @@ function SettingsPageContent() {
                 <code className="rounded bg-muted px-1 py-0.5 text-xs">
                   {DEFAULT_BQITECH_RELAY_URL}
                 </code>
-                . Production sends mail via Office 365 SMTP — no SendGrid required.
+                . Production sends mail via Microsoft Graph — no SMTP required.
               </p>
             </div>
 
@@ -1962,7 +1971,7 @@ function SettingsPageContent() {
 
           <SettingsPanel
             title="Microsoft Graph mail"
-            description="Entra app certificate credentials for Graph sendMail. When configured, Graph is preferred over SMTP."
+            description="Entra app certificate credentials for Graph sendMail. Graph is the only SMTP replacement — configure here for all outbound HR portal mail."
             badge={
               graphMail.configured ? (
                 <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">

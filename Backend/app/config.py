@@ -84,12 +84,12 @@ class Settings(BaseModel):
         r"https?:\/\/([a-z0-9-]+\.)*netlify\.app$",
     )
     
-    # Email provider (smtp | sendgrid | netlify_relay)
-    email_provider: str = os.getenv("EMAIL_PROVIDER", "smtp")
+    # Email provider (microsoft_graph | sendgrid | netlify_relay). SMTP deprecated/unused.
+    email_provider: str = os.getenv("EMAIL_PROVIDER", "microsoft_graph")
     sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
     email_relay_url: str = os.getenv("EMAIL_RELAY_URL", "")
     
-    # Email Configuration (Office 365 SMTP)
+    # Deprecated SMTP_* — kept for deploy compatibility; outbound mail uses Microsoft Graph.
     smtp_host: str = os.getenv("SMTP_HOST", "smtp.office365.com")
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
     smtp_user: str = os.getenv("SMTP_USER", "info@bqitech.com")

@@ -105,7 +105,10 @@ def _from_email_configured(creds: Dict[str, str]) -> bool:
 
 def _provider(config: Optional[Dict[str, str]] = None) -> str:
     creds = config or get_email_transport_config_sync()
-    return (creds.get("provider") or "smtp").strip().lower()
+    provider = (creds.get("provider") or "microsoft_graph").strip().lower()
+    if provider in {"smtp", "graph"}:
+        return "microsoft_graph"
+    return provider
 
 
 def is_email_transport_configured(config: Optional[Dict[str, str]] = None) -> bool:
@@ -117,6 +120,8 @@ def is_email_transport_configured(config: Optional[Dict[str, str]] = None) -> bo
     creds = config or get_email_transport_config_sync()
     provider = _provider(creds)
 
+    if provider in {"microsoft_graph", "graph"}:
+        return False
     if provider == "sendgrid":
         return bool((creds.get("sendgridApiKey") or "").strip())
     if provider in {"netlify_relay", "relay"}:
@@ -130,10 +135,7 @@ def is_email_transport_configured(config: Optional[Dict[str, str]] = None) -> bo
             and _from_email_configured(creds)
         )
 
-    return bool(
-        (creds.get("smtpUser") or "").strip()
-        and (creds.get("smtpPass") or "").strip()
-    )
+    return False
 
 
 async def get_email_transport_public() -> Dict[str, Any]:
@@ -173,7 +175,7 @@ async def update_email_transport_settings(payload: Dict[str, Any]) -> Dict[str, 
     if db is None:
         raise ValueError("Database not connected")
 
-    allowed_providers = {"smtp", "sendgrid", "netlify_relay", "relay"}
+    allowed_providers = {"microsoft_graph", "graph", "sendgrid", "netlify_relay", "relay"}
     update_fields: Dict[str, Any] = {
         "type": EMAIL_TRANSPORT_TYPE,
         "updatedAt": _utcnow().isoformat(),
@@ -182,8 +184,15 @@ async def update_email_transport_settings(payload: Dict[str, Any]) -> Dict[str, 
 
     if "provider" in payload and payload["provider"] is not None:
         provider = str(payload["provider"]).strip().lower()
+        if provider == "smtp":
+            provider = "microsoft_graph"
         if provider not in allowed_providers:
-            raise ValueError("provider must be smtp, sendgrid, or netlify_relay")
+            raise ValueError(
+                "provider must be microsoft_graph, sendgrid, or netlify_relay "
+                "(SMTP is no longer supported)"
+            )
+        if provider == "graph":
+            provider = "microsoft_graph"
         update_fields["transport.provider"] = provider
         touched = True
 

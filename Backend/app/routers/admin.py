@@ -7175,7 +7175,9 @@ async def test_email_transport_settings(
 
     await get_email_transport_config(force_reload=True)
     creds = await get_email_transport_config()
-    provider = (creds.get("provider") or "smtp").strip()
+    from app.lib.email_transport import get_email_provider
+
+    provider = get_email_provider() or (creds.get("provider") or "microsoft_graph").strip()
 
     html = f"""
         <p>Hi,</p>
