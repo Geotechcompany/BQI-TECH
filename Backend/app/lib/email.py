@@ -27,19 +27,45 @@ from app.lib.email_transport import deliver_html_email
 logger = logging.getLogger(__name__)
 
 
-def is_smtp_configured() -> bool:
-    """Return True when SMTP credentials are present."""
-    from app.lib.email_transport import get_email_provider, is_email_configured
+def _html_body_from_message(message: MIMEMultipart) -> str:
+    for part in message.walk():
+        if part.get_content_type() == "text/html":
+            return part.get_payload(decode=True).decode(
+                part.get_content_charset() or "utf-8"
+            )
+    return ""
 
+
+def is_smtp_configured() -> bool:
+    """Return True when Graph mail or SMTP credentials are present."""
+    from app.lib.email_transport import get_email_provider, is_email_configured
+    from app.lib.graph_mail import is_graph_mail_configured
+
+    if is_graph_mail_configured():
+        return True
     if get_email_provider() != "smtp":
         return is_email_configured()
     return bool((settings.smtp_user or "").strip() and (settings.smtp_pass or "").strip())
 
 
 def test_smtp_connection() -> dict[str, Any]:
-    """Verify SMTP settings by connecting and logging in. Does not send mail."""
+    """Verify Graph token (preferred) or SMTP login. Does not send mail."""
+    from app.lib.graph_mail import is_graph_mail_configured, test_graph_mail_auth
+
+    if is_graph_mail_configured():
+        graph = test_graph_mail_auth()
+        return {
+            "provider": "microsoft_graph",
+            "configured": graph.get("configured", False),
+            "connected": bool(graph.get("authenticated")),
+            "fromEmail": graph.get("fromEmail") or settings.from_email,
+            "message": graph.get("message"),
+            "graph": graph,
+        }
+
     if not is_smtp_configured():
         return {
+            "provider": "smtp",
             "configured": False,
             "connected": False,
             "host": settings.smtp_host,
@@ -52,6 +78,7 @@ def test_smtp_connection() -> dict[str, Any]:
         with get_smtp_connection():
             pass
         return {
+            "provider": "smtp",
             "configured": True,
             "connected": True,
             "host": settings.smtp_host,
@@ -63,6 +90,7 @@ def test_smtp_connection() -> dict[str, Any]:
     except Exception as e:
         logger.warning("SMTP connection test failed: %s", e)
         return {
+            "provider": "smtp",
             "configured": True,
             "connected": False,
             "host": settings.smtp_host,
@@ -184,14 +212,10 @@ def send_verification_email(email: str, verification_code: str) -> bool:
         body = wrap_public_email(content=content, preheader="Your BQI Tech verification code")
         
         message.attach(MIMEText(body, "html"))
-        
-        # Create secure connection and send email
-        with get_smtp_connection() as server:
-            text = message.as_string()
-            server.sendmail(settings.from_email, email, text)
-        
-        logger.info(f"Verification email sent successfully to {email}")
-        return True
+        ok = deliver_html_email(email, message["Subject"], body)
+        if ok:
+            logger.info(f"Verification email sent successfully to {email}")
+        return ok
         
     except Exception as e:
         logger.error(f"Failed to send verification email to {email}: {str(e)}")
@@ -284,14 +308,10 @@ async def send_contact_form_email(
         body = wrap_public_email(content=content, preheader=f"New contact form submission from {safe_name}")
         
         message_obj.attach(MIMEText(body, "html"))
-        
-        # Create secure connection and send email
-        with get_smtp_connection() as server:
-            text = message_obj.as_string()
-            server.sendmail(settings.from_email, settings.hr_email, text)
-        
-        logger.info(f"Contact form email sent successfully for {email}")
-        return True
+        ok = deliver_html_email(settings.hr_email, message_obj["Subject"], body)
+        if ok:
+            logger.info(f"Contact form email sent successfully for {email}")
+        return ok
         
     except Exception as e:
         logger.error(f"Failed to send contact form email: {str(e)}")
@@ -333,13 +353,10 @@ async def send_contact_confirmation_email(
         body = wrap_public_email(content=content, preheader="We received your message")
 
         message_obj.attach(MIMEText(body, "html"))
-
-        with get_smtp_connection() as server:
-            text = message_obj.as_string()
-            server.sendmail(settings.from_email, email, text)
-
-        logger.info(f"Contact confirmation email sent successfully to {email}")
-        return True
+        ok = deliver_html_email(email, message_obj["Subject"], body)
+        if ok:
+            logger.info(f"Contact confirmation email sent successfully to {email}")
+        return ok
     except Exception as e:
         logger.error(f"Failed to send contact confirmation email to {email}: {str(e)}")
         return False
@@ -374,16 +391,16 @@ async def send_application_confirmation_email(
         body = wrap_public_email(content=content, preheader=f"Application received for {safe_job}")
 
         message_obj.attach(MIMEText(body, "html"))
-
-        with get_smtp_connection() as server:
-            text = message_obj.as_string()
-            server.sendmail(settings.from_email, applicant_email, text)
-
-        logger.info(f"Application confirmation email sent successfully to {applicant_email}")
-        return True
+        ok = deliver_html_email(applicant_email, message_obj["Subject"], body)
+        if ok:
+            logger.info(
+                f"Application confirmation email sent successfully to {applicant_email}"
+            )
+        return ok
     except Exception as e:
-        logger.error(f"Failed to send application confirmation email to {applicant_email}: {str(e)}")
-
+        logger.error(
+            f"Failed to send application confirmation email to {applicant_email}: {str(e)}"
+        )
         return False
 
 
@@ -503,11 +520,11 @@ async def send_admin_privilege_upgrade_email(
             admin_login_url=admin_login_url,
         )
         message["To"] = email
-
-        with get_smtp_connection() as server:
-            server.sendmail(settings.from_email, email, message.as_string())
-        logger.info(f"Admin privilege upgrade email sent to {email}")
-        return True
+        html = _html_body_from_message(message)
+        ok = deliver_html_email(email, message["Subject"], html)
+        if ok:
+            logger.info(f"Admin privilege upgrade email sent to {email}")
+        return ok
     except Exception as e:
         logger.error(
             f"Failed to send admin privilege upgrade email to {email}: {str(e)}"

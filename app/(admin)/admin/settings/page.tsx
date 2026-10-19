@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "react-hot-toast";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -475,9 +476,25 @@ function SettingsPageContent() {
     hasRelaySecret: false,
     usesBqitechApiRelay: true,
     configured: false,
+    graphConfigured: false,
+  });
+  const [graphMail, setGraphMail] = useState({
+    clientId: "",
+    tenantId: "",
+    fromEmail: "",
+    fromName: "BQI Tech",
+    certBase64: "",
+    certPassword: "",
+    hasCertBase64: false,
+    hasCertPassword: false,
+    certBase64Hint: "",
+    configured: false,
+    source: "" as string,
   });
   const [isSavingEmailTransport, setIsSavingEmailTransport] = useState(false);
+  const [isSavingGraphMail, setIsSavingGraphMail] = useState(false);
   const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [isTestingGraphMail, setIsTestingGraphMail] = useState(false);
   const [aiProviders, setAiProviders] = useState<AiProvider[]>([]);
   const [aiActiveProviderId, setAiActiveProviderId] = useState("");
   const [isSavingAiProviders, setIsSavingAiProviders] = useState(false);
@@ -510,6 +527,7 @@ function SettingsPageContent() {
     loadContactAnalytics();
     loadRecaptchaSettings();
     loadEmailTransportSettings();
+    loadGraphMailSettings();
     loadAiProviderSettings();
   }, []);
 
@@ -610,11 +628,90 @@ function SettingsPageContent() {
             )
         ),
         configured: Boolean(transport.configured),
+        graphConfigured: Boolean(transport.graphConfigured),
         sendgridApiKey: "",
         relaySecret: "",
       }));
     } catch (error) {
       console.error("Failed to load email transport settings:", error);
+    }
+  };
+
+  const loadGraphMailSettings = async () => {
+    try {
+      const response = await adminApi.getGraphMailSettings();
+      const graph = (response as any)?.graph ?? {};
+      setGraphMail({
+        clientId: graph.clientId || "",
+        tenantId: graph.tenantId || "",
+        fromEmail: graph.fromEmail || "",
+        fromName: graph.fromName || "BQI Tech",
+        certBase64: "",
+        certPassword: "",
+        hasCertBase64: Boolean(graph.hasCertBase64),
+        hasCertPassword: Boolean(graph.hasCertPassword),
+        certBase64Hint: graph.certBase64Hint || "",
+        configured: Boolean(graph.configured),
+        source: graph.source || "",
+      });
+    } catch (error) {
+      console.error("Failed to load Graph mail settings:", error);
+    }
+  };
+
+  const handleSaveGraphMail = async () => {
+    setIsSavingGraphMail(true);
+    try {
+      const payload: Record<string, string> = {
+        clientId: graphMail.clientId.trim(),
+        tenantId: graphMail.tenantId.trim(),
+        fromEmail: graphMail.fromEmail.trim(),
+        fromName: graphMail.fromName.trim() || "BQI Tech",
+      };
+      if (graphMail.certBase64.trim()) {
+        payload.certBase64 = graphMail.certBase64.trim();
+      }
+      if (graphMail.certPassword.trim()) {
+        payload.certPassword = graphMail.certPassword.trim();
+      }
+      const response = await adminApi.updateGraphMailSettings(payload);
+      const graph = (response as any)?.graph ?? {};
+      setGraphMail({
+        clientId: graph.clientId || "",
+        tenantId: graph.tenantId || "",
+        fromEmail: graph.fromEmail || "",
+        fromName: graph.fromName || "BQI Tech",
+        certBase64: "",
+        certPassword: "",
+        hasCertBase64: Boolean(graph.hasCertBase64),
+        hasCertPassword: Boolean(graph.hasCertPassword),
+        certBase64Hint: graph.certBase64Hint || "",
+        configured: Boolean(graph.configured),
+        source: graph.source || "",
+      });
+      setEmailTransport((current) => ({
+        ...current,
+        graphConfigured: Boolean(graph.configured),
+      }));
+      toast.success("Microsoft Graph mail settings saved");
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to save Graph mail settings");
+    } finally {
+      setIsSavingGraphMail(false);
+    }
+  };
+
+  const handleTestGraphMail = async () => {
+    setIsTestingGraphMail(true);
+    try {
+      const response = await adminApi.testGraphMailSettings();
+      toast.success(
+        (response as any)?.message || "Graph authentication succeeded"
+      );
+    } catch (error: any) {
+      toast.error(error?.message || "Graph authentication failed");
+    } finally {
+      setIsTestingGraphMail(false);
     }
   };
 
@@ -1661,14 +1758,15 @@ function SettingsPageContent() {
 
       case "email":
         return (
+          <div className="space-y-6">
           <SettingsPanel
             title="Email delivery"
             description="Configure outbound email for invites and notifications without SMTP on Render"
             badge={
-              emailTransport.configured ? (
+              emailTransport.configured || graphMail.configured ? (
                 <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
                   <CheckCircle2 className="h-3 w-3" />
-                  Configured
+                  {graphMail.configured ? "Graph active" : "Configured"}
                 </Badge>
               ) : (
                 <Badge variant="outline" className="gap-1 text-amber-600">
@@ -1861,6 +1959,166 @@ function SettingsPageContent() {
               </Button>
             </div>
           </SettingsPanel>
+
+          <SettingsPanel
+            title="Microsoft Graph mail"
+            description="Entra app certificate credentials for Graph sendMail. When configured, Graph is preferred over SMTP."
+            badge={
+              graphMail.configured ? (
+                <Badge className="gap-1 bg-emerald-600 hover:bg-emerald-600">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Configured
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 text-amber-600">
+                  <AlertCircle className="h-3 w-3" />
+                  Not configured
+                </Badge>
+              )
+            }
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SettingsField label="Azure client ID">
+                <Input
+                  value={graphMail.clientId}
+                  onChange={(e) =>
+                    setGraphMail((current) => ({
+                      ...current,
+                      clientId: e.target.value,
+                    }))
+                  }
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+              </SettingsField>
+              <SettingsField label="Azure tenant ID">
+                <Input
+                  value={graphMail.tenantId}
+                  onChange={(e) =>
+                    setGraphMail((current) => ({
+                      ...current,
+                      tenantId: e.target.value,
+                    }))
+                  }
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                />
+              </SettingsField>
+              <SettingsField
+                label="From email"
+                hint="Mailbox UPN used as Graph sendMail sender"
+              >
+                <Input
+                  type="email"
+                  value={graphMail.fromEmail}
+                  onChange={(e) =>
+                    setGraphMail((current) => ({
+                      ...current,
+                      fromEmail: e.target.value,
+                    }))
+                  }
+                  placeholder="noreply@bqitech.com"
+                />
+              </SettingsField>
+              <SettingsField label="From display name">
+                <Input
+                  value={graphMail.fromName}
+                  onChange={(e) =>
+                    setGraphMail((current) => ({
+                      ...current,
+                      fromName: e.target.value,
+                    }))
+                  }
+                  placeholder="BQI Tech"
+                />
+              </SettingsField>
+              <SettingsField
+                label="Certificate (base64)"
+                hint={
+                  graphMail.hasCertBase64
+                    ? `Saved (${graphMail.certBase64Hint || "configured"}). Paste a new value only to replace it.`
+                    : "Base64 of the PEM or PFX certificate used by the Entra app"
+                }
+                className="sm:col-span-2"
+              >
+                <Textarea
+                  value={graphMail.certBase64}
+                  onChange={(e) =>
+                    setGraphMail((current) => ({
+                      ...current,
+                      certBase64: e.target.value,
+                    }))
+                  }
+                  rows={4}
+                  className="font-mono text-xs"
+                  placeholder={
+                    graphMail.hasCertBase64
+                      ? "•••• certificate configured — paste to replace ••••"
+                      : "Paste AZURE_CERT_BASE64 value"
+                  }
+                />
+              </SettingsField>
+              <SettingsField
+                label="Certificate password"
+                hint={
+                  graphMail.hasCertPassword
+                    ? "Password is saved. Enter a new value only to replace it."
+                    : "Required if the PFX is encrypted"
+                }
+                className="sm:col-span-2"
+              >
+                <Input
+                  type="password"
+                  value={graphMail.certPassword}
+                  onChange={(e) =>
+                    setGraphMail((current) => ({
+                      ...current,
+                      certPassword: e.target.value,
+                    }))
+                  }
+                  placeholder={
+                    graphMail.hasCertPassword
+                      ? "••••••••••••••••"
+                      : "PFX password (optional)"
+                  }
+                />
+              </SettingsField>
+            </div>
+
+            {graphMail.source ? (
+              <p className="text-xs text-muted-foreground">
+                Active source: {graphMail.source}
+                {graphMail.source === "environment"
+                  ? " (not yet saved to database — click Save to persist)"
+                  : ""}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button
+                type="button"
+                onClick={handleSaveGraphMail}
+                disabled={isSavingGraphMail}
+              >
+                {isSavingGraphMail ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Save Graph settings
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleTestGraphMail}
+                disabled={isTestingGraphMail || !graphMail.configured}
+              >
+                {isTestingGraphMail ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plug className="mr-2 h-4 w-4" />
+                )}
+                Test Graph auth
+              </Button>
+            </div>
+          </SettingsPanel>
+          </div>
         );
 
       case "integrations":

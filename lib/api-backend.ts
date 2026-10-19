@@ -732,6 +732,13 @@ export const adminApi = {
   testEmailTransport: (data?: { to?: string }) =>
     backendApi.post("/api/admin/settings/email-transport/test", data ?? {}),
 
+  getGraphMailSettings: () =>
+    backendApi.get("/api/admin/settings/graph-mail"),
+  updateGraphMailSettings: (data: Record<string, unknown>) =>
+    backendApi.put("/api/admin/settings/graph-mail", data),
+  testGraphMailSettings: () =>
+    backendApi.post("/api/admin/settings/graph-mail/test", {}),
+
   getAiProviderSettings: () =>
     backendApi.get("/api/admin/settings/ai-providers"),
   updateAiProviderSettings: (data: Record<string, unknown>) =>

@@ -7078,6 +7078,80 @@ async def update_email_transport_settings_endpoint(
         raise HTTPException(status_code=500, detail="Failed to save email transport settings")
 
 
+@router.get("/settings/graph-mail")
+async def get_graph_mail_settings(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Get Microsoft Graph mail settings (secrets masked)."""
+    try:
+        from app.lib.graph_mail_settings import get_graph_mail_public
+
+        graph = await get_graph_mail_public()
+        return {"graph": graph}
+    except Exception as e:
+        logger.error(f"Error in get_graph_mail_settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load Graph mail settings")
+
+
+@router.put("/settings/graph-mail")
+async def update_graph_mail_settings_endpoint(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Save Microsoft Graph mail credentials (cert/password encrypted at rest)."""
+    try:
+        from app.lib.graph_mail_settings import SECRET_FIELDS, update_graph_mail_settings
+
+        graph = await update_graph_mail_settings(payload)
+
+        # Audit log: never persist raw secrets
+        safe_updates = {
+            key: ("[redacted]" if key in SECRET_FIELDS else value)
+            for key, value in payload.items()
+            if key in payload
+        }
+
+        await log_resource_updated(
+            get_database(),
+            current_user,
+            resource_type="graph_mail",
+            existing={},
+            updates=safe_updates,
+            title_field="fromEmail",
+        )
+
+        return {"message": "Graph mail settings updated", "graph": graph}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in update_graph_mail_settings_endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save Graph mail settings")
+
+
+@router.post("/settings/graph-mail/test")
+async def test_graph_mail_settings(
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Acquire a Graph token to verify credentials (does not send mail)."""
+    try:
+        from app.lib.graph_mail import test_graph_mail_auth
+        from app.lib.graph_mail_settings import get_graph_mail_config
+
+        await get_graph_mail_config(force_reload=True)
+        result = test_graph_mail_auth()
+        if not result.get("authenticated"):
+            raise HTTPException(
+                status_code=400,
+                detail=result.get("message") or "Graph authentication failed",
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in test_graph_mail_settings: {e}")
+        raise HTTPException(status_code=500, detail="Graph mail test failed")
+
+
 @router.post("/settings/email-transport/test")
 async def test_email_transport_settings(
     request: Request,

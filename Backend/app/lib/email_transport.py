@@ -8,6 +8,7 @@ import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -54,15 +55,29 @@ def rewrite_email_html_for_frontend(html: str, frontend_url: str | None) -> str:
 
 
 def get_email_provider() -> str:
+    """Resolved transport. Graph replaces SMTP when Entra cert vars are set."""
+    from app.lib.graph_mail import is_graph_mail_configured
+
     creds = get_email_transport_config_sync()
-    return (creds.get("provider") or "smtp").strip().lower()
+    configured = (creds.get("provider") or "smtp").strip().lower()
+    if configured in {"", "smtp"} and is_graph_mail_configured():
+        return "microsoft_graph"
+    return configured or "smtp"
 
 
 def is_email_configured() -> bool:
+    if get_email_provider() == "microsoft_graph":
+        return True
     return is_email_transport_configured()
 
 
 def email_transport_status() -> dict[str, Any]:
+    from app.lib.graph_mail import (
+        get_graph_mail_from,
+        get_mail_from_name,
+        is_graph_mail_configured,
+    )
+
     creds = get_email_transport_config_sync()
     provider = get_email_provider()
     from_email = creds.get("fromEmail") or settings.from_email
@@ -70,8 +85,12 @@ def email_transport_status() -> dict[str, Any]:
         "provider": provider,
         "configured": is_email_configured(),
         "fromEmail": from_email,
+        "fromName": get_mail_from_name(),
+        "graphConfigured": is_graph_mail_configured(),
     }
-    if provider == "sendgrid":
+    if provider == "microsoft_graph":
+        status["fromEmail"] = get_graph_mail_from() or from_email
+    elif provider == "sendgrid":
         status["sendgridConfigured"] = bool((creds.get("sendgridApiKey") or "").strip())
     elif provider in {"netlify_relay", "relay"}:
         status["relayUrl"] = (creds.get("relayUrl") or "").strip()
@@ -85,6 +104,14 @@ def email_transport_status() -> dict[str, Any]:
 def _from_address() -> str:
     creds = get_email_transport_config_sync()
     return (creds.get("fromEmail") or settings.from_email or "").strip()
+
+
+def _from_header(address: Optional[str] = None) -> str:
+    """RFC 5322 From with display name, e.g. \"BQI Tech\" <noreply@…>."""
+    from app.lib.graph_mail import get_mail_from_name
+
+    addr = (address or _from_address()).strip()
+    return formataddr((get_mail_from_name(), addr))
 
 
 def _smtp_send(to: str, subject: str, html: str, from_email: Optional[str] = None) -> None:
@@ -109,7 +136,7 @@ def _smtp_send(to: str, subject: str, html: str, from_email: Optional[str] = Non
 
     try:
         message = MIMEMultipart()
-        message["From"] = sender
+        message["From"] = _from_header(sender)
         message["To"] = to
         message["Subject"] = subject
         message.attach(MIMEText(html, "html"))
@@ -134,10 +161,12 @@ def _sendgrid_send(to: str, subject: str, html: str) -> None:
     if not api_key:
         raise RuntimeError("SendGrid API key is not configured")
 
+    from app.lib.graph_mail import get_mail_from_name
+
     from_email = _from_address()
     payload = {
         "personalizations": [{"to": [{"email": to}]}],
-        "from": {"email": from_email, "name": "BQI Tech"},
+        "from": {"email": from_email, "name": get_mail_from_name()},
         "subject": subject,
         "content": [{"type": "text/html", "value": html}],
     }
@@ -219,6 +248,14 @@ def _send_via_provider(
     frontend_url: str | None = None,
 ) -> str:
     """Send email and return the transport label used."""
+    from app.lib.graph_mail import is_graph_mail_configured, send_mail_via_graph
+
+    # Graph replaces SMTP when Entra cert credentials are present (Harvest pattern).
+    if provider == "microsoft_graph" or (
+        provider == "smtp" and is_graph_mail_configured()
+    ):
+        send_mail_via_graph(to, subject, html)
+        return "microsoft_graph"
     if provider == "sendgrid":
         _sendgrid_send(to, subject, html)
         return provider
@@ -246,7 +283,7 @@ def deliver_html_email_with_detail(
     html: str,
     frontend_url: str | None = None,
 ) -> tuple[bool, str | None]:
-    """Send HTML email using admin-configured transport."""
+    """Send HTML email using admin-configured transport (Graph → SendGrid/relay → SMTP)."""
     provider = get_email_provider()
     try:
         used = _send_via_provider(to, subject, html, provider, frontend_url=frontend_url)

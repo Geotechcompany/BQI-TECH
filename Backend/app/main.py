@@ -30,6 +30,10 @@ from .lib.employee_invite_scheduler import (
 from .lib.job_status_scheduler import start_job_status_scheduler, stop_job_status_scheduler
 from .lib.cors import apply_cors_headers, build_allowed_origins, is_origin_allowed
 from .lib.email_transport_settings import get_email_transport_config
+from .lib.graph_mail_settings import (
+    ensure_graph_mail_seed_from_env,
+    get_graph_mail_config,
+)
 
 # Import routers directly from modules
 from .routers.admin import router as admin_router
@@ -101,6 +105,17 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up...")
     await connect_to_database()
     await get_email_transport_config(force_reload=True)
+    try:
+        seed_result = await ensure_graph_mail_seed_from_env()
+        if seed_result.get("seeded"):
+            logger.info(
+                "Graph mail settings seeded from environment (%s public fields, %s secrets)",
+                len(seed_result.get("fieldsWritten") or []),
+                seed_result.get("secretsWritten") or 0,
+            )
+        await get_graph_mail_config(force_reload=True)
+    except Exception as exc:
+        logger.warning("Graph mail settings seed/load skipped: %s", exc)
     start_reconnect_task()
     start_backup_scheduler()
     start_job_status_scheduler()

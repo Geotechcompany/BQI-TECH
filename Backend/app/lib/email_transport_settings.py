@@ -106,6 +106,11 @@ def _provider(config: Optional[Dict[str, str]] = None) -> str:
 
 
 def is_email_transport_configured(config: Optional[Dict[str, str]] = None) -> bool:
+    from app.lib.graph_mail import is_graph_mail_configured
+
+    if is_graph_mail_configured():
+        return True
+
     creds = config or get_email_transport_config_sync()
     provider = _provider(creds)
 
@@ -129,10 +134,17 @@ def is_email_transport_configured(config: Optional[Dict[str, str]] = None) -> bo
 
 
 async def get_email_transport_public() -> Dict[str, Any]:
+    from app.lib.graph_mail_settings import (
+        get_graph_mail_config,
+        is_graph_mail_configured,
+    )
+
     creds = await get_email_transport_config()
     provider = _provider(creds)
     relay_url = creds.get("relayUrl") or ""
     from_email = creds.get("fromEmail") or settings.from_email
+    graph_creds = await get_graph_mail_config()
+    graph_configured = is_graph_mail_configured(graph_creds)
 
     return {
         "provider": provider,
@@ -146,6 +158,8 @@ async def get_email_transport_public() -> Dict[str, Any]:
         "smtpUser": creds.get("smtpUser") or settings.smtp_user,
         "hasSmtpPass": bool(creds.get("smtpPass")),
         "configured": is_email_transport_configured(creds),
+        "graphConfigured": graph_configured,
+        "graphFromEmail": graph_creds.get("fromEmail") or "",
         "relayPath": "/api/internal/send-email",
         "defaultRelayUrl": "https://api.bqitech.com/api/internal/send-email",
     }

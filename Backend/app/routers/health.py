@@ -51,7 +51,7 @@ async def health_check():
 
 @router.get("/health/smtp")
 async def smtp_health_check():
-    """Test SMTP configuration and connectivity without sending email."""
+    """Test Graph auth (preferred) or SMTP login without sending email."""
     result = await asyncio.to_thread(test_smtp_connection)
     payload = {
         "status": "healthy" if result.get("connected") else "unhealthy",
@@ -59,3 +59,9 @@ async def smtp_health_check():
     }
     status_code = 200 if result.get("connected") else 503
     return JSONResponse(content=payload, status_code=status_code)
+
+
+@router.get("/health/email")
+async def email_health_check():
+    """Alias for /health/smtp — Graph token or SMTP connectivity."""
+    return await smtp_health_check()
