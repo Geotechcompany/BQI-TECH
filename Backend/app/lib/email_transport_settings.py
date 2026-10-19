@@ -41,7 +41,10 @@ def _from_env() -> Dict[str, str]:
         for field, env_key in FIELD_ENV_MAP.items()
     }
     if not values.get("provider"):
-        values["provider"] = "smtp"
+        values["provider"] = "microsoft_graph"
+    # Normalize legacy SMTP default to Graph (SMTP send path removed)
+    if values.get("provider", "").strip().lower() == "smtp":
+        values["provider"] = "microsoft_graph"
     if not values.get("fromEmail"):
         values["fromEmail"] = (settings.from_email or "").strip()
     if not values.get("smtpHost"):
@@ -79,8 +82,8 @@ async def get_email_transport_config(force_reload: bool = False) -> Dict[str, st
     except Exception as exc:
         logger.warning("Failed loading email transport settings from database: %s", exc)
 
-    if not merged.get("provider"):
-        merged["provider"] = "smtp"
+    if not merged.get("provider") or merged.get("provider", "").strip().lower() == "smtp":
+        merged["provider"] = "microsoft_graph"
 
     _transport_cache = merged
     return dict(merged)

@@ -1,6 +1,4 @@
 import asyncio
-import smtplib
-import ssl
 import random
 import string
 from email.mime.text import MIMEText
@@ -37,91 +35,37 @@ def _html_body_from_message(message: MIMEMultipart) -> str:
 
 
 def is_smtp_configured() -> bool:
-    """Return True when Graph mail or SMTP credentials are present."""
-    from app.lib.email_transport import get_email_provider, is_email_configured
+    """Legacy name: True when Microsoft Graph mail is configured."""
     from app.lib.graph_mail import is_graph_mail_configured
 
-    if is_graph_mail_configured():
-        return True
-    if get_email_provider() != "smtp":
-        return is_email_configured()
-    return bool((settings.smtp_user or "").strip() and (settings.smtp_pass or "").strip())
+    return is_graph_mail_configured()
 
 
 def test_smtp_connection() -> dict[str, Any]:
-    """Verify Graph token (preferred) or SMTP login. Does not send mail."""
+    """Verify Graph token acquisition. Does not send mail. SMTP login removed."""
     from app.lib.graph_mail import is_graph_mail_configured, test_graph_mail_auth
 
-    if is_graph_mail_configured():
-        graph = test_graph_mail_auth()
+    if not is_graph_mail_configured():
         return {
             "provider": "microsoft_graph",
-            "configured": graph.get("configured", False),
-            "connected": bool(graph.get("authenticated")),
-            "fromEmail": graph.get("fromEmail") or settings.from_email,
-            "message": graph.get("message"),
-            "graph": graph,
-        }
-
-    if not is_smtp_configured():
-        return {
-            "provider": "smtp",
             "configured": False,
             "connected": False,
-            "host": settings.smtp_host,
-            "port": int(settings.smtp_port),
             "fromEmail": settings.from_email,
-            "message": "SMTP_USER or SMTP_PASS is not set",
+            "message": (
+                "Microsoft Graph mail is not configured "
+                "(clientId, tenantId, and certificate required). SMTP is disabled."
+            ),
         }
 
-    try:
-        with get_smtp_connection():
-            pass
-        return {
-            "provider": "smtp",
-            "configured": True,
-            "connected": True,
-            "host": settings.smtp_host,
-            "port": int(settings.smtp_port),
-            "user": settings.smtp_user,
-            "fromEmail": settings.from_email,
-            "message": "SMTP login successful",
-        }
-    except Exception as e:
-        logger.warning("SMTP connection test failed: %s", e)
-        return {
-            "provider": "smtp",
-            "configured": True,
-            "connected": False,
-            "host": settings.smtp_host,
-            "port": int(settings.smtp_port),
-            "user": settings.smtp_user,
-            "fromEmail": settings.from_email,
-            "message": str(e),
-        }
-
-
-def get_smtp_connection():
-    """
-    Get the appropriate SMTP connection based on port configuration.
-    Office 365 uses port 587 with STARTTLS.
-    Gmail uses port 465 with SSL.
-    """
-    context = ssl.create_default_context()
-    
-    if int(settings.smtp_port) == 587:
-        # STARTTLS (Office 365, most modern SMTP)
-        server = smtplib.SMTP(settings.smtp_host, int(settings.smtp_port))
-        server.ehlo()
-        server.starttls(context=context)
-        server.ehlo()
-        server.login(settings.smtp_user, settings.smtp_pass)
-        return server
-    else:
-        # SSL/TLS (Gmail on 465)
-        server = smtplib.SMTP_SSL(settings.smtp_host, int(settings.smtp_port), context=context)
-        server.login(settings.smtp_user, settings.smtp_pass)
-        return server
+    graph = test_graph_mail_auth()
+    return {
+        "provider": "microsoft_graph",
+        "configured": graph.get("configured", False),
+        "connected": bool(graph.get("authenticated")),
+        "fromEmail": graph.get("fromEmail") or settings.from_email,
+        "message": graph.get("message"),
+        "graph": graph,
+    }
 
 def generate_verification_code(length: int = 6) -> str:
     """Generate a random verification code"""
