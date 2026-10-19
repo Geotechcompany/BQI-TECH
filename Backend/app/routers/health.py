@@ -51,7 +51,7 @@ async def health_check():
 
 @router.get("/health/smtp")
 async def smtp_health_check():
-    """Test Graph auth (preferred) or SMTP login without sending email."""
+    """Graph mail auth test (legacy path name; SMTP login removed)."""
     result = await asyncio.to_thread(test_smtp_connection)
     payload = {
         "status": "healthy" if result.get("connected") else "unhealthy",
@@ -63,5 +63,5 @@ async def smtp_health_check():
 
 @router.get("/health/email")
 async def email_health_check():
-    """Alias for /health/smtp — Graph token or SMTP connectivity."""
+    """Alias for /health/smtp — Microsoft Graph token check only."""
     return await smtp_health_check()

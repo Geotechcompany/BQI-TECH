@@ -1310,7 +1310,7 @@ async def _deliver_admin_invite_email(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=(
                 "Could not send the invitation email. "
-                "Verify SMTP credentials on Render and try again."
+                "Verify Microsoft Graph mail settings and try again."
             ),
         )
 

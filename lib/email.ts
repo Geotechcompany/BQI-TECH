@@ -1,4 +1,4 @@
-import { createTransport } from "nodemailer";
+import { BACKEND_URL } from "./config";
 import {
   BQI_EMAIL_BRAND,
   getBrandedEmailFooter,
@@ -7,12 +7,10 @@ import {
   wrapBrandedEmail,
 } from "./email-brand";
 
-interface EmailParams {
-  to: string;
-  subject: string;
-  body: string;
-}
-
+/**
+ * Send HTML email via the Python backend (Microsoft Graph).
+ * Nodemailer/SMTP has been removed — Graph must be configured on the API.
+ */
 export const sendEmail = async (options: {
   to: string;
   subject: string;
@@ -23,28 +21,35 @@ export const sendEmail = async (options: {
     return;
   }
 
-  const transporter = createTransport({
-    service: "Gmail",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  });
+  const relaySecret = process.env.EMAIL_RELAY_SECRET?.trim() || "";
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (relaySecret) {
+    headers["X-Email-Relay-Key"] = relaySecret;
+  }
 
-  try {
-    await transporter.sendMail({
-      from: `"BQI Tech" <${process.env.FROM_EMAIL}>`,
+  const response = await fetch(`${BACKEND_URL}/api/internal/send-email`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
       to: options.to,
       subject: options.subject,
       html: options.body,
-    });
-    console.log("Email sent successfully");
-  } catch (error) {
-    console.error("Email sending error:", error);
-    throw new Error("Failed to send confirmation email");
+      from: process.env.FROM_EMAIL || process.env.BQI_EMAIL_FROM || undefined,
+    }),
+  });
+
+  if (!response.ok) {
+    let detail = "Failed to send email via Microsoft Graph";
+    try {
+      const data = (await response.json()) as { error?: string; detail?: string };
+      detail = data.detail || data.error || detail;
+    } catch {
+      /* ignore */
+    }
+    console.error("Email sending error:", detail);
+    throw new Error(detail);
   }
 };
 

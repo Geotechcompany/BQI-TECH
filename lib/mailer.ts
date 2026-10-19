@@ -1,4 +1,4 @@
-import { createTransport } from "nodemailer";
+import { sendEmail } from "./email";
 import {
   BQI_EMAIL_BRAND,
   getBrandedEmailFooter,
@@ -6,18 +6,8 @@ import {
   wrapBrandedEmail,
 } from "./email-brand";
 
+/** Verification code email via backend Microsoft Graph (no SMTP). */
 export async function sendVerificationEmail(email: string, code: string) {
-  const transport = createTransport({
-    service: "Gmail",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: process.env.NODE_ENV === "production",
-    },
-  });
-
   const content = `
     <h1 style="margin: 0 0 12px; font-size: 24px; font-weight: 700; color: ${BQI_EMAIL_BRAND.darkBlue};">
       Email Verification Code
@@ -43,11 +33,10 @@ export async function sendVerificationEmail(email: string, code: string) {
   });
 
   try {
-    await transport.sendMail({
-      from: `"BQI Technologies" <${process.env.SMTP_USER}>`,
+    await sendEmail({
       to: email,
       subject: "Verify Your Email Address – BQI Tech",
-      html,
+      body: html,
     });
   } catch (error) {
     console.error("Email sending failed:", error);
