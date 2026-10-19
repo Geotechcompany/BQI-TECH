@@ -7055,7 +7055,7 @@ async def update_email_transport_settings_endpoint(
     payload: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_admin_user),
 ):
-    """Save email delivery settings (Netlify relay, SendGrid, or SMTP)."""
+    """Save email delivery settings (Microsoft Graph, SendGrid, or API relay)."""
     try:
         from app.lib.email_transport_settings import update_email_transport_settings
 

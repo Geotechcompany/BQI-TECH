@@ -467,7 +467,7 @@ function SettingsPageContent() {
   const [recaptchaSecretKey, setRecaptchaSecretKey] = useState("");
   const [hasRecaptchaSecret, setHasRecaptchaSecret] = useState(false);
   const [emailTransport, setEmailTransport] = useState({
-    provider: "netlify_relay",
+    provider: "microsoft_graph",
     relayUrl: DEFAULT_BQITECH_RELAY_URL,
     fromEmail: "",
     sendgridApiKey: "",
