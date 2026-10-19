@@ -1,14 +1,9 @@
-"""Email delivery transports for cloud hosts where SMTP is unreliable."""
+"""Email delivery via Microsoft Graph (primary) with optional SendGrid/relay."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import smtplib
-import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.utils import formataddr
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -55,19 +50,24 @@ def rewrite_email_html_for_frontend(html: str, frontend_url: str | None) -> str:
 
 
 def get_email_provider() -> str:
-    """Resolved transport. Graph replaces SMTP when Entra cert vars are set."""
+    """Resolved transport. Graph is preferred; SMTP is never used for send."""
     from app.lib.graph_mail import is_graph_mail_configured
 
-    creds = get_email_transport_config_sync()
-    configured = (creds.get("provider") or "smtp").strip().lower()
-    if configured in {"", "smtp"} and is_graph_mail_configured():
+    if is_graph_mail_configured():
         return "microsoft_graph"
-    return configured or "smtp"
+
+    creds = get_email_transport_config_sync()
+    configured = (creds.get("provider") or "microsoft_graph").strip().lower()
+    if configured in {"", "smtp", "microsoft_graph", "graph"}:
+        return "microsoft_graph"
+    return configured
 
 
 def is_email_configured() -> bool:
     if get_email_provider() == "microsoft_graph":
-        return True
+        from app.lib.graph_mail import is_graph_mail_configured
+
+        return is_graph_mail_configured()
     return is_email_transport_configured()
 
 
@@ -94,65 +94,12 @@ def email_transport_status() -> dict[str, Any]:
         status["sendgridConfigured"] = bool((creds.get("sendgridApiKey") or "").strip())
     elif provider in {"netlify_relay", "relay"}:
         status["relayUrl"] = (creds.get("relayUrl") or "").strip()
-    else:
-        status["smtpHost"] = creds.get("smtpHost") or settings.smtp_host
-        status["smtpPort"] = int(creds.get("smtpPort") or settings.smtp_port)
-        status["smtpUser"] = creds.get("smtpUser") or settings.smtp_user
     return status
 
 
 def _from_address() -> str:
     creds = get_email_transport_config_sync()
     return (creds.get("fromEmail") or settings.from_email or "").strip()
-
-
-def _from_header(address: Optional[str] = None) -> str:
-    """RFC 5322 From with display name, e.g. \"BQI Tech\" <noreply@…>."""
-    from app.lib.graph_mail import get_mail_from_name
-
-    addr = (address or _from_address()).strip()
-    return formataddr((get_mail_from_name(), addr))
-
-
-def _smtp_send(to: str, subject: str, html: str, from_email: Optional[str] = None) -> None:
-    creds = get_email_transport_config_sync()
-    host = creds.get("smtpHost") or settings.smtp_host
-    port = int(creds.get("smtpPort") or settings.smtp_port)
-    user = creds.get("smtpUser") or settings.smtp_user
-    password = creds.get("smtpPass") or settings.smtp_pass
-    sender = (from_email or _from_address()).strip()
-
-    context = ssl.create_default_context()
-
-    if port == 587:
-        server = smtplib.SMTP(host, port)
-        server.ehlo()
-        server.starttls(context=context)
-        server.ehlo()
-        server.login(user, password)
-    else:
-        server = smtplib.SMTP_SSL(host, port, context=context)
-        server.login(user, password)
-
-    try:
-        message = MIMEMultipart()
-        message["From"] = _from_header(sender)
-        message["To"] = to
-        message["Subject"] = subject
-        message.attach(MIMEText(html, "html"))
-        server.sendmail(sender, to, message.as_string())
-    finally:
-        server.quit()
-
-
-def smtp_send_html(
-    to: str,
-    subject: str,
-    html: str,
-    from_email: Optional[str] = None,
-) -> None:
-    """Public SMTP helper for the internal relay endpoint."""
-    _smtp_send(to, subject, html, from_email=from_email)
 
 
 def _sendgrid_send(to: str, subject: str, html: str) -> None:
@@ -247,13 +194,16 @@ def _send_via_provider(
     provider: str,
     frontend_url: str | None = None,
 ) -> str:
-    """Send email and return the transport label used."""
+    """Send email and return the transport label used. SMTP is not supported."""
     from app.lib.graph_mail import is_graph_mail_configured, send_mail_via_graph
 
-    # Graph replaces SMTP when Entra cert credentials are present (Harvest pattern).
-    if provider == "microsoft_graph" or (
-        provider == "smtp" and is_graph_mail_configured()
-    ):
+    if provider in {"microsoft_graph", "graph", "smtp", ""}:
+        if not is_graph_mail_configured():
+            raise RuntimeError(
+                "Microsoft Graph mail is not configured. "
+                "Set clientId, tenantId, and certificate in Admin → Settings → Graph mail "
+                "(or AZURE_* env). SMTP fallback has been removed."
+            )
         send_mail_via_graph(to, subject, html)
         return "microsoft_graph"
     if provider == "sendgrid":
@@ -273,8 +223,10 @@ def _send_via_provider(
             )
             _sendgrid_send(to, subject, html)
             return "sendgrid (direct fallback)"
-    _smtp_send(to, subject, html)
-    return provider
+    raise RuntimeError(
+        f"Unsupported email provider '{provider}'. "
+        "Configure Microsoft Graph mail (preferred) or sendgrid/netlify_relay."
+    )
 
 
 def deliver_html_email_with_detail(
@@ -283,7 +235,7 @@ def deliver_html_email_with_detail(
     html: str,
     frontend_url: str | None = None,
 ) -> tuple[bool, str | None]:
-    """Send HTML email using admin-configured transport (Graph → SendGrid/relay → SMTP)."""
+    """Send HTML email via Graph (or explicit SendGrid/relay). No SMTP."""
     provider = get_email_provider()
     try:
         used = _send_via_provider(to, subject, html, provider, frontend_url=frontend_url)

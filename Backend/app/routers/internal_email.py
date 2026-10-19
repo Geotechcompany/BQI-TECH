@@ -12,8 +12,8 @@ from app.config import settings
 from app.lib.email_transport import (
     normalize_relay_frontend_url,
     rewrite_email_html_for_frontend,
-    smtp_send_html,
 )
+from app.lib.graph_mail import is_graph_mail_configured, send_mail_via_graph
 from app.logger import logger
 
 router = APIRouter(tags=["internal"])
@@ -25,9 +25,9 @@ async def internal_send_email(
     payload: Dict[str, Any] = Body(...),
 ):
     """
-    Send email using this host's SMTP configuration (Office 365).
+    Send email via Microsoft Graph on this host.
 
-    Used by dev/staging backends that cannot reach SMTP directly.
+    Used by dev/staging backends that relay through production.
     Docs: https://api.bqitech.com/docs
     """
     expected_secret = os.getenv("EMAIL_RELAY_SECRET", "").strip()
@@ -51,20 +51,28 @@ async def internal_send_email(
         )
     if not from_email:
         raise HTTPException(status_code=400, detail="from email is required")
+    if not is_graph_mail_configured():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Microsoft Graph mail is not configured on this host. "
+                "SMTP relay has been removed."
+            ),
+        )
 
     if frontend_url:
         html = rewrite_email_html_for_frontend(html, frontend_url)
 
     try:
         await asyncio.to_thread(
-            smtp_send_html,
+            send_mail_via_graph,
             to,
             subject,
             html,
-            from_email,
+            from_email=from_email,
         )
     except Exception as exc:
         logger.error("Internal email relay failed for %s: %s", to, exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    return {"ok": True, "message": f"Email sent to {to}"}
+    return {"ok": True, "message": f"Email sent to {to}", "provider": "microsoft_graph"}
